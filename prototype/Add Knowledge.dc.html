@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-fe763c99-19b8-4614-a4f8-6d4eab48130a/styles.css">
+<script src="_ds/industry-fe763c99-19b8-4614-a4f8-6d4eab48130a/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); }
+  a { color: var(--color-accent-700); text-decoration: none; }
+  a:hover { color: var(--color-accent-800); text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; background: var(--color-bg); font-family: var(--font-body);">
+
+  <nav style="flex: 0 0 216px; border-right: 1px solid var(--color-divider); padding: 20.4px 0; display: flex; flex-direction: column; gap: 27.2px;">
+    <div style="padding: 0 20.4px; display: flex; flex-direction: column; gap: 3.4px;">
+      <div style="font-family: var(--font-heading); font-weight: 700; font-size: 22px; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1;">Talkwisp</div>
+      <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-neutral-600);">Agent console</div>
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <a href="Dashboard.dc.html" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Dashboard</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-text); background: var(--color-accent-200); border-left: 3px solid var(--color-accent); text-decoration: none;">Knowledge base</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);"><span>Gaps</span><span style="font-family: var(--font-heading); font-size: 13px; padding: 0 5px; border: 1px solid var(--color-accent-400); color: var(--color-accent-700);">41</span></a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Conversations</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Test console</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Templates</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Settings</a>
+    </div>
+  </nav>
+
+  <main style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;">
+
+    <header style="display: flex; align-items: center; justify-content: space-between; gap: 20.4px; padding: 13.6px 27.2px; border-bottom: 1px solid var(--color-divider); flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 1.7px;">
+        <span style="font-family: var(--font-heading); font-size: 20px; line-height: 1.1;">Shifo Med — clinic</span>
+        <span style="font-size: 12px; color: var(--color-neutral-600);">Tashkent · Chilonzor</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 20.4px;">
+        <div style="display: flex; align-items: stretch; border: 1px solid var(--color-divider);">
+          <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+          <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+          <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6.8px; font-size: 14px; color: var(--color-neutral-700);">
+          <span style="width: 26px; height: 26px; border: 1px solid var(--color-divider); display: flex; align-items: center; justify-content: center; font-family: var(--font-heading); font-size: 13px;">DM</span>
+          <span>Dilnoza M.</span>
+        </div>
+      </div>
+    </header>
+
+    <div style="padding: 27.2px; display: flex; flex-direction: column; gap: 27.2px; max-width: 1360px;">
+
+      <div style="display: flex; flex-direction: column; gap: 3.4px;">
+        <h1 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: clamp(28px, 3.4vw, 38px); line-height: 1.05; letter-spacing: -0.01em;">Add knowledge</h1>
+        <p style="margin: 0; font-size: 15px; color: var(--color-neutral-600);">One knowledge base, shared by both your agents.</p>
+      </div>
+
+      <section class="blueprint" style="position: relative; padding: 17px 20.4px; display: flex; align-items: center; gap: 13.6px 27.2px; flex-wrap: wrap;">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <sc-if value="{{ isFirst }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 5px; max-width: 70ch;">
+            <span style="font-family: var(--font-heading); font-size: 26px; line-height: 1.1;">Your agent doesn't know anything yet.</span>
+            <span style="font-size: 15px; line-height: 1.45; color: var(--color-neutral-700); text-wrap: pretty;">The fastest first move is a photo of your printed price list — one photo is usually thirty or forty facts. Or write a fact yourself on the right; that takes ten seconds and always works.</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isReturning }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; align-items: baseline; gap: 10.2px 27.2px; flex-wrap: wrap;">
+            <span style="font-size: 16px;">The agent knows <strong style="font-family: var(--font-heading); font-weight: 600; font-size: 20px;">214 facts</strong> from <strong style="font-family: var(--font-heading); font-weight: 600; font-size: 20px;">8 sources</strong></span>
+            <span style="font-size: 14px; color: var(--color-neutral-600);">last added 2 days ago</span>
+            <a href="#" style="font-size: 14px; color: var(--color-neutral-700);">6 waiting for review</a>
+          </div>
+        </sc-if>
+      </section>
+
+      <section style="display: grid; grid-template-columns: {{ zoneColumns }}; gap: 27.2px; align-items: stretch;">
+
+        <div class="blueprint" style="position: relative; padding: 20.4px; display: flex; flex-direction: column; gap: 13.6px;">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <h2 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: 26px; line-height: 1.1;">Give it something to read</h2>
+
+          <sc-if value="{{ dropMode }}" hint-placeholder-val="{{ true }}">
+            <div onClick="{{ startPaste }}" style="border: 1px dashed var(--color-accent-400); background: var(--color-accent-100); padding: 34px 20.4px; display: flex; flex-direction: column; align-items: center; gap: 13.6px; cursor: pointer; text-align: center; min-width: 0;">
+              <span style="font-family: var(--font-heading); font-size: 22px; line-height: 1.15; color: var(--color-accent-800); text-wrap: pretty;">Drop a file, choose from your phone, or paste text here</span>
+              <div style="display: flex; gap: 10.2px; flex-wrap: wrap; justify-content: center; min-width: max-content; max-width: 100%;">
+                <button type="button" class="btn btn-secondary" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 16px; cursor: pointer;">Choose file</button>
+                <button type="button" onClick="{{ startPaste }}" class="btn btn-secondary" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 16px; cursor: pointer;">Paste text</button>
+              </div>
+              <span style="font-size: 13px; color: var(--color-neutral-600); text-wrap: pretty;">Photo, PDF, Excel or Word · up to 20 MB · a blurry photo is fine to retry</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ pasteMode }}" hint-placeholder-val="{{ false }}">
+            <div style="border: 1px solid var(--color-accent); padding: 13.6px; display: flex; flex-direction: column; gap: 10.2px;">
+              <label style="font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-accent-700);">Pasted text · 412 characters</label>
+              <textarea class="input" rows="6" style="width: 100%; font-family: var(--font-body); font-size: 15px; line-height: 1.45; resize: vertical;">Кардиолог — Расулова Нигора Абдуллаевна. Приём: пн–пт 09:00–14:00. Первичная консультация примерно 200 000–300 000 сум. УЗИ брюшной полости — около 180 000 сум.</textarea>
+              <div style="display: flex; align-items: center; gap: 13.6px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-primary" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 16px; cursor: pointer;">Read this text</button>
+                <button type="button" onClick="{{ cancelPaste }}" class="btn btn-ghost" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 12px; cursor: pointer;">Cancel</button>
+                <span style="font-size: 13px; color: var(--color-neutral-600);">Detected Russian · you'll review what it reads</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="border-top: 1px solid var(--color-divider); padding-top: 13.6px; margin-top: auto; display: flex; flex-direction: column; gap: 3.4px;">
+            <sc-if value="{{ sheetsOff }}" hint-placeholder-val="{{ true }}">
+              <a href="#" onClick="{{ openSheets }}" style="font-size: 15px;">Keep your prices in a Google Sheet? Connect it and it stays in sync →</a>
+            </sc-if>
+            <sc-if value="{{ sheetsOn }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; align-items: baseline; gap: 13.6px; flex-wrap: wrap;">
+                <span style="font-size: 15px;">Narxlar (Google Sheet)</span>
+                <span style="font-size: 13px; color: var(--color-neutral-600);">synced 40 minutes ago · 3 changes</span>
+                <a href="#" style="font-size: 14px;">Sync now</a>
+              </div>
+            </sc-if>
+            <span style="font-size: 13px; color: var(--color-neutral-600);">For spreadsheet people. Nothing else needs it.</span>
+          </div>
+        </div>
+
+        <div class="blueprint" style="position: relative; padding: 20.4px; display: flex; flex-direction: column; gap: 13.6px;">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <h2 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: 26px; line-height: 1.1;">Write a fact yourself</h2>
+
+          <sc-if value="{{ lineMode }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 10.2px;">
+              <textarea class="input" rows="3" onPaste="{{ onTypedPaste }}" placeholder="Dr. Rasulova, cardiologist, Monday to Friday 9–14&#10;Приём — примерно 200 000–300 000 сум" style="width: 100%; font-family: var(--font-body); font-size: 16px; line-height: 1.45; resize: vertical;"></textarea>
+              <sc-if value="{{ longPaste }}" hint-placeholder-val="{{ false }}">
+                <div style="border: 1px solid var(--color-accent-400); background: var(--color-accent-100); padding: 10.2px 13.6px; display: flex; flex-direction: column; gap: 5px;">
+                  <span style="font-size: 14px; line-height: 1.4; color: var(--color-accent-800); text-wrap: pretty;">That's a lot of text for facts you're writing yourself. Send it to be read instead, and you'll get a list to check?</span>
+                  <div style="display: flex; align-items: center; gap: 13.6px; flex-wrap: wrap;">
+                    <a href="#" onClick="{{ sendToRead }}" style="font-size: 14px;">Read it instead →</a>
+                    <a href="#" onClick="{{ keepAsTyped }}" style="font-size: 14px; color: var(--color-neutral-700);">No, these are my own words</a>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="display: flex; align-items: center; gap: 13.6px; flex-wrap: wrap;">
+                <button type="button" onClick="{{ addTyped }}" class="btn btn-primary" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 16px; cursor: pointer;">Add to knowledge base</button>
+                <button type="button" onClick="{{ toFields }}" class="btn btn-ghost" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 12px; cursor: pointer;">Use fields instead</button>
+              </div>
+              <span style="font-size: 13px; color: var(--color-neutral-600); text-wrap: pretty;">One fact per line — add as many as you like. You wrote them, so they're confirmed straight away, with no review.</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ fieldsMode }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 13.6px;">
+              <div class="field" style="display: flex; flex-direction: column; gap: 3.4px;">
+                <label style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700);">What is it about</label>
+                <input class="input" type="text" value="Расулова Нигора" style="width: 100%; font-size: 16px;">
+              </div>
+              <div class="field" style="display: flex; flex-direction: column; gap: 5px;">
+                <label style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700);">Kind of fact</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                  <sc-for list="{{ kinds }}" as="kind" hint-placeholder-count="7">
+                    <button type="button" onClick="{{ kind.pick }}" style="{{ kind.style }}">{{ kind.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <sc-if value="{{ kindIsPrice }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                  <label style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700);">Roughly how much</label>
+                  <div style="display: flex; align-items: center; gap: 10.2px; flex-wrap: wrap;">
+                    <input class="input" type="text" value="200 000" style="flex: 1 1 110px; min-width: 0; font-size: 16px;">
+                    <span style="font-size: 15px; color: var(--color-neutral-600);">to</span>
+                    <input class="input" type="text" value="300 000" style="flex: 1 1 110px; min-width: 0; font-size: 16px;">
+                    <span style="font-size: 15px; color: var(--color-neutral-700);">UZS</span>
+                  </div>
+                  <span style="font-size: 13px; color: var(--color-neutral-600);">Stored as approximate. The agent always says "about".</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ kindIsOther }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; gap: 3.4px;">
+                  <label style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700);">{{ valueLabel }}</label>
+                  <input class="input" type="text" placeholder="{{ valuePlaceholder }}" style="width: 100%; font-size: 16px;">
+                </div>
+              </sc-if>
+              <div style="display: flex; align-items: center; gap: 10.2px; flex-wrap: wrap;">
+                <span style="font-size: 13px; color: var(--color-neutral-600);">Language</span>
+                <span class="tag tag-outline" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 13px;">Russian — detected</span>
+                <a href="#" style="font-size: 13px;">Change</a>
+              </div>
+              <div style="display: flex; align-items: center; gap: 13.6px; flex-wrap: wrap;">
+                <button type="button" onClick="{{ addTyped }}" class="btn btn-primary" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 16px; cursor: pointer;">Add fact</button>
+                <button type="button" onClick="{{ toLine }}" class="btn btn-ghost" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 15px; padding: 8px 12px; cursor: pointer;">Back to one line</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasReadback }}" hint-placeholder-val="{{ false }}">
+            <div style="border: 1px solid var(--color-accent); background: var(--color-accent-100); padding: 13.6px; display: flex; flex-direction: column; gap: 6.8px; margin-top: auto;">
+              <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10.2px; flex-wrap: wrap;">
+                <span style="font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-accent-700);">Added · confirmed</span>
+                <a href="#" onClick="{{ clearReadback }}" style="font-size: 13px;">Not right? Edit</a>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 5px 13.6px;">
+                <span style="font-size: 15px;"><span style="color: var(--color-neutral-600);">Subject</span> Dr. Rasulova</span>
+                <span style="font-size: 15px;"><span style="color: var(--color-neutral-600);">Specialty</span> cardiologist</span>
+                <span style="font-size: 15px;"><span style="color: var(--color-neutral-600);">Hours</span> Monday to Friday, 09:00–14:00</span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 10.2px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 13.6px; flex-wrap: wrap;">
+          <h2 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: 24px; line-height: 1.1;">{{ bandTitle }}</h2>
+          <span style="font-size: 14px; color: var(--color-neutral-700);">{{ bandSummary }}</span>
+        </div>
+        <div style="border-top: 1px solid var(--color-divider); display: flex; flex-direction: column;">
+          <sc-for list="{{ rows }}" as="row" hint-placeholder-count="5">
+            <div style="border-bottom: 1px solid var(--color-divider); padding: 13.6px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6.8px 20.4px; align-items: start;">
+              <div style="display: flex; flex-direction: column; gap: 3.4px; min-width: 0;">
+                <span style="font-size: 16px; line-height: 1.3; text-wrap: pretty;">{{ row.name }}</span>
+                <span style="font-size: 13px; color: var(--color-neutral-600);">{{ row.kind }}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 5px; min-width: 0;">
+                <span style="font-size: 15px; line-height: 1.35; color: {{ row.stateColor }}; text-wrap: pretty;">{{ row.state }}</span>
+                <sc-if value="{{ row.hasBar }}" hint-placeholder-val="{{ false }}">
+                  <div style="height: 6px; background: var(--color-neutral-200); border: 1px solid var(--color-divider); max-width: 240px;">
+                    <div style="height: 100%; width: {{ row.pct }}; background: var(--color-accent);"></div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ row.hasNote }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 13px; color: var(--color-neutral-600);">{{ row.note }}</span>
+                </sc-if>
+              </div>
+              <div style="display: flex; align-items: center; gap: 13.6px; flex-wrap: wrap;">
+                <sc-if value="{{ row.hasTag }}" hint-placeholder-val="{{ false }}">
+                  <span class="{{ row.tagClass }}" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 13px;">{{ row.tag }}</span>
+                </sc-if>
+                <sc-for list="{{ row.actions }}" as="act" hint-placeholder-count="1">
+                  <a href="#" style="{{ act.style }}">{{ act.label }}</a>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ isFirst }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size: 13px; color: var(--color-neutral-600); text-wrap: pretty;">Nothing added yet. Whatever you add appears here with what was read from it.</span>
+        </sc-if>
+      </section>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;returning&quot;,&quot;first&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;returning&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;defaultTypedMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;One line&quot;,&quot;Fields&quot;],&quot;default&quot;:&quot;One line&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;sheetsConnected&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Screen state&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", paste: false, typed: null, kind: "Price range", readback: false, sheets: null, longPaste: false };
+
+  reviewLink() {
+    return "font-size: 15px; font-family: var(--font-heading); font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; color: var(--color-accent-700);";
+  }
+
+  quietLink() {
+    return "font-size: 14px; white-space: nowrap; color: var(--color-neutral-700);";
+  }
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: var(--font-heading); font-size: 14px; letter-spacing: 0.06em; padding: 5px 10px; cursor: pointer; border: none; background: " +
+      (on ? "var(--color-accent)" : "transparent") + "; color: " + (on ? "#fff" : "var(--color-neutral-700)") + ";";
+  }
+
+  chipStyle(on) {
+    return "flex: 0 0 auto; white-space: nowrap; font-family: var(--font-body); font-size: 14px; padding: 5px 10px; cursor: pointer; border: 1px solid " +
+      (on ? "var(--color-accent)" : "var(--color-divider)") + "; background: " + (on ? "var(--color-accent-200)" : "transparent") +
+      "; color: " + (on ? "var(--color-accent-800)" : "var(--color-neutral-700)") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "returning";
+    const isFirst = view === "first";
+    const typedMode = this.state.typed ?? (this.props.defaultTypedMode ?? "One line");
+    const sheetsOn = this.state.sheets ?? (this.props.sheetsConnected ?? false);
+
+    const kindLabels = ["Hours", "Price range", "Specialty", "Address", "Phone", "Policy", "Other"];
+    const kinds = kindLabels.map(label => ({
+      label,
+      style: this.chipStyle(this.state.kind === label),
+      pick: () => this.setState({ kind: label })
+    }));
+    const valueLabels = {
+      Hours: ["When", "Mon–Fri 09:00–14:00, Sat 09:00–13:00"],
+      Specialty: ["Specialty", "Cardiologist · Kardiolog · Кардиолог"],
+      Address: ["Where", "Chilonzor 19, near Novza metro"],
+      Phone: ["Number", "+998 71 200 40 40"],
+      Policy: ["The rule", "Walk-ins accepted until 13:00, no appointment needed"],
+      Other: ["The fact", "Free parking behind the building"]
+    };
+    const vl = valueLabels[this.state.kind] || valueLabels.Other;
+
+    const rowsReturning = [
+      {
+        name: "Narxlar_2026.xlsx", kind: "Excel · 1.2 MB · uploaded 4 minutes ago",
+        state: "42 facts read from 3 sheets", stateColor: "var(--color-text)",
+        hasBar: false, hasNote: true, note: "Services, doctors, and a sheet of ranges — no exact prices kept",
+        hasTag: false, actions: [{ label: "Review 42 →", style: this.reviewLink() }]
+      },
+      {
+        name: "narx-royxati.jpg", kind: "Photo · 4.3 MB · from your phone",
+        state: "Reading — page 3 of 4", stateColor: "var(--color-accent-800)",
+        hasBar: true, pct: "68%", hasNote: true, note: "2.9 of 4.3 MB sent · you can add another file while this runs",
+        hasTag: false, actions: [{ label: "Cancel", style: this.quietLink() }]
+      },
+      {
+        name: "IMG_2291.jpg", kind: "Photo · 3.8 MB · from your phone",
+        state: "We couldn't read this photo — it's too blurry to make out the numbers.", stateColor: "var(--color-accent-900)",
+        hasBar: false, hasNote: true, note: "Nothing was added. Your other files kept going.",
+        hasTag: true, tag: "Couldn't read", tagClass: "tag tag-outline",
+        actions: [{ label: "Retry", style: this.quietLink() }, { label: "Upload a clearer photo", style: this.quietLink() }]
+      },
+      {
+        name: "Siyosat_va_qoidalar.docx", kind: "Word · 240 KB · yesterday",
+        state: "11 facts and 2 pages of policy text", stateColor: "var(--color-text)",
+        hasBar: false, hasNote: true, note: "Prose is kept as prose — the agent quotes it rather than splitting it",
+        hasTag: false, actions: [{ label: "Review 11 →", style: this.reviewLink() }]
+      },
+      {
+        name: "«Приём — примерно 200 000–300 000 сум»", kind: "Typed by you · just now",
+        state: "Added to the knowledge base", stateColor: "var(--color-text)",
+        hasBar: false, hasNote: false,
+        hasTag: true, tag: "Confirmed", tagClass: "tag tag-accent",
+        actions: [{ label: "Edit", style: this.quietLink() }]
+      },
+      {
+        name: "Rasulova Nigora — kardiolog, dushanbadan jumagacha 09:00–14:00", kind: "Typed by you · 2 days ago",
+        state: "Added to the knowledge base", stateColor: "var(--color-text)",
+        hasBar: false, hasNote: false,
+        hasTag: true, tag: "Confirmed", tagClass: "tag tag-accent",
+        actions: [{ label: "Edit", style: this.quietLink() }]
+      }
+    ];
+
+    const rowsOffline = [
+      {
+        name: "narx-royxati.jpg", kind: "Photo · 4.3 MB · from your phone",
+        state: "Waiting for connection — will resume on its own", stateColor: "var(--color-accent-900)",
+        hasBar: true, pct: "41%", hasNote: true, note: "1.8 of 4.3 MB sent and kept. Closing this page won't lose it.",
+        hasTag: true, tag: "Paused", tagClass: "tag tag-outline", actions: [{ label: "Try now", style: this.quietLink() }]
+      },
+      {
+        name: "Narxlar_2026.xlsx", kind: "Excel · 1.2 MB · uploaded 9 minutes ago",
+        state: "42 facts read from 3 sheets", stateColor: "var(--color-text)",
+        hasBar: false, hasNote: false,
+        hasTag: false, actions: [{ label: "Review 42 →", style: this.reviewLink() }]
+      },
+      {
+        name: "«Приём — примерно 200 000–300 000 сум»", kind: "Typed by you · 6 minutes ago",
+        state: "Added to the knowledge base", stateColor: "var(--color-text)",
+        hasBar: false, hasNote: false,
+        hasTag: true, tag: "Confirmed", tagClass: "tag tag-accent", actions: [{ label: "Edit", style: this.quietLink() }]
+      }
+    ];
+
+    const rowsFirst = [
+      {
+        name: "A photo of your printed price list", kind: "What most clinics start with",
+        state: "Usually 30–40 facts from one photo", stateColor: "var(--color-neutral-600)",
+        hasBar: false, hasNote: false, hasTag: false, actions: []
+      },
+      {
+        name: "Your doctors and their hours", kind: "Typed, three or four lines",
+        state: "The two questions customers ask most", stateColor: "var(--color-neutral-600)",
+        hasBar: false, hasNote: false, hasTag: false, actions: []
+      },
+      {
+        name: "Your policies document", kind: "Word or PDF",
+        state: "Kept as prose the agent can quote", stateColor: "var(--color-neutral-600)",
+        hasBar: false, hasNote: false, hasTag: false, actions: []
+      }
+    ];
+
+    const rows = isFirst ? rowsFirst : view === "offline" ? rowsOffline : rowsReturning;
+
+    return {
+      isFirst,
+      isReturning: !isFirst,
+      zoneColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+      dropMode: !this.state.paste,
+      pasteMode: this.state.paste,
+      startPaste: () => this.setState({ paste: true }),
+      cancelPaste: () => this.setState({ paste: false }),
+      lineMode: typedMode === "One line",
+      fieldsMode: typedMode === "Fields",
+      toFields: () => this.setState({ typed: "Fields" }),
+      toLine: () => this.setState({ typed: "One line" }),
+      kinds,
+      kindIsPrice: this.state.kind === "Price range",
+      kindIsOther: this.state.kind !== "Price range",
+      valueLabel: vl[0],
+      valuePlaceholder: vl[1],
+      longPaste: this.state.longPaste,
+      onTypedPaste: e => {
+        const text = (e.clipboardData && e.clipboardData.getData("text")) || "";
+        if (text.length > 180 || text.split(/\n/).length > 4) this.setState({ longPaste: true });
+      },
+      sendToRead: () => this.setState({ longPaste: false, paste: true }),
+      keepAsTyped: () => this.setState({ longPaste: false }),
+      addTyped: () => this.setState({ readback: true, longPaste: false }),
+      hasReadback: this.state.readback,
+      clearReadback: () => this.setState({ readback: false }),
+      sheetsOn,
+      sheetsOff: !sheetsOn,
+      openSheets: () => this.setState({ sheets: true }),
+      bandTitle: isFirst ? "What other clinics add first" : "What you've added",
+      bandSummary: isFirst ? "three suggestions, no order required"
+        : view === "offline" ? "1 file paused · 1 read · 1 typed"
+        : "2 files read · 1 reading · 1 couldn't be read · 2 typed",
+      rows,
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

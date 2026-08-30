@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-fe763c99-19b8-4614-a4f8-6d4eab48130a/styles.css">
+<script src="_ds/industry-fe763c99-19b8-4614-a4f8-6d4eab48130a/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); }
+  a { color: var(--color-accent-700); text-decoration: none; }
+  a:hover { color: var(--color-accent-800); text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; background: var(--color-bg); font-family: var(--font-body);">
+
+  <nav style="flex: 0 0 216px; border-right: 1px solid var(--color-divider); padding: 20.4px 0; display: flex; flex-direction: column; gap: 27.2px;">
+    <div style="padding: 0 20.4px; display: flex; flex-direction: column; gap: 3.4px;">
+      <div style="font-family: var(--font-heading); font-weight: 700; font-size: 22px; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1;">Talkwisp</div>
+      <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-neutral-600);">Agent console</div>
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-text); background: var(--color-accent-200); border-left: 3px solid var(--color-accent); text-decoration: none;">Dashboard</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Knowledge base</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);"><span>Gaps</span><span style="font-family: var(--font-heading); font-size: 13px; padding: 0 5px; border: 1px solid var(--color-accent-400); color: var(--color-accent-700);">{{ gapCount }}</span></a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Conversations</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Test console</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Templates</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10.2px; padding: 10.2px 20.4px; font-size: 15px; color: var(--color-neutral-700); border-left: 3px solid transparent; text-decoration: none;" style-hover="background: var(--color-neutral-200); color: var(--color-text);">Settings</a>
+    </div>
+    <sc-if value="{{ isOperator }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top: auto; padding: 13.6px 20.4px 0; border-top: 1px solid var(--color-divider); display: flex; flex-direction: column; gap: 6.8px;">
+        <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-neutral-600);">Client accounts</div>
+        <sc-for list="{{ accounts }}" as="acct" hint-placeholder-count="3">
+          <a href="#" style="display: flex; align-items: baseline; justify-content: space-between; gap: 6.8px; font-size: 14px; color: var(--color-neutral-700); text-decoration: none; padding: 3.4px 0;" style-hover="color: var(--color-text);"><span>{{ acct.name }}</span><span style="font-family: var(--font-heading); font-size: 13px; color: var(--color-accent-700);">{{ acct.gaps }}</span></a>
+        </sc-for>
+        <div style="font-size: 12px; color: var(--color-neutral-600); padding-top: 3.4px;">j / k to move · Enter to answer</div>
+      </div>
+    </sc-if>
+  </nav>
+
+  <main style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;">
+
+    <header style="display: flex; align-items: center; justify-content: space-between; gap: 20.4px; padding: 13.6px 27.2px; border-bottom: 1px solid var(--color-divider); flex-wrap: wrap;">
+      <button type="button" style="display: flex; align-items: baseline; gap: 6.8px; background: none; border: none; padding: 3.4px 0; cursor: pointer; font-family: var(--font-heading); font-size: 20px; color: var(--color-text);">
+        <span>Shifo Med — front desk</span>
+        <span style="font-size: 13px; color: var(--color-neutral-600);">▾</span>
+      </button>
+      <div style="display: flex; align-items: center; gap: 20.4px;">
+        <div style="display: flex; align-items: stretch; border: 1px solid var(--color-divider);">
+          <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+          <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+          <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6.8px; font-size: 14px; color: var(--color-neutral-700);">
+          <span style="width: 26px; height: 26px; border: 1px solid var(--color-divider); display: flex; align-items: center; justify-content: center; font-family: var(--font-heading); font-size: 13px;">DM</span>
+          <span>Dilnoza M.</span>
+        </div>
+      </div>
+    </header>
+
+    <div style="padding: 27.2px; display: flex; flex-direction: column; gap: 27.2px; max-width: 1360px;">
+
+      <section class="blueprint" style="position: relative; padding: 27.2px; display: flex; align-items: flex-start; justify-content: space-between; gap: 27.2px; flex-wrap: wrap;">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 13.6px;">
+          <div style="display: flex; align-items: center; gap: 10.2px;">
+            <span style="width: 9px; height: 9px; background: {{ statusDot }}; display: inline-block;"></span>
+            <span style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-neutral-600);">Agent status</span>
+          </div>
+          <h1 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: clamp(30px, 4vw, 44px); line-height: 1.04; letter-spacing: -0.01em; text-wrap: pretty;">{{ statusHeadline }}</h1>
+          <p style="margin: 0; font-size: 16px; line-height: 1.45; color: var(--color-neutral-700); max-width: 56ch; text-wrap: pretty;">{{ statusSub }}</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 6.8px 27.2px; padding-top: 3.4px;">
+            <sc-for list="{{ statusFacts }}" as="fact" hint-placeholder-count="3">
+              <div style="display: flex; flex-direction: column; gap: 1.7px;">
+                <span style="font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-neutral-600);">{{ fact.label }}</span>
+                <span style="font-size: 15px; color: var(--color-text);">{{ fact.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex: 0 0 auto; min-width: max-content; display: flex; flex-direction: column; align-items: flex-start; gap: 10.2px;">
+          <sc-if value="{{ hasPrimary }}" hint-placeholder-val="{{ true }}">
+            <button type="button" class="btn btn-primary blueprint" style="position: relative; display: block; text-align: left; font-size: 17px; padding: 13.6px 20.4px; height: auto; min-height: 0; cursor: pointer;">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <span style="display: block; white-space: nowrap; line-height: 1.25;">{{ primaryLabel }}</span>
+            </button>
+          </sc-if>
+          <sc-if value="{{ showTestLink }}" hint-placeholder-val="{{ false }}">
+            <a href="#" style="font-size: 15px;">{{ secondaryLabel }}</a>
+          </sc-if>
+        </div>
+      </section>
+
+      <sc-if value="{{ showBoard }}" hint-placeholder-val="{{ true }}">
+        <section style="display: flex; flex-direction: column; gap: 13.6px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); border: 1px solid var(--color-divider);">
+            <sc-for list="{{ figures }}" as="fig" hint-placeholder-count="4">
+              <div style="{{ fig.cellStyle }}">
+                <span style="font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-neutral-600); text-wrap: pretty;">{{ fig.label }}</span>
+                <span style="font-family: var(--font-heading); font-weight: 600; line-height: 1; font-size: {{ fig.size }}; color: {{ fig.color }};">{{ fig.value }}</span>
+                <span style="font-size: 13px; color: var(--color-neutral-600);">{{ fig.note }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: flex; align-items: flex-end; gap: 6.8px; height: 40px; padding: 0 1px;">
+            <sc-for list="{{ week }}" as="day" hint-placeholder-count="7">
+              <div style="flex: 1 1 0; display: flex; flex-direction: column; align-items: stretch; gap: 3.4px;">
+                <div style="height: {{ day.h }}; background: var(--color-accent-400); border-top: 1px solid var(--color-accent-700);"></div>
+                <span style="font-size: 11px; color: var(--color-neutral-600); text-align: center;">{{ day.d }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+
+        <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 27.2px; align-items: start;">
+
+          <div class="blueprint" style="position: relative; padding: 20.4px; display: flex; flex-direction: column; gap: 13.6px; grid-column: span 1;">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 13.6px; flex-wrap: wrap;">
+              <h2 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: 24px; line-height: 1.1;">{{ gapTitle }}</h2>
+              <span style="font-size: 13px; color: var(--color-neutral-600);">{{ gapSubtitle }}</span>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <sc-for list="{{ gaps }}" as="gap" hint-placeholder-count="5">
+                <div style="border-top: 1px solid var(--color-divider); padding: 13.6px 0; display: flex; flex-direction: column; gap: 10.2px;">
+                  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 13.6px;">
+                    <div style="min-width: 0; display: flex; flex-direction: column; gap: 3.4px;">
+                      <span style="font-size: 16px; line-height: 1.35; color: var(--color-text); text-wrap: pretty;">{{ gap.q }}</span>
+                      <span style="font-size: 13px; color: var(--color-neutral-600);">{{ gap.meta }}</span>
+                    </div>
+                    <button type="button" onClick="{{ gap.toggle }}" class="btn btn-secondary" style="flex: 0 0 auto; font-size: 14px; padding: 6.8px 13.6px; cursor: pointer; white-space: nowrap;">{{ gap.action }}</button>
+                  </div>
+                  <sc-if value="{{ gap.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="border: 1px solid var(--color-accent-400); background: var(--color-accent-100); padding: 13.6px; display: flex; flex-direction: column; gap: 10.2px;">
+                      <label style="font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-accent-700);">Answer in your own words</label>
+                      <textarea class="input" rows="3" placeholder="e.g. Abdominal ultrasound is roughly 200 000–300 000 UZS, walk-in, no appointment needed." style="width: 100%; font-family: var(--font-body); font-size: 15px; line-height: 1.4; resize: vertical;"></textarea>
+                      <div style="display: flex; align-items: center; gap: 13.6px; flex-wrap: wrap;">
+                        <button type="button" onClick="{{ gap.toggle }}" class="btn btn-primary" style="font-size: 15px; padding: 8px 16px; cursor: pointer;">Save fact</button>
+                        <button type="button" onClick="{{ gap.toggle }}" class="btn btn-ghost" style="font-size: 15px; padding: 8px 12px; cursor: pointer;">Cancel</button>
+                        <span style="font-size: 13px; color: var(--color-neutral-600);">Source will be recorded as: typed by you, {{ today }}</span>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border-top: 1px solid var(--color-divider); padding-top: 13.6px;">
+              <a href="#" style="font-size: 15px;">{{ gapFooter }}</a>
+            </div>
+          </div>
+
+          <div class="blueprint" style="position: relative; padding: 20.4px; display: flex; flex-direction: column; gap: 13.6px;">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <h2 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: 24px; line-height: 1.1;">Needs your attention</h2>
+            <sc-if value="{{ hasAttention }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; flex-direction: column;">
+                <sc-for list="{{ attention }}" as="item" hint-placeholder-count="4">
+                  <div style="border-top: 1px solid var(--color-divider); padding: 13.6px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 13.6px;">
+                    <div style="min-width: 0; display: flex; flex-direction: column; gap: 3.4px;">
+                      <span style="font-size: 15px; line-height: 1.35; text-wrap: pretty;">{{ item.text }}</span>
+                      <span style="font-size: 13px; color: var(--color-neutral-600);">{{ item.meta }}</span>
+                    </div>
+                    <a href="#" style="flex: 0 0 auto; font-size: 14px; white-space: nowrap; padding-top: 1.7px;">{{ item.action }}</a>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ attentionEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="border-top: 1px solid var(--color-divider); padding: 27.2px 0 13.6px; display: flex; flex-direction: column; gap: 6.8px;">
+                <span style="font-family: var(--font-heading); font-size: 22px; line-height: 1.1;">Nothing needs you.</span>
+                <span style="font-size: 14px; color: var(--color-neutral-600); text-wrap: pretty;">No conflicts, no disconnected channels, nobody waiting on a human.</span>
+              </div>
+            </sc-if>
+          </div>
+
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showFirstRun }}" hint-placeholder-val="{{ false }}">
+        <section class="blueprint" style="position: relative; padding: 27.2px; display: flex; flex-direction: column; gap: 13.6px; max-width: 62ch;">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <span style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-neutral-600);">Four steps, about ten minutes</span>
+          <p style="margin: 0; font-size: 17px; line-height: 1.5; color: var(--color-neutral-800); text-wrap: pretty;">Name your agent, tell it what your business does, connect Telegram, then test it yourself before any customer sees it. Nothing goes live until you say so.</p>
+          <div style="display: flex; align-items: center; gap: 20.4px; flex-wrap: wrap; padding-top: 3.4px;">
+            <button type="button" class="btn btn-primary blueprint" style="position: relative; font-size: 17px; padding: 13.6px 20.4px; cursor: pointer;">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              Create AI agent
+            </button>
+            <a href="#" style="font-size: 15px;">Or start from a template — clinic front desk, salon booking, FAQ</a>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showLoading }}" hint-placeholder-val="{{ false }}">
+        <section style="display: flex; flex-direction: column; gap: 27.2px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); border: 1px solid var(--color-divider);">
+            <sc-for list="{{ week }}" as="day" hint-placeholder-count="4">
+              <div style="padding: 20.4px; border-left: 1px solid var(--color-divider); display: flex; flex-direction: column; gap: 10.2px;">
+                <div style="height: 8px; width: 60%; background: var(--color-neutral-200);"></div>
+                <div style="height: 22px; width: 40%; background: var(--color-neutral-200);"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 27.2px;">
+            <div style="border: 1px solid var(--color-divider); padding: 20.4px; display: flex; flex-direction: column; gap: 20.4px;">
+              <div style="height: 10px; width: 45%; background: var(--color-neutral-200);"></div>
+              <div style="height: 1px; background: var(--color-divider);"></div>
+              <div style="height: 1px; background: var(--color-divider);"></div>
+              <div style="height: 1px; background: var(--color-divider);"></div>
+              <div style="height: 1px; background: var(--color-divider);"></div>
+            </div>
+            <div style="border: 1px solid var(--color-divider); padding: 20.4px; display: flex; flex-direction: column; gap: 20.4px;">
+              <div style="height: 10px; width: 55%; background: var(--color-neutral-200);"></div>
+              <div style="height: 1px; background: var(--color-divider);"></div>
+              <div style="height: 1px; background: var(--color-divider);"></div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showBoard }}" hint-placeholder-val="{{ true }}">
+        <footer style="border-top: 1px solid var(--color-divider); padding-top: 13.6px; display: flex; align-items: center; gap: 6.8px 27.2px; flex-wrap: wrap; font-size: 14px; color: var(--color-neutral-600);">
+          <span>Last knowledge update 2 days ago — 12 facts from Narxlar.xlsx</span>
+          <a href="#">Test your agent</a>
+          <a href="#">Invite a colleague</a>
+        </footer>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;populated&quot;,&quot;starved&quot;,&quot;empty&quot;,&quot;loading&quot;,&quot;error&quot;],&quot;default&quot;:&quot;populated&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Owner&quot;,&quot;Operator&quot;],&quot;default&quot;:&quot;Owner&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;strictBilling&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Rules&quot;}}">
+class Component extends DCLogic {
+  state = { openGap: null, lang: "EN" };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: var(--font-heading); font-size: 14px; letter-spacing: 0.06em; padding: 5px 10px; cursor: pointer; border: none; background: " +
+      (on ? "var(--color-accent)" : "transparent") + "; color: " + (on ? "#fff" : "var(--color-neutral-700)") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "populated";
+    const density = this.props.density ?? "Owner";
+    const strictBilling = this.props.strictBilling ?? false;
+
+    const live = { billing: true, channel: view !== "starved" ? true : true, knowledge: view !== "starved" };
+    const channelDown = view === "populated";
+
+    const statusByView = {
+      populated: {
+        headline: "Agent is answering.",
+        sub: "Telegram is connected and 214 facts are confirmed. Instagram stopped 3 days ago — customers there get no reply.",
+        dot: "var(--color-accent)"
+      },
+      starved: {
+        headline: "Not answering yet — it doesn't know enough.",
+        sub: "Telegram is connected and billing is active, but only 6 facts are confirmed. Add opening hours, address and a price range and it can start.",
+        dot: "var(--color-neutral-500)"
+      },
+      empty: {
+        headline: "No agent yet.",
+        sub: "You have a Standard plan and nothing running on it. Building one takes about ten minutes and nothing goes live until you test it.",
+        dot: "var(--color-neutral-400)"
+      },
+      loading: { headline: "Agent is answering.", sub: "Loading this week's numbers…", dot: "var(--color-accent)" },
+      error: {
+        headline: "Agent is answering.",
+        sub: "Last confirmed 4 minutes ago. This week's numbers didn't load — the agent itself is unaffected.",
+        dot: "var(--color-accent)"
+      }
+    };
+    const s = statusByView[view] || statusByView.populated;
+    let headline = s.headline;
+    if (strictBilling && view === "starved") headline = "Agent is live.";
+
+    const factsByView = {
+      populated: [
+        { label: "Channels", value: "Telegram · @shifomed_bot" },
+        { label: "Confirmed knowledge", value: "214 facts · 8 documents" },
+        { label: "Plan", value: "Standard — active until 12 Sep" }
+      ],
+      starved: [
+        { label: "Channels", value: "Telegram · @shifomed_bot" },
+        { label: "Confirmed knowledge", value: "6 facts" },
+        { label: "Plan", value: "Standard — active until 12 Sep" }
+      ],
+      empty: [
+        { label: "Channels", value: "None connected" },
+        { label: "Confirmed knowledge", value: "—" },
+        { label: "Plan", value: "Standard — active until 12 Sep" }
+      ],
+      error: [
+        { label: "Channels", value: "Telegram · @shifomed_bot" },
+        { label: "Confirmed knowledge", value: "214 facts · 8 documents" },
+        { label: "Plan", value: "Standard — active until 12 Sep" }
+      ]
+    };
+    factsByView.loading = factsByView.populated;
+
+    const gapCount = view === "populated" ? 41 : view === "starved" ? 4 : 0;
+    const cell = (i, last) =>
+      "padding: 20.4px; display: flex; flex-direction: column; gap: 6.8px; border-left: " +
+      (i === 0 ? "none" : "1px solid var(--color-divider)") + ";" + (last ? " background: var(--color-accent-100);" : "");
+
+    const figureSets = {
+      populated: [
+        { label: "Questions answered", value: "312", note: "this week", size: "34px", color: "var(--color-text)" },
+        { label: "Couldn't answer", value: "41", note: "26 different questions", size: "34px", color: "var(--color-text)" },
+        { label: "Handed to a human", value: "8", note: "3 still waiting", size: "34px", color: "var(--color-text)" },
+        { label: "Answered without you", value: "96%", note: "up from 91% last week", size: "44px", color: "var(--color-accent-700)" }
+      ],
+      starved: [
+        { label: "Questions answered", value: "0", note: "no customers yet", size: "34px", color: "var(--color-neutral-500)" },
+        { label: "Couldn't answer", value: "0", note: "—", size: "34px", color: "var(--color-neutral-500)" },
+        { label: "Handed to a human", value: "0", note: "—", size: "34px", color: "var(--color-neutral-500)" },
+        { label: "Answered without you", value: "—", note: "shows once it starts", size: "44px", color: "var(--color-neutral-500)" }
+      ],
+      error: [
+        { label: "Questions answered", value: "—", note: "didn't load · retry", size: "34px", color: "var(--color-neutral-500)" },
+        { label: "Couldn't answer", value: "—", note: "didn't load · retry", size: "34px", color: "var(--color-neutral-500)" },
+        { label: "Handed to a human", value: "—", note: "didn't load · retry", size: "34px", color: "var(--color-neutral-500)" },
+        { label: "Answered without you", value: "—", note: "didn't load · retry", size: "44px", color: "var(--color-neutral-500)" }
+      ]
+    };
+    const figures = (figureSets[view] || figureSets.populated).map((f, i, arr) =>
+      Object.assign({}, f, { cellStyle: cell(i, i === arr.length - 1 && view === "populated") })
+    );
+
+    const weekBars = view === "populated" ? [22, 31, 18, 36, 40, 12, 7] : [2, 2, 2, 2, 2, 2, 2];
+    const days = ["M", "T", "W", "T", "F", "S", "S"];
+    const week = weekBars.map((h, i) => ({ h: h + "px", d: days[i] }));
+
+    const gapSets = {
+      populated: [
+        { q: "«Сколько стоит УЗИ брюшной полости?»", meta: "asked 12× · Telegram · last asked today" },
+        { q: "\u201CShanba kuni ishlaysizmi?\u201D", meta: "asked 9× · Telegram · last asked yesterday" },
+        { q: "\u201CIs Dr. Rasulova taking new patients?\u201D", meta: "asked 7× · Instagram · last asked 2 days ago" },
+        { q: "«Есть ли детский невролог?»", meta: "asked 5× · Telegram" },
+        { q: "\u201CTahlil natijalari qancha vaqtda tayyor bo\u2018ladi?\u201D", meta: "asked 4× · Telegram" }
+      ],
+      starved: [
+        { q: "Opening hours", meta: "basic — customers ask this first" },
+        { q: "Address and nearest landmark", meta: "basic" },
+        { q: "Roughly what a consultation costs", meta: "basic — a range is fine" },
+        { q: "Which doctors work which days", meta: "basic" }
+      ]
+    };
+    const gaps = (gapSets[view] || gapSets.populated).map((g, i) =>
+      Object.assign({}, g, {
+        open: this.state.openGap === i,
+        action: this.state.openGap === i ? "Close" : "Add answer",
+        toggle: () => this.setState(st => ({ openGap: st.openGap === i ? null : i }))
+      })
+    );
+
+    const attention = view === "populated" ? [
+      { text: "Two facts disagree — a consultation reads 150 000 UZS and 250 000 UZS", meta: "Narxlar.xlsx vs. typed by you, 14 Aug", action: "Resolve" },
+      { text: "Instagram disconnected", meta: "3 days ago · token expired · 11 messages unanswered", action: "Reconnect" },
+      { text: "Three customers asked for a human", meta: "oldest waiting 5 hours", action: "Open" },
+      { text: "Low-confidence fact still unchecked — \u201CDr. Karimov works Sundays\u201D", meta: "61% · read from Jadval.docx", action: "Check" }
+    ] : [];
+
+    const primaryByView = {
+      populated: gapCount > 0 ? "Answer " + gapCount + " open questions" : "Test your agent",
+      starved: "Add the 4 basics it's missing",
+      empty: "Create AI agent",
+      error: gapCount > 0 ? "Answer " + gapCount + " open questions" : "Test your agent",
+      loading: "Answer " + gapCount + " open questions"
+    };
+
+    return {
+      isOperator: density === "Operator",
+      accounts: [
+        { name: "Shifo Med", gaps: 41 },
+        { name: "Zarina Beauty", gaps: 12 },
+        { name: "IT Park Tutoring", gaps: 3 },
+        { name: "Dental Lux", gaps: 0 }
+      ],
+      gapCount,
+      statusHeadline: headline,
+      statusSub: s.sub,
+      statusDot: s.dot,
+      statusFacts: factsByView[view] || factsByView.populated,
+      hasPrimary: view !== "loading",
+      primaryLabel: primaryByView[view],
+      showTestLink: view === "populated" || view === "starved",
+      secondaryLabel: view === "starved" ? "Skip for now and test what it knows" : "Or test your agent first",
+      showBoard: view === "populated" || view === "starved" || view === "error",
+      showFirstRun: view === "empty",
+      showLoading: view === "loading",
+      figures,
+      week,
+      gaps,
+      gapTitle: view === "starved" ? "What it still needs to know" : "What it doesn't know yet",
+      gapSubtitle: view === "starved" ? "the basics customers ask first" : "customers' own words, most asked first",
+      gapFooter: view === "starved" ? "See the full checklist \u2192" : "See all " + gapCount + " \u2192",
+      attention,
+      hasAttention: attention.length > 0,
+      attentionEmpty: attention.length === 0 && view !== "empty",
+      today: "27 Aug 2026",
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

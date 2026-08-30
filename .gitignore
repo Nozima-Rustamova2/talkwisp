@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+uvicorn.log
+gaps.jsonl
+results.json
+run.txt
+messages.jsonl
+bot.log
