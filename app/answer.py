@@ -76,7 +76,7 @@ Rules, in order of importance:
 2. If the context does not contain the answer, reply with exactly {NO_ANSWER} on the first line, then one short sentence in the customer's language telling them to contact the business directly. Never guess, and never use anything you know from outside the context.
 3. Never invent or adjust a price, a time, a phone number or a person's name. Use them exactly as the context gives them.
 4. Prices are approximate ranges. Present them as ranges, never as an exact price.
-5. The language to reply in is stated at the top of every message as REPLY IN. Obey it exactly. The context is often stored in a different language from the question -- never let the context's language decide your reply's language.
+5. The language to reply in is stated on the LAST line of every message as REPLY IN. It is last because it must beat everything above it. Obey it exactly. The context is often stored in a different language from the question -- never let the context's language decide your reply's language.
 6. When the context is a passage from a document, keep its wording rather than rewriting it. Paraphrasing is how details drift.
 7. Be brief -- one or two sentences. This is a chat message, not a document.
 8. TODAY and TOMORROW are stated at the top of every message. They are the ONLY dates you know. Use them solely to resolve the words "today" and "tomorrow" in the question. Never state the weekday of any other date, never count days forward or backward, and never name a date that is not written above. A day the customer names outright ("Sunday", "yakshanba", "в воскресенье") needs no resolving -- answer it from the context as usual. But a day referred to only relatively and not covered by the two lines -- "the day after tomorrow", "next Tuesday", "in three days" -- you cannot work out, so reply {NO_ANSWER}.
@@ -253,13 +253,32 @@ def detect_language(text: str) -> str:
     return "the same language the customer wrote in, in LATIN script"
 
 
+# Any line the model echoes back from the instruction, wherever it lands.
+_REPLY_IN_ECHO = re.compile(r"^\s*REPLY IN:.*$", re.MULTILINE | re.IGNORECASE)
+
+
 def _ask(prompt: str, question: str) -> tuple[str, bool]:
     """Returns (reply, refused). The model signals refusal with a marker so the
     caller can log a gap, instead of the refusal disappearing into prose."""
+    # REPLY IN goes LAST, after the context, not before it. It used to sit at
+    # the top; once both retrieval paths were merged the context block grew and
+    # a Cyrillic Uzbek question started coming back in LATIN -- the model
+    # copying the script of the facts it had just read. That is the exact
+    # failure detect_language() exists to prevent, resurfacing because the
+    # instruction sat further from the point of generation than the thing it
+    # had to override. The harness could not see it: grading is route-based, so
+    # a correct answer in the wrong script still passes.
     text = complete(
         _SYSTEM,
-        f"{_clock()}\nREPLY IN: {detect_language(question)}\n\n{prompt}"
+        f"{_clock()}\n\n{prompt}\n\nREPLY IN: {detect_language(question)}"
     )
+    # Moving REPLY IN to the last line made the model occasionally CONTINUE it:
+    # one reply came back with "REPLY IN: Uzbek, in CYRILLIC script" appended,
+    # which a customer would have read in their chat. Intermittent, which is
+    # worse than consistent. Stripped in code rather than asked for in the
+    # prompt, because a prompt instruction is a preference and this is a
+    # guarantee -- the same reason NO_ANSWER is a marker and not a request.
+    text = _REPLY_IN_ECHO.sub("", text).strip()
     if NO_ANSWER in text:
         return text.replace(NO_ANSWER, "").strip(), True
     return text, False
@@ -411,28 +430,26 @@ def answer(conn: Connection, question: str) -> dict:
         )
         return result
 
-    if retrieval["status"] == "ok":
-        context = "\n".join(
-            f"- {f['subject']} / {f['attribute']}: {f['value']}"
-            for f in retrieval["facts"]
-        )
-        reply, refused = _ask(
-            f"Context (known facts about the business):\n{context}\n\n"
-            f"Customer question: {question}",
-            question,
-        )
-        if not refused:
-            result["source"] = "facts"
-            result["answer"] = reply
-            return result
-        # Matching fired, but on facts that do not answer the question. Still a
-        # gap, and a more interesting one than a plain miss: it says the match
-        # was wrong, not that the knowledge is absent.
-        result["note"] = "facts matched but did not answer"
+    # BOTH paths, always, then merged into one context. Exact match used to be
+    # terminal: if it produced anything, the answer was built from that alone
+    # and the vector path never ran. That is a short-circuit nobody intended,
+    # and it told a customer we did not know our own address --
+    # "Yakshanbayam ochiqmisila? Ozi qatda joylashgansila?" matched on Sunday
+    # hours, answered that clause, returned `ok`, and dropped the rest. The
+    # failure is invisible by construction: a real answer to a real clause looks
+    # like success at every layer, including grading.
+    #
+    # Exact match is still FIRST and still authoritative -- its facts go in
+    # ahead of the scored ones and are never subject to the similarity floor.
+    # It just no longer ends the search. A question with one clause loses
+    # nothing by also running the vector path; a question with three gains the
+    # other two.
+    #
+    # The cost is one embedding call on questions that previously skipped it.
+    # That is cheaper than it looks: it replaces a SECOND generation call on
+    # every question where exact matching fired and then failed to answer.
+    exact_facts = retrieval["facts"] if retrieval["status"] == "ok" else []
 
-    # Exact matching missed, or matched facts that answered nothing. Fall back
-    # to vector search -- over facts as well as prose, because a Russian
-    # question about opening hours has no prose to find, only a fact.
     near_facts, chunks = search(conn, question)
     result["chunks"] = chunks
     result["near_facts"] = near_facts
@@ -443,9 +460,21 @@ def answer(conn: Connection, question: str) -> dict:
     if len(expanded) > len(usable_facts):
         result["expanded_list"] = len(expanded) - len(usable_facts)
         usable_facts = expanded
+
+    # Exact first, then the scored ones, with duplicates dropped on identity
+    # rather than on wording -- the same row can arrive down both paths.
+    seen = {(f["subject"], f["attribute"]) for f in exact_facts}
+    merged_facts = list(exact_facts)
+    for f in usable_facts:
+        if (f["subject"], f["attribute"]) not in seen:
+            seen.add((f["subject"], f["attribute"]))
+            merged_facts.append(f)
+    usable_facts = merged_facts
+
     # What actually reached the prompt. near_facts is the raw scored window;
-    # this is the window plus any list expansion, and it is what the answer was
-    # built from -- so it is what grading and the logs must look at.
+    # this is the window plus list expansion plus the exact matches, and it is
+    # what the answer was built from -- so it is what grading and the logs must
+    # look at.
     result["context_facts"] = usable_facts
     usable_chunks = [c for c in chunks if c["similarity"] >= SIMILARITY_FLOOR]
 
@@ -465,8 +494,13 @@ def answer(conn: Connection, question: str) -> dict:
             # Name what was actually in the context. Labelling this
             # "vector-facts" whenever any fact cleared the floor made two
             # correctly-answered prose questions look like failures.
+            # Name every path that actually contributed. "facts" means exact
+            # matching put something in; "vector-facts" means the scored window
+            # did. Both appear when both did, which is the whole point.
             result["source"] = "+".join(
-                p for p, on in (("vector-facts", usable_facts),
+                p for p, on in (("facts", exact_facts),
+                                ("vector-facts",
+                                 [f for f in usable_facts if f not in exact_facts]),
                                 ("chunks", usable_chunks)) if on)
             result["status"] = "ok"
             result["answer"] = reply

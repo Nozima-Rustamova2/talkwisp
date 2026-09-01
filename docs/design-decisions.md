@@ -278,6 +278,73 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## Retrieval paths merged — 2026-09-02
+
+- **Exact match is no longer terminal.** It is still first, still authoritative,
+  and its facts still bypass the similarity floor — it just no longer ends the
+  search. Both paths run, always, and the results are merged into one context
+  for one model call.
+- **The short-circuit was never intended and was invisible by construction.**
+  "Yakshanbayam ochiqmisila? Ozi qatda joylashgansila?" matched on Sunday hours,
+  answered that clause, returned `ok`, and dropped the rest — telling a customer
+  we did not know our own address, a fact we hold. A real answer to a real
+  clause looks like success at every layer, including grading.
+- **A question with one clause loses nothing by also running the vector path;
+  a question with three gains the other two.** That is the whole argument.
+- **Cost:** one embedding call on questions that previously skipped it. Cheaper
+  than it looks — it replaces a SECOND generation call on every question where
+  exact matching fired and then failed to answer.
+- **Result: `live-sunday-address-landmark` fixed, no verdict regressions.**
+  80 questions, 74 -> 75 pass. But 12 of the 21 previously-exact-match answers
+  changed wording, which is why the check below mattered.
+
+### The regression the harness could not see
+
+- **A Cyrillic Uzbek question came back in Latin script.** The larger merged
+  context meant more Latin-stored facts in the prompt, and the model copied the
+  script of what it had just read. Every route was correct, so the verdict
+  stayed **PASS** and nothing reported it. Found only by diffing the answer text
+  against a saved pre-change baseline.
+- **The cause was position, not wording.** `REPLY IN` sat at the TOP of the
+  prompt, and the instruction that had to beat the context was further from the
+  point of generation than the context itself. It now goes LAST, after
+  everything it must override.
+- **That created a second defect immediately:** the model began CONTINUING the
+  final line, and one reply came back with "REPLY IN: Uzbek, in CYRILLIC script"
+  appended — text a customer would have read in their chat. Intermittent, which
+  is worse than consistent. **Stripped in code, not asked for in the prompt:** a
+  prompt instruction is a preference, and this needed a guarantee. Same reason
+  `NO_ANSWER` is a marker rather than a request.
+- **Grading now checks the SCRIPT of every reply**, before it checks anything
+  about routes, and a wrong-script reply fails however correct its contents.
+  Route grading is mechanical and gradeable, which is why it was chosen — but it
+  cannot see a correct answer delivered in an alphabet the customer cannot read,
+  and that is the most visible defect class there is. It checks script only, not
+  language: Uzbek-Cyrillic versus Russian is the detector's job and is tested
+  free in `check_language.py`.
+
+### Pattern: every capability widens what the model feels licensed to say
+
+Three times now, a fix that gave the model something new to work with made it
+answer questions it should have declined:
+
+1. **Dates.** "Ertaga vrachda bo'sh vaqt bormi?" had always refused; given a
+   clock it began replying "tomorrow, Wednesday, our doctors' hours vary — tell
+   us which doctor". No false claim, but it implies it could check availability,
+   and it cannot for any doctor. Fixed by rule 9: **being able to name the day is
+   not permission to answer a different question about it.**
+2. **Merged retrieval.** More context in the prompt, and the reply drifted into
+   the context's script.
+3. **`syn-lunch-break`.** With more facts in front of it the model asserted the
+   clinic works "tanaffussiz" — without a break. Nothing states that. It
+   inferred a negative from silence, and it is still failing.
+
+**The generalisation: helpful is where the failures live.** Every capability
+added is more surface for the model to be helpful with, and the resulting
+failures are subtler than the ones being fixed — no false claim, just an implied
+capability or an unstated inference. Expect the next capability to do this too,
+and check for it specifically rather than trusting the pass count.
+
 ## Dates — added 2026-09-01
 
 - **The bot had no concept of what day it was**, and said so confidently:

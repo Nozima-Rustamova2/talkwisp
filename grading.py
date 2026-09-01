@@ -6,13 +6,49 @@ inspecting a route or a field that the answer path had moved on from -- and each
 time it cost a full 25-question re-run to find out.
 """
 
+import re
+
 from app.normalize import normalize
 
+
+_CYRILLIC = re.compile(r"[\u0400-\u04ff]")
+
+
+def wrong_script(q: dict, r: dict) -> str | None:
+    """Reason the reply is in the wrong script, or None.
+
+    Added after a silent regression: merging both retrieval paths grew the
+    context, and a Cyrillic Uzbek question came back in LATIN because the model
+    copied the script of the facts it had just read. Every route was correct, so
+    the verdict stayed PASS and nothing reported it. Grading the route alone
+    cannot see a right answer delivered in a script the customer cannot read --
+    and that is the most VISIBLE defect class there is. A customer notices it
+    instantly, where they would never notice a threshold being wrong.
+
+    Deliberately only checks script, not language. Uzbek-Cyrillic versus Russian
+    is the detector's job and is tested for free in check_language.py; this only
+    catches the reply coming back in the wrong alphabet entirely.
+    """
+    answer = r.get("answer") or ""
+    if not answer.strip():
+        return None  # a refusal with no text has no script to be wrong about
+    has_cyrillic = bool(_CYRILLIC.search(answer))
+    if q["lang"] in ("uz-cyrl", "ru") and not has_cyrillic:
+        return "question is Cyrillic, reply is not"
+    if q["lang"] in ("uz-latn", "en") and has_cyrillic:
+        return "question is Latin, reply is Cyrillic"
+    return None
 
 def grade(q: dict, r: dict) -> str | None:
     """PASS / FAIL / None (judge by eye)."""
     expect = q["expect"]
     source = r["source"] or ""
+
+    # Before anything about routes: a reply the customer cannot read is a
+    # failure however correct its contents. This is checked first so it cannot
+    # be masked by a route that graded green.
+    if wrong_script(q, r):
+        return "FAIL"
 
     if expect == "gap":
         return "PASS" if r["status"] == "unknown" else "FAIL"
