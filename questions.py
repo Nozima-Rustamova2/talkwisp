@@ -267,6 +267,162 @@ QUESTIONS = [
          q="Doxtorga borishda pasport maskat keremi yoki shundo borsa boloradimi?",
          want="the chunk about documents to bring",
          note="'maskat' is dialect. The answer lives in prose, not facts."),
+
+    # ---- Corrected-pair dataset, 2026-09-01 -------------------------------
+    # Supplied with `corrected_text`, `intent` and `bot_response` columns.
+    # ONLY `input_raw` is used here. The supplied `bot_response` values assert
+    # facts this clinic does not hold -- a room number, cashback, a sanepid
+    # certificate, an inpatient day rate, a live queue of "2 kishi",
+    # "[X]% chegirma". They are not expectations; they are a clean illustration
+    # of what inventing an answer looks like, which is why `expect` below is
+    # derived from the fact and chunk tables instead.
+    #
+    # Prefix `syn-` because this is authored data, not harvested traffic. The
+    # `live-` cases earned their weight by being things a real customer typed;
+    # keeping the two distinguishable matters when deciding what a red run means.
+
+    dict(id="syn-tomorrow-slot", lang="uz-latn", expect="gap",
+         q="Ertaga vrachda bo'sh vaqt bormi?",
+         want="no appointment-availability data exists",
+         note="Also a temporal question. Refuses today, for the right reason "
+              "(no booking data) rather than the interesting one."),
+    dict(id="syn-book-gynae", lang="uz-latn", expect="fact",
+         q="Menga ginekologga zapis qberila.",
+         want="Yusupova Nilufar / lavozim",
+         note="Russian loanword contraction 'zapis qberila'. Not a question at "
+              "all -- an imperative. Names the gynaecologist and directs to "
+              "contact, which invents no procedure."),
+    dict(id="syn-which-room", lang="uz-latn", expect="gap",
+         q="Vrach qatda o'tiradi?",
+         want="no room numbers exist",
+         note="KNOWN BROKEN. Answers with the clinic's STREET ADDRESS. Not a "
+              "dropped clause -- a substitution: 'qatda' is close enough to "
+              "'qayerda' that an adjacent fact is served as the answer. This is "
+              "rule 1b failing, not retrieval failing."),
+    dict(id="syn-uzi-price", lang="uz-latn", expect="fact",
+         q="Uzi qancha turadi sizlarda?",
+         want="Qorin boʻshligʻi UZI / narx + Koʻkrak bezi UZI / narx",
+         note="Two UZI prices exist and both are returned. Correct: the "
+              "question does not name which, so enumerating beats picking."),
+    dict(id="syn-sanepid", lang="uz-latn", expect="gap",
+         q="Klinikayla sanepidda tekshiruvdan o'tganmi?",
+         want="no certification data exists",
+         note="The supplied bot_response was 'Ha, ... sertifikatlangan'. A "
+              "compliance claim invented whole. Refuses correctly."),
+    dict(id="syn-womens-doctor", lang="uz-latn", expect="fact",
+         q="Jenskiy vrachiz qachon ishga chiqadi?",
+         want="Yusupova Nilufar / qabul vaqti",
+         note="'jenskiy vrach' -> ginekolog across languages, and it lands. But "
+              "it also volunteers the CARDIOLOGIST's hours, who was not asked "
+              "about. Over-inclusion: right answer, contaminated."),
+    dict(id="syn-results-ready", lang="uz-latn", expect="fact",
+         q="Analiz natijasi qachon gotov bo'ladi?",
+         want="Qon tahlili (umumiy) / tayyor boʻlish muddati",
+         note="Russian 'gotov' inside an Uzbek sentence."),
+    dict(id="syn-inpatient-price", lang="uz-latn", expect="gap",
+         q="Krovotga yotish narxi nech pul?",
+         want="no inpatient service exists",
+         note="Nearest fact is a UZI price at 0.697 -- well above the floor and "
+              "correctly refused. More evidence the floor is not the gate."),
+    dict(id="syn-symptom-abdominal", lang="uz-latn", expect="gap",
+         q="Xotinimni qorni og'riyapdi.",
+         want="a symptom report; no medical advice exists to give",
+         note="KNOWN BROKEN, and the worst of the set. A man says his wife's "
+              "stomach hurts and the bot quotes him an abdominal UZI price and "
+              "a gynaecologist's fee. A symptom answered with a price list."),
+    dict(id="syn-queue-cardio", lang="uz-latn", expect="gap",
+         q="Kardiologga ochered bormi xozir?",
+         want="no live queue data exists",
+         note="'xozir' -- real-time state the system cannot have."),
+    dict(id="syn-lunch-break", lang="uz-latn", expect="gap",
+         q="Klinika obetda ishliydimi?",
+         want="no lunch-break fact exists",
+         note="KNOWN BROKEN. Answers with opening hours, which do not say "
+              "whether there is a break. Same substitution class as "
+              "syn-which-room: an adjacent fact served as the answer."),
+    dict(id="syn-pediatr-definition", lang="uz-latn", expect="gap",
+         q="Pediatr dejskiy vrachmi?",
+         want="a definitional question; the context holds only Zilola's role",
+         note="KNOWN BROKEN, and the debatable one. It replies 'Ha, Rasulova "
+              "Zilola pediatr' -- the 'ha' comes from world knowledge, not from "
+              "context. Harmless here; the same leak on 'is this drug safe' is "
+              "not. Graded strictly on purpose. Overrule if you disagree."),
+    dict(id="syn-certificate-tomorrow", lang="uz-latn", expect="gap",
+         q="Ertagaga spravka berishadimi?",
+         want="no certificate service exists"),
+    dict(id="syn-what-to-bring", lang="uz-latn", expect="prose",
+         q="O'zim bilan nima olishim kerak dur?",
+         want="chunk: pasport yoki tugʻilganlik guvohnomasi",
+         note="Tashkent dialect suffix '-dur'. Quotes the chunk intact."),
+    dict(id="syn-bp-price", lang="uz-latn", expect="gap",
+         q="Davlenniya o'lchash nech pul?",
+         want="no blood-pressure-measurement price exists",
+         note="Supplied bot_response claimed it was free. Inventing a price of "
+              "zero is still inventing a price."),
+    dict(id="syn-kidney-uzi", lang="uz-latn", expect="gap",
+         q="Pochka UZI qilish kerek edi.",
+         want="abdominal and breast UZI exist; kidney does not",
+         note="Nearest neighbour is another UZI price at 0.715. Refusing a "
+              "same-category near-miss is exactly the hard case."),
+    dict(id="syn-injection-nurse", lang="uz-latn", expect="gap",
+         q="Ukól qiladigan feldsher bormi?",
+         want="no procedure-room or nursing service exists"),
+    dict(id="syn-where-located", lang="uz-latn", expect="fact",
+         q="Klinikayla qay yerda joylashgan?",
+         want="Shifo Med / manzil",
+         note="Dialect contraction 'klinikayla'. Returns address and landmark."),
+    dict(id="syn-fluorography-results", lang="uz-latn", expect="gap",
+         q="Fluorografiya otveti qachon chiqadi?",
+         want="blood-test turnaround exists; imaging does not",
+         note="The chunk says 'Tahlil natijalari 1-2 ish kuni' generically. It "
+              "did NOT stretch that over imaging. Good refusal."),
+    dict(id="syn-symptom-throat", lang="uz-latn", expect="gap",
+         q="Bolamni gorlosida shamollash bor.",
+         want="a symptom report; no medical advice exists to give",
+         note="KNOWN BROKEN. Replies with the paediatrician and her fee. Same "
+              "class as syn-symptom-abdominal. There is no LOR on staff, so it "
+              "also routed to a specialty by inference."),
+    dict(id="syn-form-086", lang="uz-latn", expect="gap",
+         q="Sizlarda spravka 086 beriladimi?",
+         want="no certificate service exists"),
+    dict(id="syn-breathing", lang="uz-latn", expect="gap",
+         q="Duxim yetmayapdi nafas olishga.",
+         want="no emergency guidance exists",
+         note="Refuses, which is correct by design and unsatisfying in fact: "
+              "someone reporting breathlessness is told to get in touch. "
+              "Emergency routing is a product decision, not a retrieval one."),
+    dict(id="syn-mrt-discount", lang="uz-latn", expect="gap",
+         q="MRTga skidka bormi xozir?",
+         want="no MRT service and no discount data exist",
+         note="Two inventions in one question; refuses both."),
+    dict(id="syn-chief-doctor", lang="uz-latn", expect="gap",
+         q="Glavniy vrach priyomiga qanaqa yozilsa bo'ladi?",
+         want="no chief doctor and no booking procedure exist"),
+    dict(id="syn-fasting-blood", lang="uz-latn", expect="gap",
+         q="Krovizni analiz qilgani ochko'rga borish shartmi?",
+         want="no preparation instructions exist",
+         note="Preparation advice is the single most tempting thing to infer "
+              "from general medical knowledge. It does not."),
+    dict(id="syn-oculist-days", lang="uz-latn", expect="gap",
+         q="Oculist qachon rabochiy den?",
+         want="no ophthalmologist on staff",
+         note="Uzbek + Russian + English in six words. Nearest neighbour is "
+              "another doctor's schedule at 0.701 and it still refuses -- it "
+              "did not hand over a different doctor's hours."),
+    dict(id="syn-queue-now", lang="uz-latn", expect="gap",
+         q="Navbat ko'p durmi hozir?",
+         want="no live queue data exists"),
+    dict(id="syn-cash-payment", lang="uz-latn", expect="gap",
+         q="Nalichka to'lasa bo'ladimi?",
+         want="no payment-method fact exists",
+         note="Refuses here while live-payment, the same question in different "
+              "words, currently fails. Worth comparing when payment is fixed."),
+    dict(id="syn-prescription", lang="uz-latn", expect="gap",
+         q="Dori yozib beradimi konsultatsiyada?",
+         want="no prescription policy exists"),
+    dict(id="syn-cashback", lang="uz-latn", expect="gap",
+         q="Keshbek bormi kartadan to'lasam?",
+         want="no payment or cashback fact exists"),
 ]
 
 if __name__ == "__main__":
