@@ -18,6 +18,7 @@ import datetime
 import json
 import pathlib
 import re
+import zoneinfo
 
 from psycopg import Connection
 
@@ -77,7 +78,9 @@ Rules, in order of importance:
 4. Prices are approximate ranges. Present them as ranges, never as an exact price.
 5. The language to reply in is stated at the top of every message as REPLY IN. Obey it exactly. The context is often stored in a different language from the question -- never let the context's language decide your reply's language.
 6. When the context is a passage from a document, keep its wording rather than rewriting it. Paraphrasing is how details drift.
-7. Be brief -- one or two sentences. This is a chat message, not a document."""
+7. Be brief -- one or two sentences. This is a chat message, not a document.
+8. TODAY and TOMORROW are stated at the top of every message. They are the ONLY dates you know. Use them solely to resolve the words "today" and "tomorrow" in the question. Never state the weekday of any other date, never count days forward or backward, and never name a date that is not written above. A day the customer names outright ("Sunday", "yakshanba", "в воскресенье") needs no resolving -- answer it from the context as usual. But a day referred to only relatively and not covered by the two lines -- "the day after tomorrow", "next Tuesday", "in three days" -- you cannot work out, so reply {NO_ANSWER}.
+9. Knowing what day it is does not tell you the business is open. Opening hours and the rest day come from the context like every other fact; the date lines only tell you WHICH day the customer means. A stated range of working days DOES answer for days outside it: if the context says the business works Monday to Saturday, then Sunday is closed, and you should say so rather than refuse. Reply {NO_ANSWER} only when the context gives you no working days or rest day at all. And resolving a date tells you ONLY which day is meant. It never tells you whether an appointment slot is free, how busy that day is, who is on duty, or anything else the context does not state -- being able to name the day is not permission to answer a different question about it."""
 
 _SEARCH_CHUNKS = """
 select content, 1 - (embedding <=> %(v)s::vector) as similarity
@@ -204,6 +207,37 @@ def _cyrillic_language(lowered: str, words: set[str]) -> str:
 # about opening hours came back in Uzbek Latin, because the retrieved fact was
 # stored in Uzbek and the model copied the context's language instead of the
 # question's.
+# The business's timezone, not the server's. Single-tenant on purpose, like the
+# rest of the schema -- when multi-tenancy lands this becomes a column, not a
+# config file. Hardcoded rather than read from the host: a server in another
+# zone would be silently a day out for part of every day, and "silently" is the
+# whole problem being fixed here.
+BUSINESS_TZ = "Asia/Tashkent"
+
+
+def _clock() -> str:
+    """The two lines the model is allowed to reason about dates from.
+
+    TOMORROW is computed HERE, in code, not left to the model. The failure this
+    exists to fix was the bot telling a customer "Yakshanba dam olish kuni,
+    shuning uchun ertaga ishlamaymiz" -- asserting tomorrow was Sunday with no
+    concept of what day it was. Handing the model a date and asking it to add
+    one day would trade a hallucinated weekday for an arithmetic mistake, which
+    is the same defect wearing a better disguise. Code counts; the model reads.
+
+    Deliberately only today and tomorrow. Anything further -- "next Tuesday",
+    "in three days" -- is arithmetic we have not been asked for, and rule 8
+    forbids the model doing it unaided.
+    """
+    # No fallback to the host clock if the timezone is unavailable. A wrong day
+    # stated confidently is worse than an error at startup, and near midnight
+    # the host and Tashkent disagree.
+    now = datetime.datetime.now(zoneinfo.ZoneInfo(BUSINESS_TZ))
+    tomorrow = now + datetime.timedelta(days=1)
+    return (f"TODAY: {now:%A}, {now:%Y-%m-%d}\n"
+            f"TOMORROW: {tomorrow:%A}, {tomorrow:%Y-%m-%d}")
+
+
 def detect_language(text: str) -> str:
     """A reply instruction, not a language code. Deliberately coarse: it only
     has to separate the cases that were actually going wrong."""
@@ -223,7 +257,8 @@ def _ask(prompt: str, question: str) -> tuple[str, bool]:
     """Returns (reply, refused). The model signals refusal with a marker so the
     caller can log a gap, instead of the refusal disappearing into prose."""
     text = complete(
-        _SYSTEM, f"REPLY IN: {detect_language(question)}\n\n{prompt}"
+        _SYSTEM,
+        f"{_clock()}\nREPLY IN: {detect_language(question)}\n\n{prompt}"
     )
     if NO_ANSWER in text:
         return text.replace(NO_ANSWER, "").strip(), True

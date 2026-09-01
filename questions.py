@@ -425,6 +425,44 @@ QUESTIONS = [
     dict(id="syn-cashback", lang="uz-latn", expect="gap",
          q="Keshbek bormi kartadan to'lasam?",
          want="no payment or cashback fact exists"),
+
+    # ---- Temporal, 2026-09-01 ---------------------------------------------
+    # These grade the ROUTE only, and they have to: the correct WORDING depends
+    # on the day the suite runs. "Ertaga ishlaysizmi?" should answer "yes, 09:00
+    # to 18:00" on five days a week and "no, we are closed" on Saturday, and a
+    # static expected string cannot be both. Retrieval does not see the date, so
+    # the retrieved facts are stable even though the answer is not.
+    #
+    # The day-dependent behaviour is checked two other ways, both cheap:
+    # check_time.py verifies the arithmetic offline, and probing with _clock
+    # monkeypatched covers Saturday and Sunday without waiting for the weekend.
+
+    dict(id="temporal-tomorrow-uz", lang="uz-latn", expect="fact",
+         q="Ertaga ishlaysizmi?",
+         want="Shifo Med / ish vaqti",
+         note="The failure that started this: the bot once said 'Yakshanba dam "
+              "olish kuni, shuning uchun ertaga ishlamaymiz' -- asserting "
+              "tomorrow was Sunday with no idea what day it was. TOMORROW is "
+              "now computed in code, so the model reads a weekday rather than "
+              "inventing one."),
+    dict(id="temporal-today-ru", lang="ru", expect="fact",
+         q="Сегодня открыты?",
+         want="Shifo Med / ish vaqti",
+         note="Same mechanism in Russian. The reply names the weekday, so a "
+              "wrong clock would be visible rather than silent."),
+    dict(id="temporal-day-after-tomorrow", lang="uz-latn", expect="gap",
+         q="Indinga ishlaysizmi?",
+         want="only today and tomorrow are given; 'indinga' is not derivable",
+         note="Must refuse. The clock deliberately stops at tomorrow -- letting "
+              "the model count further would swap a hallucinated weekday for an "
+              "arithmetic mistake, which is the same defect better disguised."),
+    dict(id="temporal-next-tuesday", lang="uz-latn", expect="gap",
+         q="Kelasi seshanba ishlaysizmi?",
+         want="a relative day beyond tomorrow",
+         note="Must refuse for the same reason, and note the contrast with "
+              "sunday-uz: a day the customer NAMES outright needs no resolving "
+              "and is still answered. It is the relative reference that is "
+              "unanswerable, not the weekday."),
 ]
 
 if __name__ == "__main__":

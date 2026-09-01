@@ -278,6 +278,67 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## Dates — added 2026-09-01
+
+- **The bot had no concept of what day it was**, and said so confidently:
+  "Yakshanba dam olish kuni, shuning uchun ertaga ishlamaymiz" — *Sunday is our
+  rest day, so we are closed tomorrow* — with nothing telling it that tomorrow
+  was Sunday. It was not. This is the failure class that makes a customer act
+  on something false, which is why it was taken before the others.
+- **TODAY and TOMORROW are stated at the top of every answering prompt**, and
+  both are computed in code. The model reads a weekday; it never derives one.
+- **Tomorrow is computed, not inferred, and that is the point.** Handing over
+  today's date and asking the model to add a day trades a hallucinated weekday
+  for an arithmetic mistake — the same defect in better disguise. Code counts,
+  the model reads. `check_time.py` checks the counting offline, for free.
+- **The clock deliberately stops at tomorrow.** "Indinga" (day after tomorrow)
+  and "kelasi seshanba" (next Tuesday) are refused, because extending the
+  window means handing arithmetic back to the model. Extend it only if real
+  traffic asks, and extend it in code.
+- **A day the customer NAMES is different from one they refer to relatively.**
+  "Yakshanba kuni ishlaysizmi?" needs no resolving and is answered from the
+  context as it always was; only the relative reference is unanswerable. The
+  first draft of the rule missed this and would have started refusing questions
+  that had passed since step 20.
+- **This is a second exception to "never state what was not retrieved",** after
+  the emergency numbers. The date is not business knowledge and not model
+  knowledge — it is the system clock, so it cannot become the "one wrong answer
+  feeds the next" failure that keeps history out of the answering prompt. Two
+  exceptions now exist and both are civil or physical constants. A third should
+  be argued from scratch, not from precedent.
+- **Timezone is the business's, hardcoded, with no fallback to the host.**
+  `Asia/Tashkent`, UTC+5 with no daylight saving since 2005. A server running on
+  UTC is already on the *next* day in Tashkent for five hours out of every
+  twenty-four, so a silent fallback would be wrong for a fifth of the day —
+  exactly the silent-wrongness being fixed. Single-tenant like the rest of the
+  schema; this becomes a column, not a config file, when multi-tenancy lands.
+- **`tzdata` is now a declared dependency.** Windows ships no IANA timezone
+  database, so `zoneinfo` cannot resolve `Asia/Tashkent` without it. It was
+  present transitively and worked by luck; a fresh environment would have
+  failed on the first date question.
+- **Over-refusal was the first result, and it needed fixing too.** The initial
+  rule made the model treat "Monday–Saturday" as not covering Sunday, so on a
+  Saturday it refused rather than saying "closed tomorrow". Safe but unhelpful:
+  a stated range of working days DOES answer for days outside it. Verified by
+  monkeypatching the clock to Saturday and Sunday rather than waiting for the
+  weekend.
+- **Giving the model a date made it engage with questions it should refuse,
+  and that had to be closed too.** "Ertaga vrachda bo'sh vaqt bormi?" ("any free
+  slots with a doctor tomorrow?") had always refused — there is no
+  appointment-availability data. With the clock it started replying that
+  "tomorrow, Wednesday, our doctors' hours vary, so tell us which doctor" — no
+  false claim, but it implies it could check availability if asked properly,
+  and it cannot, for any doctor. Rule 9 now says outright that resolving a date
+  tells you only which day is meant, never whether a slot is free or who is on
+  duty. **Being able to name the day is not permission to answer a different
+  question about it.** Caught by the harness, not by inspection.
+- **The harness grades the route only, and has to.** The correct wording is
+  day-dependent — "Ertaga ishlaysizmi?" should answer *yes, 09:00–18:00* on five
+  days and *no, we are closed* on Saturday — and no static expected string is
+  both. Retrieval never sees the date, so the retrieved facts are stable even
+  though the answer is not. The day-dependent behaviour is covered by
+  `check_time.py` and by clock-patched probing instead.
+
 ## Language detection — rewritten 2026-09-01
 
 - **Still detected in code, not by the model.** Unchanged and still right: a

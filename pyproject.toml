@@ -8,5 +8,9 @@ dependencies = [
     "psycopg[binary,pool]>=3.3.4",
     "python-dotenv>=1.2.3",
     "python-multipart>=0.0.32",
+    # Windows ships no IANA timezone database, so zoneinfo cannot resolve
+    # Asia/Tashkent without this. It was installed transitively and worked
+    # by luck; a fresh environment would have failed at the first date.
+    "tzdata>=2026.3",
     "uvicorn[standard]>=0.52.4",
 ]
