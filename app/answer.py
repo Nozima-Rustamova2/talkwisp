@@ -114,24 +114,104 @@ select subject, attribute, attribute_key, value
 # about opening hours came back in Uzbek Latin, because the retrieved fact was
 # stored in Uzbek and the model copied the context's language instead of the
 # question's.
-_UZBEK_CYRILLIC = set("ўғқҳ")
+# Uzbek Cyrillic has four letters Russian does not. They are decisive when
+# present -- and absent from a standard Russian keyboard layout, which is the
+# whole problem: casual typists substitute у г к х, so the strongest signal is
+# the one that disappears in the informal phone typing that is most of the
+# traffic. Measured before the rewrite: 0 of 13 such messages detected
+# correctly, every one answered in Russian. See check_language.py.
+_UZBEK_LETTERS = set("ўғқҳ")
+
+# Absent from the Uzbek Cyrillic alphabet, so decisive the other way. Note that
+# ъ, ь, э, ё, ю, я are NOT here: Uzbek Cyrillic uses all of them, and treating
+# any of them as Russian would reintroduce the same bug mirrored.
+_RUSSIAN_LETTERS = set("ыщ")
+
 # Matched as WHOLE WORDS, never as substrings. Substring matching sent Russian
 # customers Uzbek replies: "ва" sits inside "вас", so "У вас есть невролог?" --
 # about the most ordinary Russian phrasing there is -- was read as Uzbek.
 # "ва" is dropped entirely; two letters is too little signal to be worth it.
-_UZBEK_CYRILLIC_WORDS = {"бор", "керак", "қанча", "нима", "йўқ", "ким",
-                         "қанақа", "мумкин", "ишлайди", "нархи"}
+_UZBEK_WORDS = {
+    "бор", "йўқ", "йук", "керак", "нима", "ким", "қанча", "канча", "қандай",
+    "кандай", "мумкин", "ишлайди", "нархи", "нарх", "қанақа", "канака",
+    "учун", "билан", "ҳам", "хам", "бугун", "эртага", "соат", "куни", "кун",
+    "мен", "сиз", "сизлар", "бўлади", "булади", "борми", "лекин", "яна",
+    # Question words, both spellings -- the қ/к pair is the keyboard
+    # substitution this whole rewrite is about.
+    "қачон", "качон", "қаерда", "каерда", "нечта", "нечида", "неча",
+    "қайси", "кайси", "нечи", "нима", "нимага",
+}
+_RUSSIAN_WORDS = {
+    "у", "вы", "вас", "ваш", "ваша", "вашей", "не", "что", "как", "где",
+    "есть", "можно", "сколько", "мне", "меня", "я", "ли", "или", "для",
+    "при", "по", "до", "после", "нужно", "хочу", "это", "в", "на", "с",
+    "к", "стоит", "работаете", "принимаете", "прийти", "записаться", "уже",
+    "какой", "какие", "готовы",
+    # Imperatives and greetings. Added after an adversarial pass: short Russian
+    # with no function word and no distinctive ending -- "Дайте адрес",
+    # "Нужен педиатр" -- scored zero on both sides and fell through the tie
+    # to Uzbek. These carry the signal that sentence structure does not.
+    "дайте", "дай", "скажите", "подскажите", "нужен", "нужна", "нужны",
+    "здравствуйте", "спасибо", "пожалуйста", "добрый", "привет", "адрес",
+    "приём", "прием", "детский", "хорошо", "да", "нет",
+    # NOT "врач": it is an everyday loanword in colloquial Uzbek ("Врач качон
+    # келади?", "врачингиз"), and listing it read those as Russian. A word
+    # borrowed into both languages carries no signal and must stay out.
+}
+
+# Uzbek is agglutinative, so word endings carry real signal where Russian
+# function words carry it instead. Weighted lower than the word lists on
+# purpose: Russian instrumental plurals end in -ми ("с детьми", "врачами"),
+# which collides head-on with the Uzbek question particle, and the word lists
+# are what break that tie.
+_UZBEK_SUFFIXES = ("ми", "миди", "ди", "да", "дан", "га", "нинг", "лар",
+                   "миз", "сиз", "япти", "япди", "ади", "йди", "ган",
+                   "нгиз", "лари", "имиз", "ларми", "моқчи", "мокчи")
+_RUSSIAN_SUFFIXES = ("ете", "ает", "ить", "ать", "ого", "ому", "ый", "ая",
+                     "ое", "ые", "ии", "ия", "ов", "ам", "ах", "ешь",
+                     "ится", "его", "ему", "ой")
+
 _WORDS = re.compile(r"\w+", re.UNICODE)
 
 
+def _cyrillic_language(lowered: str, words: set[str]) -> str:
+    """"Uzbek" or "Russian" for Cyrillic text, by weight of evidence.
+
+    Scored rather than decided by a single test, because every individual
+    signal has a counterexample: the Uzbek letters vanish on a Russian
+    keyboard, and the Uzbek question particle -ми is also a Russian plural
+    ending. No one signal is safe; the sum of them is.
+    """
+    uz = ru = 0
+    if set(lowered) & _UZBEK_LETTERS:
+        uz += 3
+    if set(lowered) & _RUSSIAN_LETTERS:
+        ru += 3
+    uz += 2 * len(words & _UZBEK_WORDS)
+    ru += 2 * len(words & _RUSSIAN_WORDS)
+    # Long words only: short ones are mostly function words, already counted,
+    # and a three-letter word ending in "да" says nothing.
+    uz += sum(1 for w in words if len(w) >= 5 and w.endswith(_UZBEK_SUFFIXES))
+    ru += sum(1 for w in words if len(w) >= 5 and w.endswith(_RUSSIAN_SUFFIXES))
+    # A tie goes to Uzbek. The customers are in Uzbekistan, and the failure
+    # being fixed here was Uzbek read as Russian -- defaulting the other way is
+    # what produced 13 wrong replies out of 13.
+    return "Russian" if ru > uz else "Uzbek"
+
+
+# Detected in code, then stated in the prompt. Asking the model to infer and
+# match the customer's language failed in a visible way: a Russian question
+# about opening hours came back in Uzbek Latin, because the retrieved fact was
+# stored in Uzbek and the model copied the context's language instead of the
+# question's.
 def detect_language(text: str) -> str:
     """A reply instruction, not a language code. Deliberately coarse: it only
-    has to separate the three cases that were actually going wrong."""
+    has to separate the cases that were actually going wrong."""
     lowered = text.lower()
-    words = set(_WORDS.findall(lowered))
-    if any(c in _UZBEK_CYRILLIC for c in lowered) or (words & _UZBEK_CYRILLIC_WORDS):
-        return "Uzbek, in CYRILLIC script"
     if any("Ѐ" <= c <= "ӿ" for c in lowered):
+        words = set(_WORDS.findall(lowered))
+        if _cyrillic_language(lowered, words) == "Uzbek":
+            return "Uzbek, in CYRILLIC script"
         return "Russian"
     # Latin script: could be Uzbek, English or code-switched. Naming a specific
     # language here would be a guess, and guessing wrong is the defect we are

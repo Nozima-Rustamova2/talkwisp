@@ -132,6 +132,8 @@ Append as we go. Never expand a decision beyond what it says.
   are dropped entirely: too little signal to be worth the collision risk.
   This is the visible defect class — a customer sees a wrong-language reply
   instantly, where they would never notice a threshold being wrong.
+  The detector was rewritten on 2026-09-01 for a second, larger blind spot;
+  the full account is under **Language detection — rewritten 2026-09-01**.
 - **The agent never answers without retrieved context.** No fallback to model
   knowledge.
 - **One normalization function**, applied identically to stored aliases and
@@ -275,6 +277,53 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   distinguishing the two cases. Transcription was right in both. The cost of
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
+
+## Language detection — rewritten 2026-09-01
+
+- **Still detected in code, not by the model.** Unchanged and still right: a
+  Russian question about opening hours once came back in Uzbek Latin, because
+  the retrieved fact was stored in Uzbek and the model copied the *context's*
+  language instead of the *question's*. The detector produces a `REPLY IN:`
+  instruction the prompt obeys literally.
+- **Whole words, never substrings.** Also unchanged. Substring matching sent
+  Russian customers Uzbek replies: "ва" sits inside "вас", so "У вас есть
+  невролог?" was read as Uzbek. "ва" stays out entirely — two letters is too
+  little signal to be worth having.
+- **The old detector was blind to a whole class, and the test set could not
+  show it.** It decided Uzbek Cyrillic by the presence of ў ғ қ ҳ. All three
+  `uz-cyrl` questions in `questions.py` contain қ or ў, so it scored 10/10
+  while being wrong for most real Cyrillic traffic.
+- **The reason is a keyboard, not a language.** None of ў ғ қ ҳ are on a
+  standard Russian layout, so casual typists substitute у г к х. The detector
+  keyed on exactly the characters that disappear in informal phone typing.
+  Measured on the class: **0 of 13 correct** — every one answered in Russian.
+- **Replaced by a scored classifier**, because every individual signal has a
+  counterexample. The Uzbek letters vanish on a Russian keyboard; the Uzbek
+  question particle `-ми` is also the Russian instrumental plural ending
+  ("с детьми", "врачами"); `ъ ь э ё ю я` are in BOTH alphabets and treating any
+  of them as Russian would reintroduce the same bug mirrored. Only `ы` and `щ`
+  are genuinely Russian-exclusive. No one signal is safe; the sum is.
+- **A word borrowed into both languages must carry no signal.** Listing "врач"
+  as Russian read "Врач качон келади?" and "Врачингиз ким?" as Russian. It is
+  an everyday loanword in colloquial Uzbek and is deliberately absent from the
+  word lists. Same test applies to anything else shared.
+- **Ties go to Uzbek.** The customers are in Uzbekistan, and the failure being
+  fixed was Uzbek read as Russian — defaulting the other way is what produced
+  13 wrong answers out of 13. The cost is short Russian input with no
+  distinctive vocabulary, which is why the Russian imperative and greeting
+  words exist.
+- **`check_language.py` is free and offline** — no API, no database. Run it on
+  any change to the detector. It now scores 53/53, but the number that matters
+  is that **17 of those cases were written to break the classifier, not to pass
+  it**, and three of them did on the first attempt. A test set built only from
+  passes decays; see the harness note above.
+- **Residual, accepted:** a two-word Cyrillic message with no distinctive
+  vocabulary is genuinely ambiguous and will sometimes be wrong. That is a
+  property of the input, not a bug to tune away — and tuning further against
+  the authored corpus would only be fitting to sentences nobody sent.
+- **Provenance:** the Cyrillic corpus is authored, not harvested, and carries
+  the same caveat as the `syn-` questions. Replace it with real Cyrillic
+  traffic when there is some.
 
 ## Symptom triage — decided 2026-09-01
 
