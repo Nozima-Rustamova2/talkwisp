@@ -276,6 +276,64 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## Symptom triage — decided 2026-09-01
+
+- **A message reporting a symptom is short-circuited BEFORE retrieval**
+  (`app/triage.py`, called first in `answer()`). It never reaches the fact
+  table, so the model is never handed prices it could quote.
+- **This was not a retrieval failure, which is why it matters.** Retrieval was
+  working. "Xotinimni qorni og'riyapdi" ("my wife's stomach hurts") genuinely
+  matches `Qorin boʻshligʻi UZI / narx` at 0.652, every guard passed, nothing
+  was invented, and the status was `ok`. The bot answered a man describing his
+  wife's pain with an abdominal ultrasound price and a gynaecologist's fee.
+  "Bolamni gorlosida shamollash bor" got the paediatrician and her fee.
+  A correct retrieval and a product failure are not mutually exclusive.
+- **Ordering is the guarantee.** Checking after retrieval would mean the facts
+  are already in the prompt and we are trusting the model to decline to use
+  them. It did not decline. Same structural argument as the NO_ANSWER branch:
+  refusing is a branch in the program, not a behaviour we hope for.
+- **Two tiers, and ties go to acute.** Acute leads with the emergency number
+  and deliberately omits the clinic's; someone who cannot breathe should be
+  dialling an ambulance, not a reception desk. General symptoms get the
+  clinic's own number plus the emergency line as a second sentence. The
+  asymmetry is the reason: showing an emergency number to a mild complaint
+  costs almost nothing, the reverse mistake is the one that matters.
+- **The emergency numbers are hardcoded, and that is a deliberate exception to
+  "never state what was not retrieved".** 103 (ambulance) and 112 (unified
+  dispatch, live across all regions since March 2025), verified against
+  gazeta.uz and the Tashkent city administration on 2026-09-01 rather than
+  recalled. They are public civil infrastructure, constant, and must never be
+  produced by a model, interpolated or reformatted — a wrong emergency number
+  is worse than none. The replies are fixed strings per language for the same
+  reason. The clinic's OWN number in the same reply is retrieved, not
+  hardcoded, and is omitted entirely if no confirmed phone fact exists.
+- **Detection is code, not a model call**, matched at word start against
+  `normalize()` output — the same technique as retrieval's exact tier, for the
+  same reason Uzbek is agglutinative. Measured over the 76-question set: 4 fire,
+  0 false positives. "Qorin boʻshligʻi UZI narxi qancha?" contains *qorin* and
+  correctly does not fire, because the markers key on the symptom, not the body
+  part.
+- **Symptom → specialty mapping is permanently out of scope.** Not "chest pain
+  → cardiologist", not "sore throat → ENT", not later. That inference is
+  medical advice however it is worded, and it is the line between being
+  unhelpful and being liable. If the clinic has triage guidance, it is stored
+  as facts and retrieved like anything else — theirs to state, not ours to
+  derive.
+- **Not logged to `gaps.jsonl`.** A gap means "a question the clinic could
+  answer by adding a fact". A symptom report is not that, and mixing the two
+  makes the gap log useless for its one job. The message log records the
+  `triage-acute` / `triage-symptom` route, which is where volume gets counted.
+- **Deliberately missing:** a prompt-level backstop for symptoms detection
+  misses. Rejected for now because the short-circuit means the model is never
+  called with facts when triage fires, so a rule would only help on a miss —
+  and it carries real regression risk on price questions that name a body part.
+  Add it if a live miss appears, not before.
+- **Known limitation, pre-existing:** "Хотинимни корни огрияпти" (Uzbek in
+  Cyrillic, no ў/ғ/қ/ҳ) is detected as Russian and gets the Russian reply.
+  That is `detect_language()`, not triage, and it affects every answer — but
+  triage is where it becomes most visible, because the reply is a fixed string
+  rather than a model paraphrase that might drift back toward the question.
+
 ## Leads — outside things worth chasing
 
 ### Tilmoch / Tahrirchi — transliteration

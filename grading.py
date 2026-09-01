@@ -16,6 +16,12 @@ def grade(q: dict, r: dict) -> str | None:
 
     if expect == "gap":
         return "PASS" if r["status"] == "unknown" else "FAIL"
+    if expect == "triage":
+        # Graded on the ROUTE, not merely on not-answering. A symptom report
+        # that refuses for the ordinary reason -- nothing retrieved -- would
+        # look identical to one triage caught, and the difference matters: one
+        # is a guarantee, the other is luck. `want` names the tier.
+        return "PASS" if source == f"triage-{q['want']}" else "FAIL"
     if expect == "ask-which":
         return "PASS" if source == "ambiguous" else "FAIL"
     if expect == "prose":

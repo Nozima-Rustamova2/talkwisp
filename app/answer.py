@@ -24,6 +24,8 @@ from psycopg import Connection
 from app.embeddings import embed_query
 from app.llm import complete
 from app.retrieval import find
+from app.triage import reply as triage_reply
+from app.triage import triage
 
 # A COST PRE-FILTER, NOT A CORRECTNESS GATE. Refusal is decided downstream by
 # the NO_ANSWER marker; this only limits how much context reaches the prompt.
@@ -230,7 +232,46 @@ def _log_gap(question: str, retrieval: dict, chunks: list[dict],
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+
+def _clinic_phone(conn: Connection) -> str | None:
+    """The business's own number, read from the fact table like anything else.
+
+    Returns None if no confirmed phone fact exists, and the caller then omits
+    the number rather than inventing one. The emergency numbers in triage.py
+    are constants; this one is not, and must never become one.
+    """
+    row = conn.execute(
+        "select value from fact"
+        " where attribute_key like %s and confirmed"
+        " order by created_at limit 1",
+        ("telefon%",),
+    ).fetchone()
+    return row[0] if row else None
+
+
 def answer(conn: Connection, question: str) -> dict:
+    # BEFORE retrieval, on purpose. A message reporting a symptom must never
+    # reach the fact table -- if it did, the prices would already be in the
+    # prompt and we would be trusting the model not to quote them. It did quote
+    # them: "my wife's stomach hurts" was answered with an abdominal UZI price.
+    # Short-circuiting here makes that impossible rather than unlikely, which
+    # is the same argument as the NO_ANSWER branch below.
+    tiered = triage(question)
+    if tiered:
+        tier, marker = tiered
+        result = {
+            "question": question, "status": "triage", "source": f"triage-{tier}",
+            "facts": [], "matched_on": marker, "chunks": [],
+            "answer": triage_reply(tier, detect_language(question),
+                                   _clinic_phone(conn) if tier == "symptom" else None),
+        }
+        # Deliberately NOT logged as a gap. gaps.jsonl means "a question the
+        # clinic could answer by adding a fact"; a symptom report is not that,
+        # and mixing the two makes the gap log useless for its one job. The
+        # message log in bot.py records the triage route, which is where the
+        # volume question gets answered.
+        return result
+
     retrieval = find(conn, question)
     result = {
         "question": question,

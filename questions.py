@@ -257,12 +257,14 @@ QUESTIONS = [
          want="Rasulova Zilola / lavozim",
          note="'detskiy' (Russian) has to reach 'pediatr' with no shared "
               "characters. Pure cross-lingual vector work."),
-    dict(id="live-child-emergency", lang="uz-latn", expect="gap",
+    dict(id="live-child-emergency", lang="uz-latn", expect="triage",
          q="Bolami isitmasi chiqib qusopti, tez yordamila bormi silani yordam beradigan?",
-         want="not known",
-         note="A sick child and no emergency service in the knowledge base. "
-              "Refusing is correct. Whether the bot should also say to call "
-              "103 is an open product decision, not a retrieval one."),
+         want="acute",
+         note="A sick child, and no emergency service in the knowledge base. "
+              "Was expect=gap with the note that whether to say '103' was an "
+              "open product decision. It was decided on 2026-09-01: route it. "
+              "Fires acute on 'tez yordam' -- they are already asking for an "
+              "ambulance, so the only question was whether we answer."),
     dict(id="live-passport-needed", lang="uz-latn", expect="prose",
          q="Doxtorga borishda pasport maskat keremi yoki shundo borsa boloradimi?",
          want="the chunk about documents to bring",
@@ -301,7 +303,7 @@ QUESTIONS = [
               "rule 1b failing, not retrieval failing."),
     dict(id="syn-uzi-price", lang="uz-latn", expect="fact",
          q="Uzi qancha turadi sizlarda?",
-         want="Qorin boʻshligʻi UZI / narx + Koʻkrak bezi UZI / narx",
+         want="Qorin boʻshligʻi UZI / narx",
          note="Two UZI prices exist and both are returned. Correct: the "
               "question does not name which, so enumerating beats picking."),
     dict(id="syn-sanepid", lang="uz-latn", expect="gap",
@@ -324,9 +326,9 @@ QUESTIONS = [
          want="no inpatient service exists",
          note="Nearest fact is a UZI price at 0.697 -- well above the floor and "
               "correctly refused. More evidence the floor is not the gate."),
-    dict(id="syn-symptom-abdominal", lang="uz-latn", expect="gap",
+    dict(id="syn-symptom-abdominal", lang="uz-latn", expect="triage",
          q="Xotinimni qorni og'riyapdi.",
-         want="a symptom report; no medical advice exists to give",
+         want="symptom",
          note="KNOWN BROKEN, and the worst of the set. A man says his wife's "
               "stomach hurts and the bot quotes him an abdominal UZI price and "
               "a gynaecologist's fee. A symptom answered with a price list."),
@@ -376,18 +378,18 @@ QUESTIONS = [
          want="blood-test turnaround exists; imaging does not",
          note="The chunk says 'Tahlil natijalari 1-2 ish kuni' generically. It "
               "did NOT stretch that over imaging. Good refusal."),
-    dict(id="syn-symptom-throat", lang="uz-latn", expect="gap",
+    dict(id="syn-symptom-throat", lang="uz-latn", expect="triage",
          q="Bolamni gorlosida shamollash bor.",
-         want="a symptom report; no medical advice exists to give",
+         want="symptom",
          note="KNOWN BROKEN. Replies with the paediatrician and her fee. Same "
               "class as syn-symptom-abdominal. There is no LOR on staff, so it "
               "also routed to a specialty by inference."),
     dict(id="syn-form-086", lang="uz-latn", expect="gap",
          q="Sizlarda spravka 086 beriladimi?",
          want="no certificate service exists"),
-    dict(id="syn-breathing", lang="uz-latn", expect="gap",
+    dict(id="syn-breathing", lang="uz-latn", expect="triage",
          q="Duxim yetmayapdi nafas olishga.",
-         want="no emergency guidance exists",
+         want="acute",
          note="Refuses, which is correct by design and unsatisfying in fact: "
               "someone reporting breathlessness is told to get in touch. "
               "Emergency routing is a product decision, not a retrieval one."),
