@@ -173,6 +173,100 @@ QUESTIONS = [
          note="Refused, correctly, when the top three were all UZI *prices*. "
               "The fact that answers it sat outside a 3-wide window. The "
               "refusal was right; the retrieval was not."),
+
+    # ---- Real questions, spoken-register Uzbek with dialect spellings and
+    # ---- Russian loanwords. Nothing I wrote looks like these. -------------
+    dict(id="live-kardiolog-ochered", lang="uz-latn", expect="fact",
+         q="Kardiologga ochered bormi bugunga? Qachon borsa boladi?",
+         want="Rasulova Gulnora / qabul vaqti",
+         note="Two questions in one. Whether there is a queue TODAY is not "
+              "known and must not be invented; the schedule is answerable. "
+              "Also watch for 'kardiologlarimiz' plural -- there is one."),
+    dict(id="live-reschedule", lang="uz-latn", expect="gap",
+         q="Ertaga palonchi doxtorga yoziludim, vaxtini sal keginroqa sursa boladimi?",
+         want="not known",
+         note="There is no appointment system in the knowledge base, so there "
+              "is nothing to reschedule. Correct answer is to refuse."),
+    dict(id="live-how-to-book", lang="uz-latn", expect="gap",
+         q="Assalomualaykum, ozi qabulga qanaqa yoziladi, tel qilsh kerakmi?",
+         want="not known",
+         note="FAILS TODAY: answers 'call +998 71 200 30 40 to book'. The "
+              "database holds a `telefon` fact; it never says that number "
+              "takes bookings or that phone is how booking works. Inferring a "
+              "procedure from a phone number is composing beyond the context."),
+    dict(id="live-lor", lang="uz-latn", expect="gap",
+         q="Jonsarak aka (LOR) qachon keladila? Shanbayam ishlidilarmi?",
+         want="not known",
+         note="There is no ENT at this clinic. Naming one of the six real "
+              "doctors instead would be the failure."),
+    dict(id="live-uzi-price", lang="uz-latn", expect="fact",
+         q="Uzi tushish qancha bo boti hozi? Narxini etvorila.",
+         want="Koʻkrak bezi UZI / narx",
+         note="'bo boti' and 'etvorila' are spoken forms. Two UZI services "
+              "exist; naming both is the right answer."),
+    dict(id="live-blood-discount", lang="uz-latn", expect="fact",
+         q="Qon analizi jami qancha bopti, klikdan tasi bomasmi?",
+         want="Umumiy qon tahlili / narx",
+         note="Price is known, discount is not. A good answer gives the first "
+              "and declines the second rather than inventing a discount."),
+    dict(id="live-payment", lang="uz-latn", expect="gap",
+         q="Kandisiyami nma balosi boru, ushanga to'lasa boladimi silada?",
+         want="not known",
+         note="Payment methods are not in the knowledge base."),
+    dict(id="live-consultation-price", lang="uz-latn", expect="fact",
+         q="Konsultatsiyani ozi qancha? Doxtor korgani alohida pulmi?",
+         want="a per-service price quoted, NOT a synthesised range",
+         note="JUDGE BY EYE. Today it answers '150 000 to 300 000' -- a "
+              "min/max computed across different doctors' prices. No fact says "
+              "that. Whether a synthesised range is helpful or is the business "
+              "being quoted something it never said is a product decision."),
+    dict(id="live-results-delivery", lang="uz-latn", expect="fact",
+         q="Analiz javobi chgandor? Telegramdan tashavoraslami yoki borish kereymi?",
+         want="Qon tahlili (umumiy) / tayyor",
+         note="Asks how results are delivered. The prose says by phone and "
+              "collectable at reception; Telegram delivery is not offered and "
+              "must not be agreed to."),
+    dict(id="live-mrt-fasting", lang="uz-latn", expect="gap",
+         q="Mrt ga tushishdan oldin choy poy ichsa buraveradimi yoki och qoringa borish shartmi?",
+         want="not known",
+         note="No MRI here. The fasting advice in the prose is about blood "
+              "tests -- applying it to an MRI the clinic does not offer would "
+              "be answering a question about a service that does not exist."),
+    dict(id="live-blood-results-when", lang="uz-latn", expect="fact",
+         q="Ertalabdan topshirgan qonimni otveti qachon chiqadi aka?",
+         want="Qon tahlili (umumiy) / tayyor",
+         note="'otvet' is the Russian loanword for result."),
+    dict(id="live-sunday-address-landmark", lang="uz-latn", expect="fact",
+         q="Yakshanbayam ochiqmisila? Ozi qatda joylashgansila, mojal bormi biror bir?",
+         want="Shifo Med / manzil",
+         note="FAILS TODAY, and it is the worst failure found so far: it "
+              "answers the Sunday part, then says 'manzilimiz bo'yicha "
+              "ma'lumot yo'q' -- claims not to know its own address, which IS "
+              "in the database along with the landmark. Cause: the question "
+              "contains 'yakshanba', the VALUE of dam olish kuni, so the "
+              "exact-match value tier fired, returned one fact and reported "
+              "ok -- so the vector fallback never ran for the other two "
+              "clauses. Graded on `manzil` on purpose: this passes only when "
+              "multi-part questions work."),
+    dict(id="live-closing-time", lang="uz-latn", expect="fact",
+         q="Klinika soat nechgacha ishlidi? Ishdan kegin borsam ulguramanmi?",
+         want="Shifo Med / ish vaqti",
+         note="Multi-part, but the second clause follows from the first."),
+    dict(id="live-pediatrician", lang="uz-latn", expect="fact",
+         q="Detiskiy shifokor bormi silada kichkina bollar uchun?",
+         want="Rasulova Zilola / lavozim",
+         note="'detskiy' (Russian) has to reach 'pediatr' with no shared "
+              "characters. Pure cross-lingual vector work."),
+    dict(id="live-child-emergency", lang="uz-latn", expect="gap",
+         q="Bolami isitmasi chiqib qusopti, tez yordamila bormi silani yordam beradigan?",
+         want="not known",
+         note="A sick child and no emergency service in the knowledge base. "
+              "Refusing is correct. Whether the bot should also say to call "
+              "103 is an open product decision, not a retrieval one."),
+    dict(id="live-passport-needed", lang="uz-latn", expect="prose",
+         q="Doxtorga borishda pasport maskat keremi yoki shundo borsa boloradimi?",
+         want="the chunk about documents to bring",
+         note="'maskat' is dialect. The answer lives in prose, not facts."),
 ]
 
 if __name__ == "__main__":

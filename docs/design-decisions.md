@@ -44,6 +44,19 @@ Append as we go. Never expand a decision beyond what it says.
   and chunks** → NO_ANSWER + logged gap. Exact matching stays first: it is
   cheaper, more precise, and it is the language moat. Vector search is the
   fallback, never the replacement.
+- **But "fallback" was implemented as "terminal", and that is a bug in the
+  order, not in the code that implements it.** Exact match returning a hit ends
+  retrieval, so a multi-part question is answered on whichever clause matched
+  first and the rest is silently dropped. Observed live:
+  "Yakshanbayam ochiqmisila? Ozi qatda joylashgansila, mojal bormi?" matched on
+  Sunday hours, returned `ok`, and **told a customer it did not know its own
+  address** — a fact it holds. Encoded as `live-sunday-address-landmark`.
+  The failure is invisible by construction: `status: ok` with a real answer to
+  a real clause looks like success at every layer, including grading.
+  **The fix is to stop treating exact match as terminal — run both paths and
+  merge the results — not to make exact match smarter.** A question with one
+  clause loses nothing by also running the vector path; a question with three
+  gains the other two.
 - **Facts are embedded as `subject / attribute / value`**, not as the bare value.
   A Russian question about opening hours matches "Shifo Med / ish vaqti /
   Dushanba-Shanba 09:00-18:00"; it does not match "Dushanba-Shanba 09:00-18:00".
@@ -167,17 +180,22 @@ this file wins.
 - What happens when the agent is wrong: confidence thresholds, when it refuses,
   when it hands to a human. Decide after seeing real retrieval behaviour.
 - Resumable / chunked upload. The design shows it; the backend doesn't do it yet.
-- **The 30-question set in `questions.py` currently passes 30/30, which means it
-  has stopped discriminating.** A green run can no longer tell you a change made
-  things worse. Do not read it as "the system is correct" — read it as "nothing
-  broke in a way I had already thought of."
-  Every one of the three real bugs found on 2026-08-29 — the two-of-six doctor
-  list, the too-narrow retrieval window, and the "ва" inside "вас" language
-  misdetection — came from **live Telegram messages, not the harness**.
-  The fix is to harvest `messages.jsonl` into new cases: real phrasings, with
-  route and scores already recorded, so grading is mostly confirming what should
-  have happened. Do this after the demo, when there are real questions to
-  harvest.
+- **A harness that passes everything has stopped discriminating.** `questions.py`
+  sat at 30/30 and a green run could no longer tell you a change made things
+  worse. Every one of the three real bugs found on 2026-08-29 — the two-of-six
+  doctor list, the too-narrow retrieval window, and the "ва" inside "вас"
+  language misdetection — came from **live Telegram messages, not the harness**.
+  Harvesting `messages.jsonl` into real cases fixed it: the set is now 46
+  questions at **43 pass / 2 fail / 1 manual**.
+- **It discriminates again because the known-broken cases are graded as
+  failures, not excluded.** `live-how-to-book` (an inferred procedure) and
+  `live-sunday-address-landmark` (the multi-part short-circuit above) are in the
+  set and expected to fail. An excluded failure is a failure you stop seeing;
+  an encoded one is a failure that reports when it is fixed, and reports again
+  if it comes back.
+  **So: add failures to the harness as they are found, not only passes.** The
+  set's value is the ratio of cases that can still go red, and a set grown only
+  by adding passes decays back to 30/30 no matter how large it gets.
 - **Attribute reuse by prompting does not scale.** A typed line is parsed with
   every existing attribute and subject name in the prompt, so the model reuses
   `narx` instead of inventing `price` — which matters because a split attribute

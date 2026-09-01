@@ -18,6 +18,7 @@ Four operational rules, in order of how badly they bite in front of an audience:
     parsed subject, attribute and value first.
 """
 
+import collections
 import datetime
 import json
 import os
@@ -27,14 +28,14 @@ import sys
 import time
 
 import httpx
+import psycopg
 from dotenv import load_dotenv
 
 from app.answer import answer, detect_language
-from app.normalize import normalize
+from app.followup import rewrite
 from app.db import pool
-import psycopg
-
 from app.llm import LLMError, check_configured
+from app.normalize import normalize
 from app.typed import candidates, conflicts
 from app.typed import parse as parse_fact, store as store_fact
 
@@ -136,6 +137,42 @@ def log(entry: dict) -> None:
     with MESSAGE_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
+
+
+
+# ---------------------------------------------------------------- chat memory
+
+# The last few turns per chat, used ONLY to rewrite a follow-up into a
+# standalone question -- never as material for an answer. app/followup.py
+# explains why that distinction is the whole design.
+#
+# In memory, so it dies with the process. Acceptable: losing history costs one
+# unresolved follow-up and the customer can rephrase. A table later, if it
+# earns its place.
+HISTORY_TURNS = 5
+
+# A follow-up an hour later is not a follow-up. Without this, "nech pul"
+# attaches to yesterday's conversation and searches for the wrong thing.
+HISTORY_IDLE_SECONDS = 20 * 60
+
+HISTORY: dict[int, dict] = {}
+
+
+def history_for(chat_id: int) -> list:
+    entry = HISTORY.get(chat_id)
+    if entry is None:
+        return []
+    if time.monotonic() - entry["at"] > HISTORY_IDLE_SECONDS:
+        HISTORY.pop(chat_id, None)
+        return []
+    return list(entry["turns"])
+
+
+def remember(chat_id: int, question: str, answer_text: str | None) -> None:
+    entry = HISTORY.setdefault(
+        chat_id, {"turns": collections.deque(maxlen=HISTORY_TURNS), "at": 0.0})
+    entry["turns"].append((question, answer_text))
+    entry["at"] = time.monotonic()
 
 
 # ---------------------------------------------------------------- owner writes
@@ -331,8 +368,13 @@ def handle(conn, message: dict, last_seen: dict) -> None:
         return
     last_seen[chat_id] = (tokens - 1.0, now)
 
+    # Resolve a follow-up into a standalone question. After the social
+    # short-circuit and after the throttle, so neither spends a model call.
+    # The output is a QUESTION -- everything downstream is untouched.
+    asked, was_rewritten = rewrite(history_for(chat_id), text)
+
     try:
-        result = answer(conn, text)
+        result = answer(conn, asked)
     except LLMError as exc:
         # Quota gone, or the provider is down. Say something honest -- a bot
         # that goes quiet reads as broken software; this reads as software.
@@ -357,12 +399,17 @@ def handle(conn, message: dict, last_seen: dict) -> None:
 
     reply = result["answer"] or _say(DONT_KNOW, DONT_KNOW_DEFAULT, text)
     send(chat_id, reply)
+    remember(chat_id, text, reply)
 
     # Same shape as results.json, so the real questions can be graded the same
-    # way the hand-written ones are.
+    # way the hand-written ones are. `asked` is logged separately from
+    # `question`: when a follow-up goes wrong, what reached retrieval is the
+    # thing worth seeing, not what the customer typed.
     log({
         "chat_id": chat_id, "user_id": user_id, "is_owner": is_owner,
         "question": text,
+        "asked": asked if was_rewritten else None,
+        "rewritten": was_rewritten,
         "status": result["status"],
         "route": result["source"],
         "matched_on": result.get("matched_on"),
