@@ -195,6 +195,36 @@ def medical_lead(language: str) -> str:
     return _MEDICAL_LEAD[language]
 
 
+
+class ForbiddenSubject(ValueError):
+    """Raised when a subject or alias would make a symptom message matchable."""
+
+
+def check_subject(name: str) -> None:
+    """Raise if `name` would let a symptom report match a SUBJECT.
+
+    Enforced at EVERY point a subject becomes retrievable, not just in the
+    seed. Retrieval's candidate set is `fact where confirmed` plus confirmed
+    aliases, so a subject becomes matchable the moment it is confirmed -- which
+    means the seed is only one of three doors:
+
+        seed.py          bulk load
+        typed.store()    the owner types a fact; confirmed on write
+        review.confirm() an extracted proposal is accepted
+
+    The ingestion path is the one that will carry all real customer data, and a
+    price list containing "Qorin boʻshligʻi UZI" is exactly where a model would
+    propose `qorin` as a subject. Seed-time enforcement alone would leave the
+    dangerous direction wide open on the path that matters most.
+    """
+    if normalize(name) in FORBIDDEN_ALIASES:
+        raise ForbiddenSubject(
+            f"{name!r} is a body part or symptom word. Making it a subject or "
+            "alias would let a symptom report match it -- 'qornim ogriyapti' "
+            "would hit a SUBJECT and the bot would quote a price to someone "
+            "reporting pain. See FORBIDDEN_ALIASES in app/triage.py."
+        )
+
 def _hit(text: str, markers: tuple) -> str | None:
     """Word-start containment, the same rule retrieval's exact tier uses."""
     for marker in markers:

@@ -23,6 +23,7 @@ from psycopg import Connection
 
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.normalize import normalize
+from app.triage import check_subject
 
 # How much of the source to show beside each fact. Enough to recognise the
 # document and find the line; not so much that the screen becomes the document.
@@ -126,6 +127,13 @@ def confirm(conn: Connection, fact_id: str) -> dict | None:
     if current is None:
         return None
     subject, attribute, value, _ = current
+
+    # An extracted subject is NOT matchable while unconfirmed -- retrieval's
+    # candidate set is `fact where confirmed`. Confirmation is the moment it
+    # becomes reachable, so this is where the check belongs on the ingestion
+    # path. A price list containing "Qorin boʻshligʻi UZI" is exactly where a
+    # model would propose `qorin`.
+    check_subject(subject)
 
     vector = str(embed_document(f"{subject} / {attribute} / {value}"))
     conn.execute(

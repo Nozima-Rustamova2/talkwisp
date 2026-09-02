@@ -30,7 +30,7 @@ import sys
 from app.db import pool
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.normalize import normalize
-from app.triage import FORBIDDEN_ALIASES
+from app.triage import check_subject
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -168,11 +168,6 @@ ALIASES = _deduped
 # ogriyapti" match a SUBJECT, and the bot would quote a price to someone
 # reporting pain -- the exact failure triage exists to prevent, wearing a green
 # badge. Compound aliases are fine and unaffected: "koz shifokori" is not "koz".
-for _subject, _alias in ALIASES:
-    assert normalize(_alias) not in FORBIDDEN_ALIASES, (
-        f"alias {_alias!r} (-> {_subject}) is a body part or symptom word; "
-        "see FORBIDDEN_ALIASES in app/triage.py")
-
 # --- Facts a file produced: unconfirmed, with confidence, awaiting review ----
 # Kept small and deliberately in tension with the typed rows above, so the
 # review queue and conflict detection have something real to show.
@@ -189,6 +184,13 @@ EXTRACTED = [
 # split on `want`. Fail the seed rather than load one. Checks EXTRACTED too:
 # the first version of this guard only covered TYPED and would have missed
 # the one row that actually had the problem.
+# No subject or alias may BE a body part or symptom word -- see check_subject().
+# Placed here, below EXTRACTED, so it covers every row that will be written.
+for _subject, _alias in ALIASES:
+    check_subject(_alias)
+for _s in [r[0] for r in TYPED] + [r[0] for r in EXTRACTED]:
+    check_subject(_s)
+
 for _s in [r[0] for r in TYPED] + [r[0] for r in EXTRACTED]:
     assert " / " not in _s, f"subject contains the separator: {_s!r}"
 

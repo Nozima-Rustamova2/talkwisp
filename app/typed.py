@@ -19,6 +19,7 @@ from psycopg import Connection
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.llm import complete
 from app.normalize import normalize
+from app.triage import check_subject
 
 _SYSTEM = """You turn one line written by a business owner into one fact, as JSON.
 
@@ -121,6 +122,9 @@ def conflicts(conn: Connection, parsed: dict) -> list[dict]:
 def store(conn: Connection, parsed: dict) -> str:
     """Write one confirmed, owner-typed fact. Embedded so it is reachable by
     vector search immediately, not only by exact match."""
+    # Confirmed on write, so it is retrievable immediately -- which makes this
+    # one of the three doors a dangerous subject can come through.
+    check_subject(parsed["subject"])
     text = f"{parsed['subject']} / {parsed['attribute']} / {parsed['value']}"
     vector = str(embed_document(text))
     return conn.execute(
