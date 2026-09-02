@@ -278,6 +278,46 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## A verifier reads the source of truth, never a snapshot of it — 2026-09-02
+
+Five tool failures this project, and every one is the same shape: **the thing
+meant to verify a change was reading a cached or intermediate copy rather than
+the live thing it was checking.** Not five bugs — one bug, five times.
+
+1. **The grader read a route the answer path had outgrown.** Four separate
+   times, each costing a full paid re-run to discover. Fixed by extracting
+   `grading.py` so the rule lives in one place.
+2. **Grading read `near_facts`** — the raw scored window — while the answer was
+   built from the window *plus* list expansion. Three correct answers graded as
+   failures.
+3. **Grading read the route only**, so a correct answer delivered in the wrong
+   ALPHABET graded green. Found by diffing answer text against a saved baseline,
+   not by the harness.
+4. **`regrade.py` read the question snapshot stored in `results.json`**, so two
+   changed expectations were invisible and it reported an unchanged 76/3/1 —
+   the same numbers for different reasons, which is the worst kind of wrong.
+5. **The harness itself saturates** when the question set stops being refreshed
+   from real traffic: `questions.py` at 30/30 was a snapshot of failures already
+   thought of, verifying against yesterday's understanding.
+
+**The rule: a verifier must read the live source of truth, and must say so
+loudly when it cannot.** Concretely:
+
+- Re-read `questions.py`, never the copy embedded in a result file.
+- Grade what actually reached the prompt (`context_facts`), never an
+  intermediate window.
+- When a cached result cannot answer the question being asked of it — a
+  question added since the run — **report that it cannot**, rather than
+  silently omitting it. `regrade.py` now does this.
+- A stale-verifier failure is silent by construction: it produces a plausible
+  number. Prefer a loud refusal to a quiet wrong answer, exactly as `NO_ANSWER`
+  does in the answer path.
+
+**Corollary, learned the same way:** before a change that could alter answers,
+save a baseline of the current answers, not just the current verdicts. Verdicts
+hid the wrong-script regression completely; the answer text exposed it in one
+diff.
+
 ## syn-which-room: measured, and not fixable at retrieval — 2026-09-02
 
 The hypothesis was that "Vrach qatda o'tiradi?" fails because retrieval offers
@@ -324,7 +364,7 @@ Rule 1b now names this exact case and does not stop it. Two real options:
    costume: the failure is that the clinic never told us.
 2. **Accept it as known-broken** and leave it graded red, which is what it is.
 
-Worth noting the question is genuinely ambiguous even for a person — "vrach
+**Accepted as known-broken on 2026-09-02.** Worth noting the question is genuinely ambiguous even for a person — "vrach
 qatda o'tiradi" could be asked by someone who does not know where the clinic is.
 A receptionist might well answer with the address. That does not make the reply
 right, but it does explain why no rule phrased so far has caught it.

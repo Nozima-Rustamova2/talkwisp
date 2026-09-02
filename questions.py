@@ -306,10 +306,21 @@ QUESTIONS = [
     dict(id="syn-which-room", lang="uz-latn", expect="gap",
          q="Vrach qatda o'tiradi?",
          want="no room numbers exist",
-         note="KNOWN BROKEN. Answers with the clinic's STREET ADDRESS. Not a "
-              "dropped clause -- a substitution: 'qatda' is close enough to "
-              "'qayerda' that an adjacent fact is served as the answer. This is "
-              "rule 1b failing, not retrieval failing."),
+         note="KNOWN BROKEN, ACCEPTED 2026-09-02. Answers with the clinic's "
+              "STREET ADDRESS. Not a dropped clause -- a substitution: an "
+              "adjacent fact served as the answer. "
+              "Measured and NOT fixable at retrieval: exact matching returns "
+              "not_found, the address scores 0.659 and is genuinely similar, "
+              "and across all 80 questions no score signal separates answerable "
+              "from unanswerable. Rule 1b names this exact case and does not "
+              "stop it, so a fourth rule is not the answer either. "
+              "AND the question is genuinely underspecified: 'vrach qatda "
+              "o'tiradi' could be asked by someone who does not know where the "
+              "clinic is, and a human receptionist might well answer with the "
+              "address. That is a real human response to an ambiguous question, "
+              "which is why no rule has caught it. "
+              "The real fix is DATA: no fact holds a room number. See "
+              "docs/missing-knowledge.md."),
     dict(id="syn-uzi-price", lang="uz-latn", expect="fact",
          q="Uzi qancha turadi sizlarda?",
          want="Qorin boʻshligʻi UZI / narx",
