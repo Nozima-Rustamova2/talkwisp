@@ -91,6 +91,26 @@ ALIASES += [
     (CLINIC, "клиника"),
 ]
 
+# --- one synthetic doctor, added deliberately --------------------------------
+# NOT in data/avisena.json, which stays faithful to what was supplied. All 12
+# real surnames are unique, so the ambiguity behaviour -- two people matching
+# one name, ask which rather than guess -- had nothing left to test. A second
+# Karimov restores it. The previous data set had two Rasulovas for exactly this
+# reason; losing the case silently when the clinic changed is how a behaviour
+# stops being covered without anyone deciding to stop covering it.
+_SYNTHETIC = {
+    "specialty_uz": "Fizioterapevt",
+    "specialty_ru": "Физиотерапевт",
+    "full_name": "Karimov Jasur Anvarovich",
+    "degree": "9 yillik staj",
+    "room": "107-xona (1-qavat)",
+    "schedule": "Dush-Juma 09:00 - 15:00",
+    "consultation_price_uzs": 120000,
+    "follow_up_price_uzs": 60000,
+    "notes": "Massaj, elektroforez va reabilitatsiya muolajalari.",
+}
+BLOCKS["doctors"]["list"].append(_SYNTHETIC)
+
 # --- doctors ----------------------------------------------------------------
 for doc in BLOCKS["doctors"]["list"]:
     name = doc["full_name"]
