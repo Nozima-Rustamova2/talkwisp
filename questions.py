@@ -288,12 +288,21 @@ QUESTIONS = [
          want="no appointment-availability data exists",
          note="Also a temporal question. Refuses today, for the right reason "
               "(no booking data) rather than the interesting one."),
-    dict(id="syn-book-gynae", lang="uz-latn", expect="fact",
+    dict(id="syn-book-gynae", lang="uz-latn", expect="gap",
          q="Menga ginekologga zapis qberila.",
-         want="Yusupova Nilufar / lavozim",
-         note="Russian loanword contraction 'zapis qberila'. Not a question at "
-              "all -- an imperative. Names the gynaecologist and directs to "
-              "contact, which invents no procedure."),
+         want="no booking procedure exists",
+         note="CHANGED 2026-09-02 from expect=fact, and now KNOWN BROKEN. "
+              "The old expectation was written around behaviour we have since "
+              "decided is wrong: it replies 'call +998(71)200-30-40 to book', "
+              "which is exactly what live-how-to-book is graded as failing for. "
+              "Two near-identical behaviours graded oppositely is worse than "
+              "either verdict being wrong, and a false green is worse than a "
+              "fourth known-broken case. "
+              "NOT a regression: rule 10 fixed live-how-to-book and this "
+              "phrasing still slips through, which is useful information about "
+              "where that rule's coverage ends. The imperative form ('yozib "
+              "qo'ying') seems to read as a request to act rather than a "
+              "question about procedure."),
     dict(id="syn-which-room", lang="uz-latn", expect="gap",
          q="Vrach qatda o'tiradi?",
          want="no room numbers exist",
@@ -456,13 +465,22 @@ QUESTIONS = [
          note="Must refuse. The clock deliberately stops at tomorrow -- letting "
               "the model count further would swap a hallucinated weekday for an "
               "arithmetic mistake, which is the same defect better disguised."),
-    dict(id="temporal-next-tuesday", lang="uz-latn", expect="gap",
+    dict(id="temporal-next-tuesday", lang="uz-latn", expect="fact",
          q="Kelasi seshanba ishlaysizmi?",
-         want="a relative day beyond tomorrow",
-         note="Must refuse for the same reason, and note the contrast with "
-              "sunday-uz: a day the customer NAMES outright needs no resolving "
-              "and is still answered. It is the relative reference that is "
-              "unanswerable, not the weekday."),
+         want="Shifo Med / ish vaqti",
+         note="CHANGED 2026-09-02 from expect=gap. The original expectation was "
+              "wrong, not the behaviour. 'Kelasi seshanba' NAMES Tuesday, and "
+              "rule 8's own carve-out says a named day needs no resolving -- "
+              "answering 'we work Tuesdays 09:00-18:00' requires no arithmetic "
+              "and no clock. I had encoded it as a relative reference because "
+              "of 'kelasi', but the weekday is explicit. "
+              "The objection considered and rejected: 'next Tuesday' is a "
+              "specific DATE and a holiday could fall on it. True, and equally "
+              "true of tomorrow, which we answer -- so it is a general "
+              "limitation of holding no holiday data, not a difference between "
+              "these two cases. Recorded as a limitation instead. "
+              "temporal-day-after-tomorrow is the contrast that keeps the line "
+              "honest: 'indinga' names no day at all and still refuses."),
 ]
 
 if __name__ == "__main__":

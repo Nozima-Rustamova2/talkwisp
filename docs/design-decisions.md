@@ -278,6 +278,57 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## syn-which-room: measured, and not fixable at retrieval — 2026-09-02
+
+The hypothesis was that "Vrach qatda o'tiradi?" fails because retrieval offers
+the street address as a candidate at all, making it a retrieval bug rather than
+a model one — and that the fix therefore belongs in code, as it did the last
+three times. **The measurement does not support it.**
+
+- **Exact matching contributes nothing:** `not_found`, no subject, no attribute,
+  no value match. This is purely the vector path.
+- **The address scores 0.659 and is genuinely similar.** The embedding cannot
+  separate room-level from building-level location, because "where does the
+  doctor sit" and "where is the clinic" *are* close in meaning. Retrieval is
+  behaving exactly as designed.
+- **No score-based signal separates answerable from unanswerable.** Measured
+  across all 80 questions using scores already recorded in `results.json`:
+
+  | | n | top-1 median | top-1 range | spread median |
+  |---|---|---|---|---|
+  | answerable (`fact`/`prose`) | 42 | 0.720 | 0.594 – 0.877 | 0.094 |
+  | must refuse (`gap`) | 33 | 0.645 | 0.573 – 0.730 | 0.029 |
+
+  The ranges overlap across almost their entire length. `syn-queue-cardio` must
+  refuse and scores **0.730** — higher than a third of the answerable set.
+  `children-ru` must answer and scores **0.594**, below most of the refusals.
+  Spread looks more promising until the counter-examples: `syn-pediatr-
+  definition` must refuse with a spread of 0.122, and `syn-what-to-bring` must
+  answer with 0.026.
+- **This is the similarity-floor finding again, from a different direction.**
+  The score is not a correctness signal. Any threshold or flatness heuristic
+  here would misclassify in both directions, and a false negative is discarded
+  before the model ever sees it.
+
+**So the pattern does not hold here.** Three times running, the right fix was
+moving a decision out of the prompt and into code. This is the case where that
+instinct is wrong, and the measurement is what says so rather than taste.
+
+**What is actually left:** no fact holds a room number, so the honest outcome is
+a gap, and the only thing standing between the customer and a wrong answer is
+the model's judgement about whether an address answers a question about a room.
+Rule 1b now names this exact case and does not stop it. Two real options:
+
+1. **Get the facts.** A room number per doctor makes the question answerable
+   and the problem disappears. This is the completeness problem in another
+   costume: the failure is that the clinic never told us.
+2. **Accept it as known-broken** and leave it graded red, which is what it is.
+
+Worth noting the question is genuinely ambiguous even for a person — "vrach
+qatda o'tiradi" could be asked by someone who does not know where the clinic is.
+A receptionist might well answer with the address. That does not make the reply
+right, but it does explain why no rule phrased so far has caught it.
+
 ## Absence is not evidence — rule 10, 2026-09-02
 
 - **Silence never means "no".** Asked whether the clinic works through lunch,
