@@ -1,0 +1,265 @@
+[
+  {
+    "category": "clinic_info",
+    "clinic_name": "Avisena Med Tibbiyot Markazi",
+    "address_uz": "Toshkent shahri, Yakkasaroy tumani, Shota Rustaveli ko'chasi, 45-uy",
+    "address_ru": "г. Ташкент, Яккасарайский район, ул. Шота Руставели, д. 45",
+    "landmark": "Grand Mir mehmonxonasi ro'parasida, Rossiya elchixonasi yonida",
+    "working_hours": {
+      "weekdays": "08:00 - 20:00",
+      "saturday": "08:00 - 17:00",
+      "sunday": "09:00 - 14:00 (faqat navbatchi shifokor va laboratoriya)"
+    },
+    "contacts": {
+      "call_center": "+998712000000",
+      "reception_mobile": "+998901234567",
+      "telegram_bot": "@avisenamed_bot",
+      "emergency_24_7": "+998712000009"
+    },
+    "payment_methods": ["Naqd", "Uzcard", "Humo", "Visa", "Mastercard", "Click", "Payme"]
+  },
+  {
+    "category": "doctors",
+    "list": [
+      {
+        "id": "DOC-001",
+        "specialty_uz": "Kardiolog",
+        "specialty_ru": "Кардиолог",
+        "full_name": "Rahimov Alisher Bahodirovich",
+        "degree": "Tibbiyot fanlari nomzodi (PhD), 15 yillik staj",
+        "room": "102-xona (1-qavat)",
+        "schedule": "Dushanba-Juma 09:00 - 14:00",
+        "consultation_price_uzs": 180000,
+        "follow_up_price_uzs": 90000,
+        "notes": "EKO va EKG tahlillarini ham o'zi ko'radi. Zapis bo'yicha qabul qiladi."
+      },
+      {
+        "id": "DOC-002",
+        "specialty_uz": "Nevropatolog (Nevrolog)",
+        "specialty_ru": "Невропатолог",
+        "full_name": "Qosimova Lola Sur'atovna",
+        "degree": "Oliy toifali shifokor",
+        "room": "205-xona (2-qavat)",
+        "schedule": "Har kuni 08:30 - 15:00 (Shtatda)",
+        "consultation_price_uzs": 150000,
+        "follow_up_price_uzs": 80000,
+        "notes": "Insultdan keyingi reabilitatsiya, migren, umurtqa pog'onasi churrasi (gryja) bo'yicha mutaxassis."
+      },
+      {
+        "id": "DOC-003",
+        "specialty_uz": "Pediatr (Bolalar shifokori)",
+        "specialty_ru": "Педиатр",
+        "full_name": "Usmonov Timur Karimovich",
+        "degree": "10 yillik tajriba",
+        "room": "108-xona (1-qavat, Bolalar bo'limi)",
+        "schedule": "Dush-Shanba 09:00 - 17:00",
+        "consultation_price_uzs": 130000,
+        "follow_up_price_uzs": 70000,
+        "notes": "Chaqaloqlarni ham ko meva va emlash (vaksinatsiya) oldidan ko'rikdan o'tkazadi."
+      },
+      {
+        "id": "DOC-004",
+        "specialty_uz": "Ginekolog-Endokrinolog",
+        "specialty_ru": "Гинеколог-Эндокринолог",
+        "full_name": "Siddiqova Nilufar Erkinovna",
+        "degree": "Tibbiyot fanlari doktori (DSc)",
+        "room": "301-xona (3-qavat)",
+        "schedule": "Se-Pay-Shanba 10:00 - 16:00",
+        "consultation_price_uzs": 220000,
+        "follow_up_price_uzs": 120000,
+        "notes": "Faqat oldindan zapis bilan. Bepushtlik, gormonal buzilishlar va homiladorlikni olib borish."
+      },
+      {
+        "id": "DOC-005",
+        "specialty_uz": "Urolog-Androlog",
+        "specialty_ru": "Уролог-Андролог",
+        "full_name": "Karimov Sardor Jaxongirovich",
+        "degree": "Oliy toifali vrach",
+        "room": "212-xona (2-qavat)",
+        "schedule": "Dush-Juma 13:00 - 19:00",
+        "consultation_price_uzs": 160000,
+        "follow_up_price_uzs": 80000,
+        "notes": "Buyrak tosh kasalliklari, prostatit, erkaklar bepushtligi."
+      },
+      {
+        "id": "DOC-006",
+        "specialty_uz": "Oftalmolog (Glaznoy / Ko'z shifokori)",
+        "specialty_ru": "Офтальмолог (Окулист)",
+        "full_name": "Toshmatov Jamshid Alimovich",
+        "degree": "12 yillik staj",
+        "room": "104-xona (1-qavat)",
+        "schedule": "Dush-Shanba 08:00 - 14:00",
+        "consultation_price_uzs": 140000,
+        "follow_up_price_uzs": 70000,
+        "notes": "Ko'z bosimini o'lchash, ochki va linza tanlash, apparatli davolash."
+      },
+      {
+        "id": "DOC-007",
+        "specialty_uz": "LOR (Quloq-Burun-Tomoq shifokori)",
+        "specialty_ru": "ЛОР (Отоларинголог)",
+        "full_name": "Nurmatova Ziyoda Anvarovna",
+        "degree": "1-toifali shifokor",
+        "room": "201-xona (2-qavat)",
+        "schedule": "Dush-Juma 09:00 - 16:00, Shanba 09:00 - 13:00",
+        "consultation_price_uzs": 140000,
+        "follow_up_price_uzs": 70000,
+        "notes": "Gaymoritni yuvish (Kukushka), quloq tiqinlarini tozalash, tonsillit."
+      },
+      {
+        "id": "DOC-008",
+        "specialty_uz": "Dermatolog-Kosmetolog",
+        "specialty_ru": "Дерматолог-Косметолог",
+        "full_name": "Azizova Shahnoza Rashidovna",
+        "degree": "8 yillik staj",
+        "room": "308-xona (3-qavat)",
+        "schedule": "Se-Toq kunlari 11:00 - 18:00",
+        "consultation_price_uzs": 150000,
+        "follow_up_price_uzs": 80000,
+        "notes": "Psoriaz, akne, ekzema, xollarni tekshirish (dermatoskopiya)."
+      },
+      {
+        "id": "DOC-009",
+        "specialty_uz": "Endokrinolog",
+        "specialty_ru": "Эндокринолог",
+        "full_name": "Valiyev Otabek Rustamovich",
+        "degree": "Tibbiyot fanlari nomzodi",
+        "room": "208-xona (2-qavat)",
+        "schedule": "Dush-Chor-Juma 09:00 - 15:00",
+        "consultation_price_uzs": 170000,
+        "follow_up_price_uzs": 90000,
+        "notes": "Qandli diabet, buqoq (zob), semizlik va metabolik sindrom."
+      },
+      {
+        "id": "DOC-010",
+        "specialty_uz": "Gastroenterolog",
+        "specialty_ru": "Гастроэнтеролог",
+        "full_name": "Ismoilova Malika Sobirovna",
+        "degree": "Oliy toifali shifokor",
+        "room": "210-xona (2-qavat)",
+        "schedule": "Dush-Shanba 10:00 - 15:00",
+        "consultation_price_uzs": 160000,
+        "follow_up_price_uzs": 80000,
+        "notes": "Oshqozon yarasini davolash, gastrit, jigar va o't pufagi kasalliklari."
+      },
+      {
+        "id": "DOC-011",
+        "specialty_uz": "Travmatolog-Ortoped",
+        "specialty_ru": "Травматолог-Ортопед",
+        "full_name": "Yusupov Bobur Maratovich",
+        "degree": "14 yillik staj",
+        "room": "101-xona (1-qavat, Rentgen yonida)",
+        "schedule": "Har kuni 08:00 - 16:00",
+        "consultation_price_uzs": 150000,
+        "follow_up_price_uzs": 70000,
+        "notes": "Bo'g'im og'riqlari, gips qo'yish, flatfoot (yassioyoqlik), blokada qilish."
+      },
+      {
+        "id": "DOC-012",
+        "specialty_uz": "Allergolog-Immunolog",
+        "specialty_ru": "Аллерголог-Иммунолог",
+        "full_name": "Abduvaliyeva Gulnora Rustamovna",
+        "degree": "Oliy toifa",
+        "room": "304-xona (3-qavat)",
+        "schedule": "Se-Pay-Shanba 09:00 - 13:00",
+        "consultation_price_uzs": 160000,
+        "follow_up_price_uzs": 80000,
+        "notes": "Mavsumiy allergiya, pollinoz, allergenlarga test o'tkazish."
+      }
+    ]
+  },
+  {
+    "category": "diagnostics_and_lab",
+    "services": [
+      {
+        "id": "LAB-001",
+        "name_uz": "Umumiy qon tahlili (OKAK / OAK)",
+        "name_ru": "Общий анализ крови (ОАК с лейкоформулой)",
+        "price_uzs": 50000,
+        "turnaround_time": "O'sha kun soat 16:00 gacha",
+        "preparation_uz": "Achqoringa topshiriladi (naxotke)",
+        "preparation_ru": "Натощак"
+      },
+      {
+        "id": "LAB-002",
+        "name_uz": "Qondagi shakar (Glyukoza / Sahar)",
+        "name_ru": "Анализ крови на сахар (Глюкоза)",
+        "price_uzs": 30000,
+        "turnaround_time": "1 soat ichida",
+        "preparation_uz": "Ertalab hech narsa yemay, choy ichmay kelish kerak",
+        "preparation_ru": "Строго натощак"
+      },
+      {
+        "id": "LAB-003",
+        "name_uz": "Gepatit B va C ekspress testi",
+        "name_ru": "Экспресс-тест на Гепатит B и C",
+        "price_uzs": 90000,
+        "turnaround_time": "2 soat",
+        "preparation_uz": "Tayyorgarlik talab qilinmaydi",
+        "preparation_ru": "Без подготовки"
+      },
+      {
+        "id": "LAB-004",
+        "name_uz": "TTG (Qalqonsimon bez gormoni / TTG gormon)",
+        "name_ru": "ТТГ (Тиреотропный гормон)",
+        "price_uzs": 85000,
+        "turnaround_time": "1 ish kuni",
+        "preparation_uz": "Ertalab och qoringa",
+        "preparation_ru": "Натощак до 11:00"
+      },
+      {
+        "id": "LAB-005",
+        "name_uz": "Biokimyo analiz (Jigar fermaetlari: ALT, AST, Bilirubin)",
+        "name_ru": "Биохимия крови (Печеночные пробы: АЛТ, АСТ, Билирубин)",
+        "price_uzs": 120000,
+        "turnaround_time": "O'sha kuni soat 17:00 da",
+        "preparation_uz": "Och qoringa, kechqurun yog'li ovqat yemaslik",
+        "preparation_ru": "Натощак, исключить жирное накануне"
+      },
+      {
+        "id": "DIAG-001",
+        "name_uz": "UZI Qorin bo'shlig'i (Jigar, o't pufak, taloq, oshqozon osti bezi)",
+        "name_ru": "УЗИ брюшной полости",
+        "price_uzs": 140000,
+        "room": "105-xona (1-qavat)",
+        "preparation_uz": "Och qoringa kelish shart! Suv ham ichmaslik kerak.",
+        "preparation_ru": "Строго натощак! Не пить воду."
+      },
+      {
+        "id": "DIAG-002",
+        "name_uz": "UZI Kichik tasnoq a'zolari (Ginekologik / Akusherlik)",
+        "name_ru": "УЗИ органов малого таза",
+        "price_uzs": 150000,
+        "room": "105-xona (1-qavat)",
+        "preparation_uz": "Qovuq to'la bo'lishi kerak (1 litr suv ichib kelinadi)",
+        "preparation_ru": "На полный мочевой пузырь"
+      },
+      {
+        "id": "DIAG-003",
+        "name_uz": "EKG (Elektrokardiogramma)",
+        "name_ru": "ЭКГ с расшифровкой",
+        "price_uzs": 60000,
+        "room": "103-xona (1-qavat)",
+        "preparation_uz": "Tayyorgarlik shart emas",
+        "preparation_ru": "Без подготовки"
+      },
+      {
+        "id": "DIAG-004",
+        "name_uz": "O'pka rentgeni (Flyurografiya / Rentgen)",
+        "name_ru": "Рентген легких (Флюорография)",
+        "price_uzs": 80000,
+        "room": "100-xona (1-qavat, kirishda o'ngda)",
+        "preparation_uz": "Taqinchoqlarni yechish kerak",
+        "preparation_ru": "Снять металлические предметы"
+      },
+      {
+        "id": "DIAG-005",
+        "name_uz": "MDT / MRT bosh miya (Hamkor klinikada, zapis beriladi)",
+        "name_ru": "МРТ головного мозга",
+        "price_uzs": 450000,
+        "room": "Yo'llanma beriladi",
+        "preparation_uz": "Metall implantlar bo'lmasligi kerak",
+        "preparation_ru": "Противопоказано при наличии металлоконструкций"
+      }
+    ]
+  }
+]
