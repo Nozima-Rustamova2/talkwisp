@@ -278,6 +278,37 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## Absence is not evidence — rule 10, 2026-09-02
+
+- **Silence never means "no".** Asked whether the clinic works through lunch,
+  the bot answered that it works "tanaffussiz" — *without a break*. Nothing in
+  the knowledge base says that. It inferred a negative from the absence of a
+  fact, which is a different failure from serving an adjacent fact, and the more
+  dangerous half: no stated Sunday hours does not mean closed, no stated
+  insurance does not mean not accepted, no stated service does not mean not
+  offered.
+- **Stated as its own rule, not folded into the substitution fix**, even though
+  one prompt change addresses both. The generalisation is worth having on its
+  own: a reader who only sees "don't serve adjacent facts" has not been told the
+  other thing.
+- **A stated range or list is explicitly carved out**, because rule 9 depends on
+  it: "works Monday to Saturday" DOES tell you about Sunday, because the range
+  was stated. Silence is not a range. Without that sentence this rule would have
+  undone the temporal work — the Saturday case would have gone back to refusing.
+- **It fixed more than it was aimed at.** `syn-lunch-break` and also
+  `live-how-to-book`, which had been inventing a booking procedure around a real
+  phone number. Inventing "call this number to book" from a number that is
+  merely present is the same move as inventing "no break" from silence.
+- **Rule 1b gained the other half:** a different property of the RIGHT thing is
+  still the wrong answer — where the clinic is located does not answer which
+  room a doctor sits in. The first draft of that addition also claimed opening
+  hours never answer questions about breaks, which was too broad and had to be
+  narrowed with an explicit counter-example: a closing time IS part of stated
+  opening hours and must still be given.
+- **`syn-which-room` is still failing** and is now the clearest remaining case
+  of pure substitution: no room numbers exist, and the street address is served
+  instead. Rule 1b's new sentence names exactly this and does not yet stop it.
+
 ## Retrieval paths merged — 2026-09-02
 
 - **Exact match is no longer terminal.** It is still first, still authoritative,
