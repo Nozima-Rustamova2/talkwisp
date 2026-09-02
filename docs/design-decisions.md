@@ -278,6 +278,36 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## The empty chunk table: an export artifact, not a finding — 2026-09-02
+
+I initially read the Avisena seed producing **zero chunks** as evidence that
+real clinic data arrives without prose, and that the prose lane therefore
+matters far less than the fact lane. **That reading does not survive looking at
+the data.**
+
+- The export contains **24 prose-shaped values living inside structured
+  fields** — 12 doctor scope notes, 10 preparation instructions, an opening-hours
+  caveat, and a landmark. 1334 characters in total.
+- So prose is not absent from the clinic. It was **flattened into fields** by
+  whoever produced the export, and this seed stores it as facts (`izoh`,
+  `tayyorgarlik`) where it works: the ENT answer quotes the Kukushka note
+  straight out of `izoh`.
+- What is genuinely missing is the **paragraph-length policy prose** a clinic
+  certainly has — what to bring, rules for children, how results are collected,
+  cancellation, insurance. The previous data set had exactly three such
+  passages. Their absence here is a property of a structured JSON export of
+  doctors, services and prices; it is not evidence that the clinic has no
+  policies.
+- Supporting detail: only **2 of the 24** values contain a sentence break. These
+  are clauses, not paragraphs. Clause-length prose belongs in `fact`; the case
+  for `chunk` rests on material this export never had the shape to carry.
+
+**Conclusion, corrected:** nothing here says the prose lane is dead weight. The
+question is still open and the right test is different — take a clinic's actual
+documents (a printed price list, a policy page, a Telegram post) and see whether
+they contain paragraphs. Judging the prose lane by a structured export is
+judging it by the one input format guaranteed not to contain prose.
+
 ## Triage scope narrowed: a symptom may carry a named question — 2026-09-02
 
 - **The failure that prompted it.** "Ukamni qulogʻi ogʻriyapti, lor xonasi
@@ -329,7 +359,25 @@ directions.
   "qornim ogʻriyapti" match a *subject*, and the bot would quote a price to
   someone reporting pain — the original failure, returned with a green badge.
 
-**So `seed.py` now asserts that no alias is a body part or a symptom word**,
+**Enforced on every write path, not just the seed.** Retrieval's candidate set
+is `fact where confirmed` plus confirmed aliases, so a subject becomes matchable
+**the moment it is confirmed**. That makes the seed one of three doors, and the
+least important one — it carries no real customer data:
+
+| door | when the subject becomes matchable |
+|---|---|
+| `seed.py` | bulk load |
+| `typed.store()` | the owner types a fact; confirmed on write |
+| `review.confirm()` | an extracted proposal is accepted |
+
+The ingestion path will carry everything real, and a price list containing
+"Qorin boʻshligʻi UZI" is exactly where a model would propose `qorin` as a
+subject. Extraction does not currently propose *aliases* at all — but it
+proposes **subjects**, which the exact tier matches identically, so the risk was
+on that path regardless. `check_subject()` in `app/triage.py` is the one shared
+rule, called from all three.
+
+**It asserts that no subject or alias is a body part or a symptom word**,
 checked against `FORBIDDEN_ALIASES` in `app/triage.py` — the marker lists triage
 already maintains, plus body parts in both languages. The seed fails rather than
 loading one. Compound aliases are unaffected: "koz shifokori" is not "koz".
