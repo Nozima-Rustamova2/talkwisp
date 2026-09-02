@@ -15,6 +15,28 @@ prompt and we would be relying on the model to decline to use them. Here the
 model is never given them at all -- the same structural argument as the
 NO_ANSWER short-circuit in answer(), and for the same reason.
 
+SCOPE, narrowed 2026-09-02. Acute is absolute and short-circuits before any
+retrieval. A general symptom report short-circuits ONLY when the customer named
+no subject of their own. If they did -- "Ukamni qulog'i og'riyapti, lor xonasi
+nechanchi etajda?" -- the named question is answered, because refusing it is the
+same failure as a multi-part question dropping a clause.
+
+The line is not "is the answerable part independent of the symptom" -- the ENT's
+room number is not independent of the earache, that is why they are asking. The
+line is WHO CHOSE THE SUBJECT. A pure symptom report contains no question, so
+any answer requires the bot to pick something to offer, and picking a paid
+service in response to pain is the whole failure. When the customer names the
+thing, answering is not inference; it is answering. That also settles prices:
+quoting an ultrasound the customer asked for by name is no more medical than
+quoting an address. Authorship of the topic is the distinguishing feature, not
+the kind of fact.
+
+It is mechanical rather than a judgement call because the exact-match tier only
+matches strings LITERALLY PRESENT in the customer's text. `matched_on ==
+"subject"` means the customer wrote the subject's name. Measured over nine
+cases: four pure symptom reports all returned `not_found`, three symptom-plus-
+named-question cases all matched a subject.
+
 WHAT THIS DOES NOT DO, PERMANENTLY: map a symptom to a specialty. Not "chest
 pain -> cardiologist", not "sore throat -> ENT", not ever. That inference is
 medical advice regardless of how it is worded, and it is the line between being
@@ -125,6 +147,52 @@ _PHONE_LEAD = {
     "the same language the customer wrote in, in LATIN script":
         "Iltimos, {n} raqamiga qo'ng'iroq qiling. ",
 }
+
+
+# Body parts, in both languages. NOT used for detection -- a body part alone is
+# not a symptom, and "qorin" appears in perfectly ordinary questions about an
+# abdominal ultrasound. This list exists for ONE purpose: seed.py asserts that
+# no alias is exactly one of these words.
+#
+# Why that assertion matters. answer() lets a symptom report through to the
+# facts when the customer NAMED a subject, on the reasoning that the customer
+# chose the topic rather than the bot. That reasoning collapses if a body part
+# is itself a subject's alias: an alias "qorin" pointing at the abdominal
+# ultrasound would make "qornim ogriyapti" -- my stomach hurts -- match a
+# SUBJECT, and the bot would quote a price to someone reporting pain. That is
+# the exact failure triage was built to prevent, returned with a green badge.
+#
+# Note the matching is prefix-at-word-start, so a bare "qorin" also catches
+# "qornim", "qorniga" and the rest. A compound alias is fine and is not
+# blocked: "koz shifokori" is not "koz".
+_BODY_PARTS = frozenset({
+    # Uzbek
+    "qorin", "tomoq", "quloq", "koz", "bosh", "yurak", "opka", "buyrak",
+    "jigar", "oshqozon", "tish", "burun", "teri", "bogim", "umurtqa",
+    "oyoq", "qol", "bel", "korak", "til", "lab", "barmoq", "tirnoq",
+    # Russian, folded by normalize()
+    "jivot", "gorlo", "uxo", "glaz", "golova", "serdce", "pochka", "pechen",
+    "zub", "nos", "koja", "noga", "ruka", "spina", "jeludok", "gorlu",
+})
+
+# Everything an alias may never be. Imported by seed.py, which fails rather
+# than loading one.
+FORBIDDEN_ALIASES = frozenset(_BODY_PARTS | set(_ACUTE) | set(_SYMPTOM))
+
+
+# Prepended when a symptom report IS answered, because the customer named what
+# they wanted. They still get told we do not give medical advice -- answering
+# "the ENT is in room 201" must not read as engaging with the earache.
+_MEDICAL_LEAD = {
+    "Uzbek, in CYRILLIC script": "Биз тиббий маслаҳат бера олмаймиз, лекин:",
+    "Russian": "Мы не даём медицинских консультаций, но:",
+    "the same language the customer wrote in, in LATIN script":
+        "Biz tibbiy maslahat bera olmaymiz, lekin:",
+}
+
+
+def medical_lead(language: str) -> str:
+    return _MEDICAL_LEAD[language]
 
 
 def _hit(text: str, markers: tuple) -> str | None:

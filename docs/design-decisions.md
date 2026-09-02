@@ -278,6 +278,66 @@ two columns, left column cropped mid-word. Model: `gemini-3.6-flash`.
   transcribing is one extra model call; the cost of the other failure is
   quoting a customer someone else's price.
 
+## Triage scope narrowed: a symptom may carry a named question — 2026-09-02
+
+- **The failure that prompted it.** "Ukamni qulogʻi ogʻriyapti, lor xonasi
+  nechanchi etajda?" — *my brother's ear hurts, which room is the ENT in?* —
+  was short-circuited entirely. Refusing the room number is the same failure as
+  a multi-part question dropping a clause. Triage was built to stop the bot
+  quoting prices at someone describing pain, not to stop it saying where the ENT
+  sits.
+- **The line is WHO CHOSE THE SUBJECT, not whether the answerable part is
+  "independent" of the symptom.** Independence fails as a test: the ENT's room
+  number is not independent of the earache — that is *why* they are asking. But
+  a pure symptom report contains no question at all, so any answer requires the
+  BOT to pick something to offer, and picking a paid service in response to pain
+  is the whole failure. When the customer names the thing, answering is not
+  inference; it is answering.
+- **That also settles prices**, which looked like the hard case. Quoting an
+  ultrasound the customer asked for by name is no more medical than quoting an
+  address. "My wife's stomach hurts" → UZI price was wrong because *the bot*
+  chose the ultrasound. Authorship of the topic is the distinguishing feature,
+  not the kind of fact.
+- **It is mechanical, not a judgement call, and the machinery already existed.**
+  The exact-match tier only matches strings LITERALLY PRESENT in the customer's
+  text, so `matched_on == "subject"` means the customer wrote the subject's name.
+  Measured over nine cases before building anything: four pure symptom reports
+  (two languages, both tiers) all returned `not_found`; three
+  symptom-plus-named-question cases all matched a subject.
+- **Acute remains absolute** and short-circuits before any retrieval, even when
+  a subject is named. "Bolami isitmasi chiqib qusopti, tez yordamila bormi?"
+  names a service and still gets 103/112. Someone whose child is vomiting with a
+  fever should not be reading a room number.
+- **The disclaimer stays attached.** An answered symptom message is prefixed
+  with "we do not give medical advice, but:" — "the ENT is in room 201" must not
+  read as engaging with the earache.
+- **The guarantee is narrowed but still structural, and still in code:** the bot
+  can never CHOOSE a service to offer someone describing pain. Only the customer
+  can put one on the table.
+
+### The way this breaks, and the guard against it
+
+The signal is exactly as good as the alias table, and it fails in both
+directions.
+
+- **Safe direction:** a missing alias reads a named question as a pure symptom
+  and over-refuses. "Xotinimni qorni ogʻriyapdi, UZI qancha turadi?" is the one
+  miss in the nine — `not_found`, because no bare `UZI` alias exists. It
+  improves as aliases improve, and the failure is a refusal.
+- **Dangerous direction:** if a BODY PART is ever an alias, the exact tier fires
+  on the symptom itself. An alias `qorin` → abdominal ultrasound would make
+  "qornim ogʻriyapti" match a *subject*, and the bot would quote a price to
+  someone reporting pain — the original failure, returned with a green badge.
+
+**So `seed.py` now asserts that no alias is a body part or a symptom word**,
+checked against `FORBIDDEN_ALIASES` in `app/triage.py` — the marker lists triage
+already maintains, plus body parts in both languages. The seed fails rather than
+loading one. Compound aliases are unaffected: "koz shifokori" is not "koz".
+
+Worth noting the bare-`UZI` case was already a bad alias for an unrelated
+reason: "uzi" means "itself" in Uzbek, and that ambiguity was a live failure in
+the previous data set.
+
 ## A verifier reads the source of truth, never a snapshot of it — 2026-09-02
 
 Five tool failures this project, and every one is the same shape: **the thing

@@ -25,6 +25,7 @@ from psycopg import Connection
 from app.embeddings import embed_query
 from app.llm import complete
 from app.retrieval import find
+from app.triage import medical_lead
 from app.triage import reply as triage_reply
 from app.triage import triage
 
@@ -385,6 +386,21 @@ def _clinic_phone(conn: Connection) -> str | None:
 
 
 def answer(conn: Connection, question: str) -> dict:
+    """Answer, or refuse. Thin wrapper: the only thing it adds is keeping the
+    medical disclaimer attached when a symptom report gets answered because the
+    customer named what they wanted. Done here rather than threaded through
+    five return points -- triage() is pure and costs nothing to call twice."""
+    result = _answer(conn, question)
+    tiered = triage(question)
+    if (tiered and tiered[0] == "symptom" and result.get("answer")
+            and not (result.get("source") or "").startswith("triage")):
+        result["answer"] = (medical_lead(detect_language(question))
+                            + " " + result["answer"])
+        result["medical_lead"] = True
+    return result
+
+
+def _answer(conn: Connection, question: str) -> dict:
     # BEFORE retrieval, on purpose. A message reporting a symptom must never
     # reach the fact table -- if it did, the prices would already be in the
     # prompt and we would be trusting the model not to quote them. It did quote
@@ -392,6 +408,21 @@ def answer(conn: Connection, question: str) -> dict:
     # Short-circuiting here makes that impossible rather than unlikely, which
     # is the same argument as the NO_ANSWER branch below.
     tiered = triage(question)
+    tier = tiered[0] if tiered else None
+
+    # A general symptom report may still carry a question the customer asked in
+    # their own words. Whether it does is decided by the EXACT tier, because
+    # that tier only matches strings literally present in the customer's text:
+    # `matched_on == "subject"` means they named the subject themselves, so
+    # answering is answering rather than the bot choosing what to offer someone
+    # in pain. Acute never gets this treatment -- see below.
+    retrieval = find(conn, question) if tier == "symptom" else None
+    if tier == "symptom" and retrieval["matched_on"] == "subject":
+        tiered = None  # fall through to the ordinary path
+        medical_note = True
+    else:
+        medical_note = False
+
     if tiered:
         tier, marker = tiered
         result = {
@@ -407,7 +438,10 @@ def answer(conn: Connection, question: str) -> dict:
         # volume question gets answered.
         return result
 
-    retrieval = find(conn, question)
+    # Already computed above for the symptom path; only the acute and
+    # no-triage paths still need it.
+    if retrieval is None:
+        retrieval = find(conn, question)
     result = {
         "question": question,
         "status": retrieval["status"],

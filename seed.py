@@ -30,6 +30,7 @@ import sys
 from app.db import pool
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.normalize import normalize
+from app.triage import FORBIDDEN_ALIASES
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -159,6 +160,18 @@ for _subject, _alias in ALIASES:
     _seen.add(_key)
     _deduped.append((_subject, _alias))
 ALIASES = _deduped
+
+# An alias may never BE a body part or a symptom word. answer() lets a symptom
+# report reach the facts when the customer named a subject, on the reasoning
+# that the customer chose the topic. That collapses if a body part is itself an
+# alias: "qorin" pointing at the abdominal ultrasound would make "qornim
+# ogriyapti" match a SUBJECT, and the bot would quote a price to someone
+# reporting pain -- the exact failure triage exists to prevent, wearing a green
+# badge. Compound aliases are fine and unaffected: "koz shifokori" is not "koz".
+for _subject, _alias in ALIASES:
+    assert normalize(_alias) not in FORBIDDEN_ALIASES, (
+        f"alias {_alias!r} (-> {_subject}) is a body part or symptom word; "
+        "see FORBIDDEN_ALIASES in app/triage.py")
 
 # --- Facts a file produced: unconfirmed, with confidence, awaiting review ----
 # Kept small and deliberately in tension with the typed rows above, so the
