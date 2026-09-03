@@ -12,3 +12,4 @@ syn30_run.json
 run*.txt
 baseline_pre_merge.json
 feedback.jsonl
+graphify-out/
