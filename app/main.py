@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from app.answer import answer as answer_question
-from app import extract, review, sources, vision
+from app import console, extract, review, sources, vision
 from app.db import pool
 from app.llm import check_configured
 from app.retrieval import find
@@ -215,3 +215,38 @@ def list_conflicts() -> list[dict]:
     """
     with pool.connection() as conn:
         return review.conflicts(conn)
+
+
+# --- test console -----------------------------------------------------------
+# The onboarding screen where the owner talks to their agent before anyone else
+# can reach it. No auth (single tenant, local), no conversation history, and no
+# second answer path -- /console/ask calls the same answer() a customer gets.
+
+
+@app.post("/console/ask")
+def console_ask(q: str, from_suggestion: bool = False) -> dict:
+    with pool.connection() as conn:
+        return console.ask(conn, q, from_suggestion=from_suggestion)
+
+
+@app.get("/console/suggestions")
+def console_suggestions(limit: int = 3) -> list[dict]:
+    """Starter questions generated from confirmed facts. Returns FEWER than
+    asked rather than one that would fail -- the screen promises these have
+    answers."""
+    with pool.connection() as conn:
+        return console.suggestions(conn, limit=limit)
+
+
+@app.post("/console/feedback")
+def console_feedback(q: str, verdict: str, reason: str | None = None) -> dict:
+    """Right/wrong against the question, the answer, the route and the scores.
+
+    `reason` is only used for the one distinction code cannot make: whether a
+    retrieved fact is wrong, or a correct fact was used wrongly.
+    """
+    try:
+        with pool.connection() as conn:
+            return console.record(conn, q, verdict, reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -47,11 +47,39 @@ select attribute_key from fact
 # only add noise. This tier runs ONLY when no subject matched, so a question
 # that names a subject is never outranked by a value that merely shares a word.
 _VALUES = """
-select subject, attribute, value from fact
- where confirmed and value_key is not null and length(value_key) <= 40
-   and %(q)s ~ ('(^|\\s)' || value_key)
- order by length(value_key) desc
+select f.id, f.subject, f.attribute, f.value, f.created_at, s.id, s.label, s.filename, s.kind
+  from fact f
+  left join source s on s.id = f.source_id
+ where f.confirmed and f.value_key is not null
+   and length(f.value_key) <= 40
+   and %(q)s ~ ('(^|\\s)' || f.value_key)
+ order by length(f.value_key) desc
 """
+
+
+def _fact_row(row: tuple) -> dict:
+    """One retrieved fact, WITH where it came from.
+
+    Provenance is carried out of the query rather than looked up afterwards. A
+    second lookup would be reading a copy of what the answer used instead of
+    what it used -- the same mistake as a grader reading a stale field, and the
+    console exists to show what the agent actually did.
+
+    `source_*` is None for a typed fact (`source_id IS NULL`), which is not
+    missing data: the owner typed it, and "you typed this" is better provenance
+    than a filename. `created_at` is carried so the console can date it.
+    """
+    (fact_id, subject, attribute, value, created_at,
+     source_id, source_label, source_filename, source_kind) = row
+    return {
+        "id": str(fact_id),
+        "subject": subject, "attribute": attribute, "value": value,
+        "created_at": created_at.isoformat() if created_at else None,
+        "source_id": str(source_id) if source_id else None,
+        "source_label": source_label,
+        "source_filename": source_filename,
+        "source_kind": source_kind,
+    }
 
 
 def _longest(rows: list[tuple[str, str]]) -> list[str]:
@@ -86,12 +114,13 @@ def find(conn: Connection, question: str) -> dict:
         result["status"] = "ambiguous"
         return result
 
-    sql = ("select subject, attribute, value from fact"
-           " where confirmed and subject_key = any(%(s)s)")
+    sql = ("select f.id, f.subject, f.attribute, f.value, f.created_at, s.id, s.label, s.filename, s.kind"
+           " from fact f left join source s on s.id = f.source_id"
+           " where f.confirmed and f.subject_key = any(%(s)s)")
     params: dict = {"s": subjects}
 
     if subjects and attribute:
-        rows = conn.execute(sql + " and attribute_key = %(a)s",
+        rows = conn.execute(sql + " and f.attribute_key = %(a)s",
                             params | {"a": attribute}).fetchall()
         # The attribute may be a coincidence ("narx" inside an unrelated
         # question). If it filters everything away, fall back to the subject.
@@ -104,8 +133,9 @@ def find(conn: Connection, question: str) -> dict:
         # itself ("Ish vaqtingiz qanday?" never says "Shifo Med"). Answer from
         # the attribute across every subject and let the caller see the count.
         rows = conn.execute(
-            "select subject, attribute, value from fact"
-            " where confirmed and attribute_key = %(a)s", {"a": attribute}
+            "select f.id, f.subject, f.attribute, f.value, f.created_at, s.id, s.label, s.filename, s.kind"
+            " from fact f left join source s on s.id = f.source_id"
+            " where f.confirmed and f.attribute_key = %(a)s", {"a": attribute}
         ).fetchall()
         result["matched_on"] = "attribute"
     else:
@@ -114,8 +144,6 @@ def find(conn: Connection, question: str) -> dict:
         rows = conn.execute(_VALUES, {"q": key}).fetchall()
         result["matched_on"] = "value" if rows else None
 
-    result["facts"] = [
-        {"subject": s, "attribute": a, "value": v} for s, a, v in rows
-    ]
+    result["facts"] = [_fact_row(r) for r in rows]
     result["status"] = "ok" if rows else "not_found"
     return result

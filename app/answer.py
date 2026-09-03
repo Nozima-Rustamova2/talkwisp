@@ -24,7 +24,7 @@ from psycopg import Connection
 
 from app.embeddings import embed_query
 from app.llm import complete
-from app.retrieval import find
+from app.retrieval import _fact_row, find
 from app.triage import medical_lead
 from app.triage import reply as triage_reply
 from app.triage import triage
@@ -85,20 +85,24 @@ Rules, in order of importance:
 10. ABSENCE OF A FACT IS NOT EVIDENCE OF ITS OPPOSITE. If the context does not mention something, you do not know it -- silence never means the answer is "no". Never say the business lacks a service, has no lunch break, does not accept a payment method, has no such doctor, or does not do something, merely because the context does not mention it. Reply {NO_ANSWER} instead. A STATED range or list is different and you may reason from it: "works Monday to Saturday" does tell you about Sunday, because the range was stated. Silence is not a range."""
 
 _SEARCH_CHUNKS = """
-select content, 1 - (embedding <=> %(v)s::vector) as similarity
-  from chunk
- where embedding is not null
- order by embedding <=> %(v)s::vector
+select c.id, c.content, 1 - (c.embedding <=> %(v)s::vector) as similarity,
+       c.ordinal, s.id, s.label, s.filename, s.kind
+  from chunk c
+  left join source s on s.id = c.source_id
+ where c.embedding is not null
+ order by c.embedding <=> %(v)s::vector
  limit %(k)s
 """
 
 # Confirmed only: unreviewed extractions must never reach a customer.
 _SEARCH_FACTS = """
-select subject, attribute, attribute_key, value,
-       1 - (embedding <=> %(v)s::vector) as similarity
-  from fact
- where confirmed and embedding is not null
- order by embedding <=> %(v)s::vector
+select f.id, f.subject, f.attribute, f.attribute_key, f.value,
+       1 - (f.embedding <=> %(v)s::vector) as similarity,
+       f.created_at, s.id, s.label, s.filename, s.kind
+  from fact f
+  left join source s on s.id = f.source_id
+ where f.confirmed and f.embedding is not null
+ order by f.embedding <=> %(v)s::vector
  limit %(k)s
 """
 
@@ -106,8 +110,10 @@ select subject, attribute, attribute_key, value,
 # facts cluster on a single attribute, which is what a list question looks like
 # from here -- see _expand_list().
 _ALL_WITH_ATTRIBUTE = """
-select subject, attribute, attribute_key, value
-  from fact
+select f.id, f.subject, f.attribute, f.attribute_key, f.value, f.created_at,
+       s.id, s.label, s.filename, s.kind
+  from fact f
+  left join source s on s.id = f.source_id
  where confirmed and attribute_key = %(a)s
  order by subject
  limit 25
@@ -294,15 +300,19 @@ def search(conn: Connection, question: str, limit: int = FACT_WINDOW,
     One embedding call serves both searches.
     """
     vector = str(embed_query(question))
-    facts = [
-        {"subject": s, "attribute": a, "attribute_key": ak, "value": v,
-         "similarity": round(sim, 3)}
-        for s, a, ak, v, sim in conn.execute(
-            _SEARCH_FACTS, {"v": vector, "k": limit}).fetchall()
-    ]
+    facts = []
+    for (fid, subj, attr, akey, val, sim, created,
+         sid, slabel, sfile, skind) in conn.execute(
+            _SEARCH_FACTS, {"v": vector, "k": limit}).fetchall():
+        f = _fact_row((fid, subj, attr, val, created, sid, slabel, sfile, skind))
+        f["attribute_key"] = akey
+        f["similarity"] = round(sim, 3)
+        facts.append(f)
     chunks = [
-        {"content": c, "similarity": round(sim, 3)}
-        for c, sim in conn.execute(
+        {"id": str(cid), "content": c, "similarity": round(sim, 3),
+         "ordinal": ordinal, "source_id": str(sid) if sid else None,
+         "source_label": slabel, "source_filename": sfile, "source_kind": skind}
+        for cid, c, sim, ordinal, sid, slabel, sfile, skind in conn.execute(
             _SEARCH_CHUNKS, {"v": vector, "k": chunk_limit}).fetchall()
     ]
     return facts, chunks
@@ -334,13 +344,19 @@ def _expand_list(conn: Connection, facts: list[dict]) -> list[dict]:
     rows = conn.execute(_ALL_WITH_ATTRIBUTE, {"a": key}).fetchall()
     known = {(f["subject"], f["attribute"], f["value"]) for f in facts}
     expanded = list(facts)
-    for subject, attribute, attribute_key, value in rows:
+    for (fid, subject, attribute, attribute_key, value, created,
+         sid, slabel, sfile, skind) in rows:
         if (subject, attribute, value) not in known:
             # No similarity: these were not retrieved by score, they are here
-            # because the question was about the whole set.
-            expanded.append({"subject": subject, "attribute": attribute,
-                             "attribute_key": attribute_key, "value": value,
-                             "similarity": None})
+            # because the question was about the whole set. Provenance still
+            # travels with them -- an expanded fact reaches the prompt exactly
+            # like a scored one, so the console must be able to show where it
+            # came from.
+            f = _fact_row((fid, subject, attribute, value, created,
+                           sid, slabel, sfile, skind))
+            f["attribute_key"] = attribute_key
+            f["similarity"] = None
+            expanded.append(f)
     return expanded
 
 

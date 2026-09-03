@@ -1,0 +1,13 @@
+D:\startup\talkwisp\README.md
+D:\startup\talkwisp\data\avisena_policy.txt
+D:\startup\talkwisp\docs\competitors.md
+D:\startup\talkwisp\docs\design-add-knowledge.md
+D:\startup\talkwisp\docs\design-dashboard.md
+D:\startup\talkwisp\docs\design-decisions.md
+D:\startup\talkwisp\docs\missing-knowledge.md
+D:\startup\talkwisp\docs\strategy-architecture.md
+D:\startup\talkwisp\prototype\Add Knowledge.dc.html
+D:\startup\talkwisp\prototype\Dashboard.dc.html
+D:\startup\talkwisp\prototype\_ds\industry-fe763c99-19b8-4614-a4f8-6d4eab48130a\readme.md
+D:\startup\talkwisp\narxlar.png
+D:\startup\talkwisp\uzb.png
