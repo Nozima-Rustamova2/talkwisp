@@ -93,6 +93,37 @@ _APPROXIMATE = ("-", "–", "—", "~", "…", "dan", "gacha",
                 "taxminan", "atrofida", "boshlab", "+")
 
 
+def _flatten(text: str) -> str:
+    """Fold every invisible or lookalike character to something this can read.
+
+    Owners paste prices out of Word, Excel and PDFs, and those carry characters
+    that are invisible on screen and fatal here: a zero-width space inside
+    "60<zwsp>000" splits it into TWO numbers, so parse_amount refused it and
+    price_for said `not_exact` -- telling the owner to set an exact amount for a
+    price that already looked exact. A misleading error is worse than a wrong
+    one, because it sends someone to fix what is not broken.
+
+    By Unicode CATEGORY, not by a list of characters, because a list of
+    invisible characters is a list nobody can proofread:
+
+        Zs  every kind of space  -> a plain space (the digit-join then closes it)
+        Cf  format characters    -> deleted; they render as nothing
+        Pd  every kind of dash   -> "-", so _APPROXIMATE catches a range written
+                                    with a non-breaking or figure dash
+
+    normalize() already folds all of these for KEYS, which is why lookup was
+    never affected and this stayed invisible. Only the money path reads the raw
+    value, and the money path is where it mattered.
+    """
+    out = []
+    for ch in text:
+        category = unicodedata.category(ch)
+        out.append(" " if category == "Zs" else
+                   "" if category == "Cf" else
+                   "-" if category == "Pd" else ch)
+    return "".join(out)
+
+
 def parse_amount(value: str) -> int | None:
     """One exact sum in so'm, or None.
 
@@ -102,7 +133,7 @@ def parse_amount(value: str) -> int | None:
     depends on them staying ranges. Picking the low end would be the model
     inventing a price with extra steps.
     """
-    text = unicodedata.normalize("NFKC", value or "").lower()
+    text = _flatten(unicodedata.normalize("NFKC", value or "")).lower()
     if any(marker in text for marker in _APPROXIMATE):
         return None
 
@@ -121,8 +152,43 @@ def parse_amount(value: str) -> int | None:
     return amount
 
 
-def price_for(conn: Connection, subject_key: str) -> dict:
+def price_options(conn: Connection, subject_key: str) -> list[dict]:
+    """Every confirmed price fact for a subject, with the amount parsed.
+
+    ONE query reads prices, and everything that needs one comes through here --
+    price_for() below, and the purchase offer in app/buy.py. Two queries
+    reading prices is two definitions of what a price is, and they diverge on
+    the day someone adds an attribute.
+
+    `amount` is None when the value is a range or a floor. Those rows are KEPT
+    rather than filtered out, because the caller usually has to say why
+    something cannot be bought, and a missing row cannot explain itself.
+
+    `retrievable_fact`, not `fact`: a price shown to a customer is answering.
+    """
+    rows = conn.execute(
+        "select subject, attribute, attribute_key, value from retrievable_fact"
+        " where subject_key = %s and attribute_key like %s and confirmed"
+        " order by attribute",
+        (subject_key, "%narx%"),
+    ).fetchall()
+    # subject_key travels with each option so a caller holding a mixed list --
+    # two doctors' prices in one keyboard -- can create the order from the row
+    # it was handed, without matching a display name back to a key.
+    return [{"subject": s, "subject_key": subject_key, "attribute": a,
+             "attribute_key": ak, "value": v, "amount": parse_amount(v)}
+            for s, a, ak, v in rows]
+
+
+def price_for(conn: Connection, subject_key: str,
+              attribute_key: str | None = None) -> dict:
     """The single confirmed exact price for a subject, or a refusal.
+
+    `attribute_key` picks between several prices -- it is a SELECTOR, never an
+    amount. The figure is still read from the confirmed fact here, so the
+    guarantee that no amount can arrive from a model survives the extra
+    parameter. Callers pass a key that came out of price_options(), never one a
+    model produced.
 
     Three ways this says no, and all three are correct behaviour:
 
@@ -137,27 +203,26 @@ def price_for(conn: Connection, subject_key: str) -> dict:
     been read by a human, and the gap between reviewing a price and charging
     one is the entire point of the review queue.
     """
-    rows = conn.execute(
-        "select subject, attribute, value from fact"
-        " where subject_key = %s and attribute_key like %s and confirmed"
-        " order by attribute",
-        (subject_key, "%narx%"),
-    ).fetchall()
+    options = price_options(conn, subject_key)
+    if attribute_key is not None:
+        options = [o for o in options if o["attribute_key"] == attribute_key]
 
-    if not rows:
-        raise OrderError("no_price", subject_key=subject_key)
-    if len(rows) > 1:
+    if not options:
+        raise OrderError("no_price", subject_key=subject_key,
+                         attribute_key=attribute_key)
+    if len(options) > 1:
         raise OrderError("several_prices", subject_key=subject_key,
-                         options=[{"subject": s, "attribute": a, "value": v}
-                                  for s, a, v in rows])
+                         options=options)
 
-    subject, attribute, value = rows[0]
-    amount = parse_amount(value)
-    if amount is None:
-        raise OrderError("not_exact", subject_key=subject_key,
-                         subject=subject, attribute=attribute, value=value)
-    return {"subject": subject, "attribute": attribute, "value": value,
-            "amount": amount}
+    chosen = options[0]
+    if chosen["amount"] is None:
+        # `chosen` already carries subject_key, so it is NOT passed again --
+        # that collision is the same shape as the `reason` one this class was
+        # renamed to prevent, and it came back the moment a key was added to
+        # the dict. Splatting a row into kwargs beside explicit kwargs is the
+        # pattern at fault, not either key.
+        raise OrderError("not_exact", **chosen)
+    return chosen
 
 
 def _taken_amounts(conn: Connection, low: int, high: int) -> set[int]:
@@ -175,14 +240,19 @@ def _taken_amounts(conn: Connection, low: int, high: int) -> set[int]:
 
 # ------------------------------------------------------------------ lifecycle
 
-def create(conn: Connection, chat_id: int, subject_key: str) -> dict:
+def create(conn: Connection, chat_id: int, subject_key: str,
+           attribute_key: str | None = None) -> dict:
     """Open one order. Reads the price itself; the caller supplies no amount.
 
     That is not convenience. An amount passed in as an argument is an amount
     that could have come from anywhere, including a model, and the one thing
     this module guarantees is that it did not.
+
+    `attribute_key` chooses between several prices when a subject has more than
+    one -- every doctor has both `qabul narxi` and `takroriy qabul narxi`. It
+    selects a row; it never supplies a figure.
     """
-    price = price_for(conn, subject_key)
+    price = price_for(conn, subject_key, attribute_key)
     base = price["amount"]
 
     # Retry on the unique index rather than trusting the read: two customers

@@ -1134,3 +1134,119 @@ module's write path depend on a WHERE clause in a different module. Deleting
 extraction into an unguarded door for body-part subjects, and nothing anywhere
 would fail to say so. The note is in `extract.py` and in `retrieval.py`,
 because the dependency is invisible from either one alone.
+
+## Buy intent: measured, and what the measurement found — 2026-09-05
+
+### The classifier proposes; a tap creates
+
+The brief had buy intent create the order. It does not. An order occupies an
+amount, holds it 24 hours and quarantines it seven days, out of a space of 50
+suffixes — so a classifier firing on price questions would exhaust a popular
+service's suffix space over a few quiet weeks, and real customers would start
+hitting `amount_exhausted` for reasons nobody could see.
+
+With a tap in between, a false positive costs one unwanted button and zero
+rows. The guarantee tightens from *the worst case is an unwanted payment offer*
+to *the worst case is an offer nobody accepted*.
+
+### The first measurement was a perfect score on a broken thing
+
+`purchasable()` listed canonical subjects only. So the model was shown
+`Rahimov Alisher Bahodirovich` and never `Kardiolog`, and "Kardiologga
+yozilmoqchiman" — I want to book a cardiologist — missed in all three
+languages. Nobody asks for a doctor by full name.
+
+**0 of 90 false positives, and 3 of 5 real intents missed.** A classifier that
+cannot fire scores perfectly on a false-positive metric.
+
+It was caught only because the file contained a deliberate can't-fire control —
+five real purchase intents, present precisely so a silent zero would fail.
+That control was not automatic; someone had to think of it. The general rule
+worth carrying: **when a measurement comes back clean, ask whether the setup
+could produce that result while broken.**
+
+This is the same fault as the stale-snapshot verifier, in a new place: the
+thing being measured and the thing being verified had drifted apart while every
+signal stayed green.
+
+### After showing the model the names customers actually use
+
+**1 of 90, and all five real intents caught in three languages.** The one hit
+is not a misfire — see the next section.
+
+The model's answer is resolved back through the database by subject *or* alias,
+so it can only ever reach something the business sells. It never sees a price.
+
+### Booking is not paying, and only one of them exists here
+
+The single hit was `syn-book-gynae` — "Menga ginekologga zapis qberila", *sign
+me up for the gynaecologist*. The classifier read that correctly. It is a
+booking request.
+
+**Avisena has no booking procedure.** The graded expectation for that question
+is `gap` for exactly that reason. So if a booking request produces a payment
+offer, we take money for an appointment nobody can reserve — the customer-side
+form of the failure this whole feature was built to avoid.
+
+Paying for a consultation and reserving a slot are different acts. At a market
+stall they are the same act, which is why the brief's framing did not separate
+them; at a clinic they are not. The reference case hid the distinction.
+
+Recorded as a boundary rather than silently resolved: whether a scheduling
+request may produce a payment offer depends on whether the business can
+actually reserve anything, and that is the owner's fact to state, not ours to
+assume.
+
+### Two disambiguation axes, crossed rather than sequenced
+
+- **Which thing.** `resolve("Karimov")` returns two doctors; `"kardiolog"`
+  would return two at a clinic with two cardiologists. Choosing one is choosing
+  who the customer sees and what they pay.
+- **Which price.** Every doctor has `qabul narxi` and `takroriy qabul narxi`.
+  All 13 of them. The normal case, not an edge one.
+
+Asked in sequence that is two taps before anyone sees a figure. They are
+crossed into one keyboard while the result still fits a screen — the live data
+maxes out at four buttons — and fall back to the subject question above
+`MAX_COMBINED`. A judgement about a phone screen, not a principle.
+
+The second Karimov is synthetic, added to the seed months earlier purely to
+keep the ambiguity behaviour testable. It caught this the first time it ran.
+Deliberately awkward cases in the seed pay for themselves late.
+
+### An invisible character in the money path
+
+`payment.som()` used U+00A0, a non-breaking space, where every stored price
+uses U+0020. Visually identical. Every computed amount would have failed to
+string-match its own price list, and nothing in the system would have surfaced
+it — it was found only because an assertion happened to compare bytes.
+
+Two consequences, both fixed:
+
+- **There were two money formatters.** `seed.money()` and `payment.som()` — the
+  same "two definitions of one thing" fault removed from price reading an hour
+  earlier. `seed.money()` now calls `payment.som()`.
+- **`parse_amount()` could not read a pasted price.** A zero-width space, soft
+  hyphen, BOM or non-breaking hyphen inside `60<zwsp>000` splits it into two
+  numbers, so the price was refused as `not_exact` — telling the owner to set an
+  exact amount for a price that already looked exact on screen. A misleading
+  error is worse than a wrong one: it sends someone to fix what is not broken.
+  Owners paste prices out of Word and PDFs, so this was reachable.
+
+The fix folds by Unicode CATEGORY, not by a list of characters, because a list
+of invisible characters is a list nobody can proofread: `Zs` to a space, `Cf`
+deleted, `Pd` to `-` so a range written with a figure dash is still a range.
+
+`normalize()` already folded all twelve suspects, which is why keys were never
+affected and this stayed hidden — only the money path reads a raw value. A scan
+of `fact`, `alias`, `chunk` and `source` found no live rows carrying any of
+them.
+
+### The kwargs collision came back
+
+Adding `subject_key` to a price row immediately produced `OrderError() got
+multiple values for keyword argument 'subject_key'` — the same shape as the
+`reason` collision that got `OrderError.__init__` renamed in A1. Renaming a
+parameter fixed one instance; the pattern at fault is **splatting a row into
+kwargs beside explicit kwargs**, and it returned the moment a key was added to
+the row. Now named as the pattern rather than the key.

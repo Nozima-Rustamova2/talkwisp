@@ -59,6 +59,13 @@ def rejects(label, fn):
 
 with pool:
     with pool.connection() as conn:
+        # Read BEFORE anything is written, compared after the rollback. The
+        # alternative is a literal count, which goes stale the moment the owner
+        # adds a line of copy -- and a verifier asserting a stale snapshot is
+        # the bug this codebase has now met five times.
+        BEFORE = conn.execute(
+            "select count(*) from fact where subject_key = %s",
+            (PAYMENT_SUBJECT_KEY,)).fetchone()[0]
         try:
             with conn.transaction() as tx:
 
@@ -191,7 +198,7 @@ with pool:
                            ).fetchone()[0], 0)
         check("payment facts unchanged",
               conn.execute("select count(*) from fact where subject_key = %s",
-                           (PAYMENT_SUBJECT_KEY,)).fetchone()[0], 6)
+                           (PAYMENT_SUBJECT_KEY,)).fetchone()[0], BEFORE)
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

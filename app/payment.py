@@ -51,6 +51,33 @@ INSTRUCTION_ATTRIBUTE = {
     "Russian": "tolov korsatmasi rus",
 }
 
+# The line that asks for the amount to be sent EXACTLY. Also the owner's, also
+# per language, and it is the only mitigation there is for the customer who
+# types the round number anyway -- see the reliability list in
+# docs/design-decisions.md. Prominence is not a guarantee.
+EXACT_ATTRIBUTE = {
+    "the same language the customer wrote in, in LATIN script":
+        "aniq summa ogohlantirishi lotin",
+    "Uzbek, in CYRILLIC script": "aniq summa ogohlantirishi kirill",
+    "Russian": "aniq summa ogohlantirishi rus",
+}
+
+# Uzbekistan only, and stated rather than assumed. The stored prices already
+# carry "soʻm"; this formats an integer the same way for the one line that is
+# computed rather than copied. A second country needs a decision here, not a
+# parameter added in passing.
+CURRENCY = "soʻm"
+
+
+def som(amount: int) -> str:
+    """250003 -> '250 003 soʻm'. A space is the thousands separator here."""
+    # The separator is a PLAIN space, U+0020. It was a non-breaking space
+    # here for one commit -- visually identical, and it would have made
+    # every computed amount fail to string-match the stored prices that use
+    # a plain one. Caught by check_buy.py asserting the amount appears
+    # verbatim; nothing else would ever have shown it.
+    return f"{amount:,}".replace(",", " ") + f" {CURRENCY}"
+
 # Word-start containment, the rule triage._hit() uses and the same rule
 # retrieval's exact tier uses. Written in normalized form, so Cyrillic input
 # reaches them after folding: "номер карты" -> "nomer karti", caught by
@@ -118,3 +145,25 @@ def message(conn: Connection, language: str) -> str | None:
     lines = [instruction, card]
     lines += [stored[a] for a in OPTIONAL_ATTRIBUTES if stored.get(a)]
     return "\n".join(lines)
+
+
+def order_message(conn: Connection, language: str, order: dict) -> str | None:
+    """The payment message for one order, or None if it cannot be assembled.
+
+    Same rules as message() above, plus the amount -- which comes from
+    `order["amount"]`, a column the database computed and constrained
+    (`amount = base_amount + suffix`). No model, no arithmetic here beyond the
+    thousands separator.
+
+    The amount is on its own line, alone, directly under the card block,
+    because the whole unique-suffix trick collapses if the customer rounds it
+    off. That is prominence, not a guarantee: item 3 on the
+    cannot-be-made-reliable list stands.
+    """
+    base = message(conn, language)
+    if base is None:
+        return None
+    warning = details(conn).get(EXACT_ATTRIBUTE[language])
+    if not warning:
+        return None
+    return f"{base}\n\n{som(order['amount'])}\n{warning}"

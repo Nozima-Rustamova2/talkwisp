@@ -30,6 +30,7 @@ import sys
 from app.db import pool
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.normalize import normalize
+from app import payment
 from app.payment import PAYMENT_SUBJECT, PAYMENT_SUBJECT_KEY
 from app.triage import check_subject
 
@@ -44,8 +45,14 @@ CLINIC = "Avisena Med"
 
 
 def money(amount: int) -> str:
-    """180000 -> '180 000 soʻm'. Uzbek uses a space as the thousands separator."""
-    return f"{amount:,}".replace(",", " ") + " soʻm"
+    """180000 -> '180 000 soʻm'. Uzbek uses a space as the thousands separator.
+
+    ONE definition of how money looks, in app/payment.py, because the seed
+    writes the prices and payment.order_message() writes the amount a customer
+    is asked to send. Two formatters is two ways to render the same sum, and
+    they had already drifted by one invisible character before this was noticed.
+    """
+    return payment.som(amount)
 
 
 def _parenthetical(text: str) -> tuple[str, list[str]]:
@@ -241,6 +248,19 @@ PAYMENT = [
     ("Toʻlov koʻrsatmasi lotin", "Toʻlovni quyidagi kartaga amalga oshiring:"),
     ("Toʻlov koʻrsatmasi kirill", "Тўловни қуйидаги картага амалга оширинг:"),
     ("Toʻlov koʻrsatmasi rus", "Оплату можно произвести на следующую карту:"),
+    # The exact-amount line. This is the ONLY defence against a customer
+    # rounding 250 003 back to 250 000, which silently breaks the matching the
+    # whole feature rests on. Prominence, not a guarantee -- see item 3 on the
+    # reliability list in docs/design-decisions.md.
+    ("Aniq summa ogohlantirishi lotin",
+     "Iltimos, summani ANIQ shu koʻrinishda yuboring — "
+     "toʻlovingizni shu raqam boʻyicha topamiz."),
+    ("Aniq summa ogohlantirishi kirill",
+     "Илтимос, суммани АНИҚ шу кўринишда юборинг — "
+     "тўловингизни шу рақам бўйича топамиз."),
+    ("Aniq summa ogohlantirishi rus",
+     "Пожалуйста, переведите ТОЧНО эту сумму — "
+     "по ней мы найдём ваш заказ."),
 ]
 
 FILE_SOURCE = (

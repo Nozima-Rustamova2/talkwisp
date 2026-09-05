@@ -62,6 +62,19 @@ for value, want in [
     ("bepul", None),
     ("", None),
     ("50", None),                     # below the sanity band
+    # Invisible characters, which owners paste in from Word, Excel and PDFs.
+    # Every one of these renders on screen as an ordinary exact price. Before
+    # _flatten() they split the number in two and price_for() answered
+    # `not_exact` -- telling the owner to fix a price that already looked
+    # correct. normalize() folded them all along, so lookup never noticed and
+    # only the money path was affected.
+    ("60​000 so'm", 60000),      # zero-width space
+    ("60­000 so'm", 60000),      # soft hyphen
+    ("60﻿000 so'm", 60000),      # byte-order mark
+    ("60 000 so'm", 60000),      # non-breaking space
+    ("60 000 so'm", 60000),      # narrow non-breaking space
+    ("450 000–500 000", None),   # an en-dash range is still a range
+    ("60‑000 so'm", None),       # a non-breaking HYPHEN is still a dash
 ]:
     check(f"{value!r:28} -> {want}", orders.parse_amount(value), want)
 
