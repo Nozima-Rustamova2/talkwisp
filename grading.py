@@ -39,6 +39,26 @@ def wrong_script(q: dict, r: dict) -> str | None:
         return "question is Latin, reply is Cyrillic"
     return None
 
+def matches(fact: dict, want: str) -> bool:
+    """Does this retrieved fact satisfy a `want` of the form "Subject / attribute"?
+
+    ONE definition, because check_window.py needs the same rule to ask where the
+    answering fact ranks. Two copies of "is this the right fact" would be two
+    answers to that question, and they would disagree the first time an
+    attribute was renamed.
+
+    The attribute is matched by PREFIX: `want` says "qabul narxi" and the stored
+    attribute may be "qabul narxi" or something that starts with it. The subject
+    must match exactly, on the normalized key.
+    """
+    if " / " not in want:
+        return False
+    want_subject, want_attribute = (p.strip() for p in want.split(" / ", 1))
+    return (normalize(fact["subject"]) == normalize(want_subject)
+            and normalize(fact["attribute"]).startswith(
+                normalize(want_attribute)))
+
+
 def grade(q: dict, r: dict) -> str | None:
     """PASS / FAIL / None (judge by eye)."""
     expect = q["expect"]
@@ -78,7 +98,6 @@ def grade(q: dict, r: dict) -> str | None:
     if " / " not in q["want"]:
         return None  # a shape, not a row
 
-    want_subject, want_attribute = (p.strip() for p in q["want"].split(" / ", 1))
     # Facts arrive either by exact match or by vector search. Both count.
     candidates = list(r["facts"])
     if "vector-facts" in source:
@@ -86,8 +105,6 @@ def grade(q: dict, r: dict) -> str | None:
         # window. Grading the window scored three correct answers as failures.
         candidates += r.get("context_facts") or r.get("near_facts") or []
     for fact in candidates:
-        if (normalize(fact["subject"]) == normalize(want_subject)
-                and normalize(fact["attribute"]).startswith(
-                    normalize(want_attribute))):
+        if matches(fact, q["want"]):
             return "PASS"
     return "FAIL"
