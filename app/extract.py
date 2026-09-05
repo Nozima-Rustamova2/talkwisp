@@ -153,6 +153,21 @@ def store(source_id: str, facts: list[dict],
         conn.execute("delete from fact where source_id = %s and not confirmed",
                      (source_id,))
         chunks.store(conn, source_id, embedded_prose or [])
+        # NO check_subject() HERE, AND THAT IS LOAD-BEARING ON ANOTHER MODULE.
+        #
+        # These rows are written unconfirmed, and retrieval's candidate set is
+        # `confirmed` only (see _MATCH in app/retrieval.py). So a body-part
+        # subject a model proposes -- "Qorin boʻshligʻi UZI" is exactly where it
+        # would -- sits harmlessly in the review queue until review.confirm()
+        # checks it. That is the design, not an oversight.
+        #
+        # It means the safety of THIS write path depends on a WHERE clause in a
+        # DIFFERENT module. Delete `confirmed` from retrieval's candidate query
+        # as a redundant-looking filter and this becomes a live door, with
+        # nothing failing to say so. The guard is Python-only -- there is no
+        # constraint underneath it -- because a check constraint cannot call
+        # normalize(). Recorded 2026-09-05; the proper fix is a generated column
+        # or an immutable SQL function, and it is its own decision.
         for f in facts:
             conn.execute(
                 "insert into fact (subject, subject_key, attribute,"

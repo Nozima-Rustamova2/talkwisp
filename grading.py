@@ -60,6 +60,15 @@ def grade(q: dict, r: dict) -> str | None:
         return "PASS" if source == f"triage-{q['want']}" else "FAIL"
     if expect == "ask-which":
         return "PASS" if source == "ambiguous" else "FAIL"
+    if expect == "payment":
+        # The ONLY expectation graded on wording, and graded on it exactly.
+        # Route alone is not enough here: "payment" plus a reply that is one
+        # digit different is the failure this is for. Byte equality is the
+        # assertion -- no strip(), no normalize(), no "contains the number".
+        # If the model ever composes this string it will not be byte-equal,
+        # and that is the entire test.
+        return "PASS" if (source == "payment"
+                          and r.get("answer") == q["want"]) else "FAIL"
     if expect == "prose":
         # Route may be "chunks" or "vector-facts+chunks": once the floor
         # dropped, facts clear it too even when the chunk carries the answer.

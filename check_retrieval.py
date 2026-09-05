@@ -27,7 +27,12 @@ def grade(q: dict, r: dict) -> str | None:
     expect = q["expect"]
     if expect == "ask-which":
         return "PASS" if r["status"] == "ambiguous" else "FAIL"
-    if expect in ("prose", "gap"):
+    if expect in ("prose", "gap", "payment"):
+        # `payment` belongs here and it is not a shortcut. A payment question
+        # reaching this layer at all means the route above it missed, and
+        # not_found is then the ONLY acceptable result -- anything else is the
+        # card number arriving in retrieval. So this harness scores the
+        # exclusion for free, on every run, with no model and no API call.
         return "PASS" if r["status"] == "not_found" else "FAIL"
 
     if " / " not in q["want"]:

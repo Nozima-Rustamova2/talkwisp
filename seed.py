@@ -30,6 +30,7 @@ import sys
 from app.db import pool
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.normalize import normalize
+from app.payment import PAYMENT_SUBJECT, PAYMENT_SUBJECT_KEY
 from app.triage import check_subject
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -212,7 +213,35 @@ for _s in [r[0] for r in TYPED] + [r[0] for r in EXTRACTED]:
     check_subject(_s)
 
 for _s in [r[0] for r in TYPED] + [r[0] for r in EXTRACTED]:
+    # Kept even though migrations/0005 now enforces this with a check
+    # constraint on every write path. This fails at import with the offending
+    # subject named, before a single row or embedding is written; the
+    # constraint is the floor for the three doors this list cannot see.
     assert " / " not in _s, f"subject contains the separator: {_s!r}"
+
+# --- Payment details: the one subject that is never retrieved ---------------
+#
+# THE CARD NUMBER IS DELIBERATELY INVALID. 8600 is a real Uzcard BIN, so a
+# plausible-looking test number could be mistaken for a live one by anyone
+# reading this file or a test failure. All-zeros cannot be, and it fails a Luhn
+# check. Replaced by the owner's real details through the console; never
+# committed.
+#
+# These rows are excluded from retrieval by the view `retrievable_fact` and
+# cannot carry an embedding. They are readable only by app/payment.py, which
+# joins them with newlines and never shows them to a model.
+PAYMENT = [
+    ("Karta raqami", "8600 0000 0000 0000"),
+    ("Karta egasi", "AVISENA MED"),
+    ("Bank", "Kapitalbank"),
+    # The owner's own copy, per language, editable like any other fact. The
+    # card block above is identical in all three; only this line changes,
+    # because language detection is very good and not perfect, and a payment
+    # instruction is the wrong place to find that out.
+    ("Toʻlov koʻrsatmasi lotin", "Toʻlovni quyidagi kartaga amalga oshiring:"),
+    ("Toʻlov koʻrsatmasi kirill", "Тўловни қуйидаги картага амалга оширинг:"),
+    ("Toʻlov koʻrsatmasi rus", "Оплату можно произвести на следующую карту:"),
+]
 
 FILE_SOURCE = (
     "file",
@@ -254,6 +283,14 @@ def main() -> None:
                      value, normalize(value), confidence, file_source),
                 )
 
+            for attribute, value in PAYMENT:
+                conn.execute(
+                    "insert into fact (subject, subject_key, attribute, attribute_key,"
+                    " value, value_key, confirmed) values (%s, %s, %s, %s, %s, %s, true)",
+                    (PAYMENT_SUBJECT, PAYMENT_SUBJECT_KEY,
+                     attribute, normalize(attribute), value, normalize(value)),
+                )
+
             for subject, alias in ALIASES:
                 conn.execute(
                     "insert into alias (subject_key, alias, alias_key, confirmed)"
@@ -264,8 +301,13 @@ def main() -> None:
             # Embed every fact as "subject / attribute / value" -- the value on
             # its own gives no clue what it is, so a question about opening
             # hours would never reach "Dushanba-Juma 08:00 - 20:00".
+            # `retrievable_fact`, so the payment rows are skipped. Not an
+            # optimisation: the constraint fact_payment_not_embedded would
+            # abort the whole seed on the first one. Reading the view means
+            # this loop cannot embed something that must not be embedded, and
+            # it does not need to know why.
             facts = conn.execute(
-                "select id, subject, attribute, value from fact"
+                "select id, subject, attribute, value from retrievable_fact"
             ).fetchall()
             print(f"  embedding {len(facts)} facts...")
             for n, (fact_id, subject, attribute, value) in enumerate(facts, 1):

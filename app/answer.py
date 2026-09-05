@@ -24,6 +24,7 @@ from psycopg import Connection
 
 from app.embeddings import embed_query
 from app.llm import complete
+from app import payment
 from app.retrieval import _fact_row, find
 from app.triage import medical_lead
 from app.triage import reply as triage_reply
@@ -95,11 +96,15 @@ select c.id, c.content, 1 - (c.embedding <=> %(v)s::vector) as similarity,
 """
 
 # Confirmed only: unreviewed extractions must never reach a customer.
+# `retrievable_fact`, not `fact`: the view excludes the reserved payment
+# subject. Belt and braces here -- a payment fact also cannot carry an
+# embedding (constraint fact_payment_not_embedded), so `embedding is not
+# null` below already closes this path at the database.
 _SEARCH_FACTS = """
 select f.id, f.subject, f.attribute, f.attribute_key, f.value,
        1 - (f.embedding <=> %(v)s::vector) as similarity,
        f.created_at, s.id, s.label, s.filename, s.kind
-  from fact f
+  from retrievable_fact f
   left join source s on s.id = f.source_id
  where f.confirmed and f.embedding is not null
  order by f.embedding <=> %(v)s::vector
@@ -112,7 +117,7 @@ select f.id, f.subject, f.attribute, f.attribute_key, f.value,
 _ALL_WITH_ATTRIBUTE = """
 select f.id, f.subject, f.attribute, f.attribute_key, f.value, f.created_at,
        s.id, s.label, s.filename, s.kind
-  from fact f
+  from retrievable_fact f
   left join source s on s.id = f.source_id
  where confirmed and attribute_key = %(a)s
  order by subject
@@ -393,7 +398,10 @@ def _clinic_phone(conn: Connection) -> str | None:
     are constants; this one is not, and must never become one.
     """
     row = conn.execute(
-        "select value from fact"
+        # The view, not the table: this value reaches a customer, which is the
+        # test for which of the two to read. No payment attribute starts with
+        # "telefon" today, and that is not a reason to read the wider one.
+        "select value from retrievable_fact"
         " where attribute_key like %s and confirmed"
         " order by created_at limit 1",
         ("telefon%",),
@@ -453,6 +461,28 @@ def _answer(conn: Connection, question: str) -> dict:
         # message log in bot.py records the triage route, which is where the
         # volume question gets answered.
         return result
+
+    # ALSO before retrieval, and for the mirror-image reason. Triage keeps a
+    # question away from the facts; this keeps a fact away from the model. The
+    # card number is never in a prompt because the prompt is never built.
+    #
+    # Below triage on purpose: someone describing chest pain who also mentions a
+    # card gets the emergency reply, not payment details.
+    #
+    # A missed phrasing falls through to the ordinary path, where the view
+    # hides the subject and the answer is NO_ANSWER plus a logged gap. The
+    # failure mode is silence, never a wrong card number.
+    marker = payment.detect(question)
+    if marker:
+        text = payment.message(conn, detect_language(question))
+        # None means the owner has not finished filling these in. Falling
+        # through is better than sending half a payment instruction.
+        if text:
+            return {
+                "question": question, "status": "ok", "source": "payment",
+                "facts": [], "matched_on": marker, "chunks": [],
+                "answer": text,
+            }
 
     # Already computed above for the symptom path; only the acute and
     # no-triage paths still need it.

@@ -995,3 +995,117 @@ unconfirmed range from a file *and* a confirmed exact figure from the owner. The
 6. **Language detection is 53/53 on the test set, not perfect**, and a payment
    instruction in the wrong language is a bad failure. Mitigation: the card
    block is identical in every language; only the surrounding text varies.
+7. **A card number printed inside an uploaded document is not excluded.** The
+   reserved subject protects facts; a chunk has no subject, so prose carrying
+   payment details is chunked, embedded, retrieved and shown to the model like
+   any other passage. Added 2026-09-05, when the exclusion was built and this
+   turned out to be the edge it cannot reach. No mitigation in code -- naming
+   it beats a filter that would look like coverage and provide none.
+
+## How the payment exclusion is actually enforced — 2026-09-05
+
+The A1 entry above named the rule: payment details are *a fact that must never
+be retrieved*. This is where it was built, and the mechanism moved during
+design in a way worth recording.
+
+### The exclusion is not in the retrieval code
+
+The obvious implementation is a `WHERE subject_key <> ...` in the retrieval
+queries. Counting the statements that can return a fact, that is eight arms:
+five inside `find()` (including *both* halves of the candidate union) and three
+in `answer.py`. Eight places is eight chances to forget, and the ninth query
+written next year would inherit nothing while nothing failed. That is the same
+structural hole A1 exposed, in a different costume.
+
+So the exclusion lives below `app/`, in `migrations/0005`:
+
+- **A view, `retrievable_fact`.** Every retrieval query reads it; `fact` stays
+  the write and edit target. The naming does the work: **a query that reads
+  `fact` is editing, a query that reads `retrievable_fact` is answering.** A
+  query written later inherits the exclusion by reading the obvious thing.
+- **A check constraint, `fact_payment_not_embedded`.** Both vector searches
+  already require `embedding is not null`. A payment fact that *cannot* carry
+  an embedding is therefore unreachable from either of them — closed by the
+  database rather than by the text of a WHERE clause somebody may rewrite.
+
+`seed.py` and `typed.store()` skip embedding for the reserved subject. That is
+the policy; the constraint is the floor that catches the policy going missing,
+and `check_payment.py` proves the floor fires by writing raw SQL around `app/`
+entirely. Both mechanisms are one line.
+
+### The one arm the view cannot reach
+
+`find()`'s candidate set unions subjects-that-have-facts with confirmed
+aliases. The view is on `fact`, so the alias arm is untouched by it: an alias
+pointing at the payment subject would resurface the card number through that
+union alone. `check_subject()` also refuses to create such an alias, but that
+is a guard in another module, and depending on it silently is precisely what
+this design is avoiding. So the alias arm carries an explicit predicate, and
+`check_payment.py` inserts a live alias row and asserts it reaches nothing.
+
+### What the exclusion cannot cover: chunks
+
+A chunk has no subject, so a subject-key exclusion is a no-op on the prose
+path. Writing one anyway and calling the chunk path covered would be a lie in
+the shape of a filter.
+
+The real risk is the owner uploading a price list with their card number
+printed on it. It gets chunked, embedded, retrieved and put in front of the
+model, and nothing here can see it. Recorded on the cannot-be-made-reliable
+list rather than papered over.
+
+### The test is the deliverable, and `want` is a literal
+
+Three questions in the graded set — Uzbek Latin, Uzbek Cyrillic, Russian — whose
+`want` is the expected reply **byte for byte**, written out as a literal string
+rather than built by calling `payment.message()`. Comparing code-built output
+to a code-built expectation would still pass if the answer path quietly started
+asking the model, which is the one failure these exist to catch. Changing the
+seeded card number means editing three lines; that friction is the feature.
+
+Verified by disabling `payment.detect()` and running the three questions down
+the ordinary path: all three flip to FAIL, and all three come back as correct
+refusals in the right language with no payment fact in the context and no card
+number in the reply. The test has teeth, and the miss lands in silence.
+
+`check_retrieval.py` scores `payment` alongside `prose` and `gap`: a payment
+question reaching that layer at all means the route above it missed, so
+`not_found` is the only acceptable result. The exclusion is therefore
+re-checked on every run of the deterministic harness, with no model and no API
+call.
+
+### The seeded card number is deliberately invalid
+
+`8600 0000 0000 0000`. 8600 is a real Uzcard BIN, so a plausible-looking test
+number could be mistaken for a live one by anyone reading the seed or a test
+failure. All zeros cannot be, and it fails a Luhn check. The reason is written
+in the row.
+
+### Guards enforced only in Python — audited 2026-09-05
+
+The A1 finding generalised: a guarantee enforced in Python before the database
+sees it means the constraint never fires and could be dropped with every test
+still green. Both existing guards had the shape, and one was worse than that.
+
+**The `" / "` separator assert — fixed.** It was a bare `assert` over `seed.py`'s
+own literal lists, at import time. It covered one of the four doors a fact can
+come through, and `assert` disappears under `python -O`, so in production it was
+a guard that was not there. Now `fact_subject_no_separator`, one constraint
+covering every door including doors not yet written. The assert is kept because
+it fails earlier and names the offending subject; the constraint is the floor.
+
+**The body-part / symptom alias guard — not fixed, and the reason is a real
+decision.** A check constraint cannot call `normalize()`, so making this
+structural needs a generated column or an immutable SQL function — the same
+question about where normalization lives that was deferred at step 6. Worth
+doing properly rather than squeezing in here.
+
+What *was* done today is writing down the invisible dependency, in both
+modules. `extract.py` deliberately skips `check_subject()`, on the reasoning
+that an extracted fact is unconfirmed and retrieval's candidate set is
+`confirmed` only. That reasoning is sound and it makes the safety of one
+module's write path depend on a WHERE clause in a different module. Deleting
+`confirmed` from `_MATCH` as an apparently redundant filter would turn
+extraction into an unguarded door for body-part subjects, and nothing anywhere
+would fail to say so. The note is in `extract.py` and in `retrieval.py`,
+because the dependency is invisible from either one alone.

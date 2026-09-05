@@ -19,6 +19,7 @@ from psycopg import Connection
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.llm import complete
 from app.normalize import normalize
+from app.payment import PAYMENT_SUBJECT_KEY
 from app.triage import check_subject
 
 _SYSTEM = """You turn one line written by a business owner into one fact, as JSON.
@@ -126,7 +127,14 @@ def store(conn: Connection, parsed: dict) -> str:
     # one of the three doors a dangerous subject can come through.
     check_subject(parsed["subject"])
     text = f"{parsed['subject']} / {parsed['attribute']} / {parsed['value']}"
-    vector = str(embed_document(text))
+    # The reserved payment subject is never embedded: it is excluded from
+    # retrieval, so a vector would be quota spent on a row nothing can reach --
+    # and the constraint fact_payment_not_embedded refuses it anyway. This
+    # branch is the policy; the constraint is the floor that catches it going
+    # missing. check_subject() above means we only reach here via a caller that
+    # passed allow_reserved, so this is reachable but rare.
+    vector = (None if normalize(parsed["subject"]) == PAYMENT_SUBJECT_KEY
+              else str(embed_document(text)))
     return conn.execute(
         "insert into fact (subject, subject_key, attribute, attribute_key,"
         " value, value_key, confirmed, embedding, embedding_model)"
@@ -134,5 +142,5 @@ def store(conn: Connection, parsed: dict) -> str:
         (parsed["subject"], normalize(parsed["subject"]),
          parsed["attribute"], normalize(parsed["attribute"]),
          parsed["value"], normalize(parsed["value"]),
-         vector, f"{MODEL}@{DIMENSIONS}"),
+         vector, f"{MODEL}@{DIMENSIONS}" if vector else None),
     ).fetchone()[0]

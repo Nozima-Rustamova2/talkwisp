@@ -45,6 +45,7 @@ facts and retrieved like anything else; it is not ours to derive.
 """
 
 from app.normalize import normalize
+from app.payment import PAYMENT_SUBJECT_KEY
 
 # Verified 2026-09-01, not recalled: 103 is the ambulance line and remains in
 # operation; 112 is the unified emergency dispatch, live across all regions of
@@ -200,8 +201,14 @@ class ForbiddenSubject(ValueError):
     """Raised when a subject or alias would make a symptom message matchable."""
 
 
-def check_subject(name: str) -> None:
-    """Raise if `name` would let a symptom report match a SUBJECT.
+def check_subject(name: str, allow_reserved: bool = False) -> None:
+    """Raise if `name` would let a symptom report match a SUBJECT, or if it
+    claims the reserved payment subject.
+
+    `allow_reserved` is passed by the one writer that is supposed to use that
+    subject. Everything else is refused, because a second writer putting
+    ordinary business facts under the payment key would make them invisible to
+    retrieval -- the exclusion is total and has no idea what it is hiding.
 
     Enforced at EVERY point a subject becomes retrievable, not just in the
     seed. Retrieval's candidate set is `fact where confirmed` plus confirmed
@@ -217,6 +224,14 @@ def check_subject(name: str) -> None:
     propose `qorin` as a subject. Seed-time enforcement alone would leave the
     dangerous direction wide open on the path that matters most.
     """
+    if not allow_reserved and normalize(name) == PAYMENT_SUBJECT_KEY:
+        raise ForbiddenSubject(
+            f"{name!r} is the reserved payment subject. Facts stored under it "
+            "are excluded from retrieval by construction and can never be "
+            "answered from -- see app/payment.py and migrations/0005. An alias "
+            "pointing at it is refused for the same reason: it would put the "
+            "card number back into retrieval's candidate set."
+        )
     if normalize(name) in FORBIDDEN_ALIASES:
         raise ForbiddenSubject(
             f"{name!r} is a body part or symptom word. Making it a subject or "

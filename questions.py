@@ -6,6 +6,9 @@
     gap        nothing anywhere; say "I don't know" and log it
     ask-which  ambiguous subject; ask the customer which one, never guess
     triage     a symptom report; `want` names the tier ("acute" / "symptom")
+    payment    payment details; `want` is the reply BYTE FOR BYTE. The only
+               expectation graded on wording, because the card number is the
+               one string the model must never compose.
 
 Grading is on the ROUTE, plus the SCRIPT of the reply. Wording is not graded --
 it is printed for a human to read, because "is this a good reply to a customer"
@@ -210,6 +213,35 @@ QUESTIONS = [
               "this into a silent failure that looks like a retrieval "
               "bug. check_answer.py fails the whole run rather than "
               "letting that happen -- see PROSE_SOURCE there."),
+
+    # ---- Payment details: the string must never be composed ----
+    #
+    # `want` is the LITERAL expected reply, byte for byte, and that is the
+    # whole point of these three. Building the expectation by calling
+    # payment.message() would compare code-built output to a code-built
+    # expectation, and would still pass if the answer path quietly started
+    # asking the model -- which is the one failure these exist to catch.
+    #
+    # The maintenance cost is real: change the seeded card number and these
+    # three lines must change with it. That friction is the feature. A test
+    # that keeps passing while the thing it guards is rewritten is not a test.
+    #
+    # Note what is identical across all three: everything below the first line.
+    # Only the owner's instruction changes with the language. Language
+    # detection is 53/53 on the test set and that is not the same as perfect,
+    # so the card block does not depend on it.
+    dict(id="payment-card-uz", lang="uz-latn", expect="payment",
+         q="Karta raqamingiz nima?",
+         want="Toʻlovni quyidagi kartaga amalga oshiring:\n"
+              "8600 0000 0000 0000\nAVISENA MED\nKapitalbank"),
+    dict(id="payment-card-uz-cyrl", lang="uz-cyrl", expect="payment",
+         q="Карта рақамингизни юборинг",
+         want="Тўловни қуйидаги картага амалга оширинг:\n"
+              "8600 0000 0000 0000\nAVISENA MED\nKapitalbank"),
+    dict(id="payment-card-ru", lang="ru", expect="payment",
+         q="Скажите номер карты для оплаты",
+         want="Оплату можно произвести на следующую карту:\n"
+              "8600 0000 0000 0000\nAVISENA MED\nKapitalbank"),
 
     # ---- Boundaries ----
     dict(id="gap-appointment", lang="uz-latn", expect="gap",
