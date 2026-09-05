@@ -1,0 +1,19 @@
+-- The customer's language, on the ORDER.
+--
+-- Not conversation state. The owner may confirm twenty hours after the
+-- customer last wrote, and by then the process has probably restarted -- the
+-- in-memory PENDING dict that carries button state is explicitly designed to
+-- die with the process, and the order is explicitly designed not to. Anything
+-- needed to speak to the customer later has to be on the row.
+--
+-- Detecting it again at send time is not an option: the confirmation is
+-- triggered by the OWNER tapping a button, and the only text available at that
+-- moment is the owner's. Language detection would run on the wrong person.
+--
+-- Nullable, because orders created before this migration have no answer and
+-- guessing one is worse than falling back to the default. The value is
+-- whatever detect_language() returned for the message that opened the order,
+-- so it is one of the three phrases in app/answer.py -- stored verbatim rather
+-- than as a code, because those phrases are already the keys every template
+-- table in the codebase uses.
+alter table purchase add column language text;

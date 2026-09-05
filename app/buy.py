@@ -86,6 +86,55 @@ The subject must be copied EXACTLY from the list, character for character. If
 what they want is not on the list, answer false."""
 
 
+# A COST FILTER, NOT A CORRECTNESS GATE -- the same distinction as
+# SIMILARITY_FLOOR, and it is load-bearing here for the same reason.
+#
+# Running classify() on every customer message DOUBLES the completion calls per
+# message: one to decide whether it is a purchase, one to answer it. This skips
+# the first call when the message contains nothing that could possibly be about
+# paying.
+#
+# DELIBERATELY LOOSE. A message this blocks never becomes a purchase offer, and
+# the customer has to ask again -- recoverable. Over-calling costs money, which
+# is measurable. Err toward firing, exactly as the similarity floor errs toward
+# admitting context.
+#
+# It can never cause a wrong charge: code still decides, and the tap after the
+# button is still a human's.
+#
+# Written in normalized form, so Cyrillic folds into them: "оплатить" ->
+# "oplatit", caught by "oplat"; "карты" -> "karti", caught by "kart".
+_PREFILTER = (
+    # Uzbek. "tol", not "tola": to'lov normalizes to "tolov", which does not
+    # contain "tola". The first version used "tola" and silently blocked two of
+    # the five real prepayment intents in check_buy.py -- the same control set
+    # that caught the classifier's alias miss, catching the filter in front of
+    # it. A stem is safer than a word here precisely because it over-fires.
+    "tol",        # tolov, tolash, tolamoqchi, tolang
+    "pul", "kart", "plastik", "hisob", "buyurtma", "sotib", "narx",
+    # Russian, folded
+    "oplat", "plat", "perevod", "perevest", "dengi", "deneg", "schet",
+    "kupit", "zakaz",
+)
+
+
+def preflight(message: str) -> str | None:
+    """The marker that makes this message worth a classifier call, or None.
+
+    None means DO NOT SPEND A COMPLETION CALL. It does not mean "not a
+    purchase" -- nothing here decides that, and bot.py logs every block so the
+    miss rate can be measured by replaying them, rather than assumed. An
+    unmeasurable filter drifts silently.
+    """
+    text = normalize(message)
+    if not text:
+        return None
+    for marker in _PREFILTER:
+        if text.startswith(marker) or f" {marker}" in text:
+            return marker
+    return None
+
+
 def _json(raw: str) -> dict:
     """Models add fences even when told not to. Take the outermost object."""
     match = re.search(r"\{.*\}", raw, re.DOTALL)
