@@ -1074,6 +1074,31 @@ question reaching that layer at all means the route above it missed, so
 re-checked on every run of the deterministic harness, with no model and no API
 call.
 
+That last move generalises, and is worth reaching for again: **a deterministic,
+no-API check that fails if a protected thing reaches a layer it should never
+reach** is nearly free and runs constantly, where a check that must call a
+model runs when someone remembers. When the alias guard gets its proper fix,
+this is the shape to give it.
+
+### The seed path was verified, not assumed
+
+`seed.py` truncates `source`, so seeding destroys the ingested policy document
+the four prose questions depend on. The payment rows therefore went into the
+live database through a targeted insert at first, which left `seed.PAYMENT`
+correct but unexercised -- the kind of thing discovered at the worst moment,
+weeks later, by whoever runs the next full reseed.
+
+So it was exercised deliberately on 2026-09-05. The policy source is a paste
+that produced eight chunks and no facts, so it was dumped verbatim with its
+embeddings, `seed.py` was run for real, and the source and chunks were restored
+byte for byte -- no re-extraction, no re-embedding, nothing guessed. The seed
+reported 137 facts and embedded exactly 131: the six payment rows were skipped
+because the embed loop reads `retrievable_fact`, and the constraint did not
+abort the run. `check_retrieval.py` scored 54/31/5 before and after, identical.
+
+The embed loop reading the view is the part worth keeping. It cannot embed
+something that must not be embedded, and it does not need to know why.
+
 ### The seeded card number is deliberately invalid
 
 `8600 0000 0000 0000`. 8600 is a real Uzcard BIN, so a plausible-looking test
