@@ -163,29 +163,53 @@ QUESTIONS = [
               "someone decided to stop covering it, not because a data change "
               "quietly removed the case."),
 
-    # ---- Prose: currently untestable, kept and marked ----
-    dict(id="what-to-bring-uz", lang="uz-latn", expect="gap",
+    # ---- Prose: restored 2026-09-03 when the policy source was ingested ----
+    dict(id="what-to-bring-uz", lang="uz-latn", expect="prose",
          q="Qabulga nima olib kelish kerak?",
-         want="no policy prose exists in this export",
-         note="WAS expect=prose. The Avisena export is structured JSON of "
-              "doctors, services and prices with no paragraph-length policy "
-              "prose, so the chunk table is EMPTY and there is nothing to "
-              "quote. Refusing is now correct. Flip back when the clinic "
-              "supplies policy documents -- and see docs/design-decisions.md: "
-              "the empty chunk table is an artifact of the export FORMAT, not "
-              "evidence that clinics lack prose."),
-    dict(id="children-ru", lang="ru", expect="gap",
+         want="the policy passage about documents to bring",
+         note="Moved to `gap` on 2026-09-02 when the Avisena export turned out "
+              "to contain no prose, then back to `prose` on 2026-09-03 once the "
+              "policy document was ingested. The expectation tracks the DATA, "
+              "not the question. "
+              "REQUIRES the policy source 'Bemorlar uchun qoidalar' "
+              "(data/avisena_policy.txt). seed.py TRUNCATES source on "
+              "every run, so a reseed empties the chunk table and turns "
+              "this into a silent failure that looks like a retrieval "
+              "bug. check_answer.py fails the whole run rather than "
+              "letting that happen -- see PROSE_SOURCE there."),
+    dict(id="children-ru", lang="ru", expect="prose",
          q="Можно прийти с ребёнком?",
-         want="no policy prose exists in this export",
-         note="WAS expect=prose, same reason."),
-    dict(id="live-passport-needed", lang="uz-latn", expect="gap",
+         want="the policy passage about children and guardians",
+         note="A RUSSIAN question against an UZBEK passage. The reply cannot be "
+              "verbatim -- rule 5 (answer in the customer's language) beats "
+              "rule 6 (keep the document's wording), so this one is answered by "
+              "translation. Measured 2026-09-02. "
+              "REQUIRES the policy source 'Bemorlar uchun qoidalar' "
+              "(data/avisena_policy.txt). seed.py TRUNCATES source on "
+              "every run, so a reseed empties the chunk table and turns "
+              "this into a silent failure that looks like a retrieval "
+              "bug. check_answer.py fails the whole run rather than "
+              "letting that happen -- see PROSE_SOURCE there."),
+    dict(id="live-passport-needed", lang="uz-latn", expect="prose",
          q="Doxtorga borishda pasport maskat keremi yoki shundo borsa boloradimi?",
-         want="no policy prose exists in this export",
-         note="WAS expect=prose, same reason. A real customer asked this."),
-    dict(id="syn-what-to-bring", lang="uz-latn", expect="gap",
+         want="the policy passage about documents to bring",
+         note="A real customer asked this. "
+              "REQUIRES the policy source 'Bemorlar uchun qoidalar' "
+              "(data/avisena_policy.txt). seed.py TRUNCATES source on "
+              "every run, so a reseed empties the chunk table and turns "
+              "this into a silent failure that looks like a retrieval "
+              "bug. check_answer.py fails the whole run rather than "
+              "letting that happen -- see PROSE_SOURCE there."),
+    dict(id="syn-what-to-bring", lang="uz-latn", expect="prose",
          q="O'zim bilan nima olishim kerak dur?",
-         want="no policy prose exists in this export",
-         note="WAS expect=prose, same reason. Tashkent dialect suffix '-dur'."),
+         want="the policy passage about documents to bring",
+         note="Tashkent dialect suffix '-dur'. "
+              "REQUIRES the policy source 'Bemorlar uchun qoidalar' "
+              "(data/avisena_policy.txt). seed.py TRUNCATES source on "
+              "every run, so a reseed empties the chunk table and turns "
+              "this into a silent failure that looks like a retrieval "
+              "bug. check_answer.py fails the whole run rather than "
+              "letting that happen -- see PROSE_SOURCE there."),
 
     # ---- Boundaries ----
     dict(id="gap-appointment", lang="uz-latn", expect="gap",

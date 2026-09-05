@@ -23,9 +23,29 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 print(f"similarity floor = {SIMILARITY_FLOOR}\n")
 
+# The four `prose` questions can only pass while this source is loaded, and
+# seed.py TRUNCATES source on every run. Without this guard a reseed turns four
+# passes into four failures that look like a retrieval bug -- the silent-drift
+# failure class that has cost time five times now. It FAILS the run rather than
+# warning, because a warning gets scrolled past. Same shape as the
+# forbidden-alias guard in seed.py.
+PROSE_SOURCE = "Bemorlar uchun qoidalar"
+
 rows = []
 with pool:
     with pool.connection() as conn:
+        needs_prose = [q["id"] for q in QUESTIONS if q["expect"] == "prose"]
+        if needs_prose and not conn.execute(
+                "select count(*) from chunk").fetchone()[0]:
+            print(f"ABORT: {len(needs_prose)} questions expect prose and the "
+                  f"chunk table is EMPTY.")
+            print(f"  {', '.join(needs_prose)}")
+            print(f"  They depend on the source {PROSE_SOURCE!r} "
+                  f"(data/avisena_policy.txt), which seed.py truncates.")
+            print("  Re-ingest it first, or this run reports four retrieval "
+                  "failures that are really one missing source.")
+            sys.exit(2)
+
         for q in QUESTIONS:
             r = answer(conn, q["q"])
             rows.append((grade(q, r), q, r))
