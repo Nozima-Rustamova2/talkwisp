@@ -842,3 +842,156 @@ execution model appears to be one mutable live graph with each contact as a
 cursor on a node. We flagged versioned publish as a hard requirement; the market
 leader has not solved it in a decade. Not unimportant, but not the barrier to
 entry we assumed.
+
+## Orders — a fifth table, and the rule that permits it — 2026-09-04
+
+Manual payment confirmation: the seller sends a card number, the customer pays
+and sends a screenshot, the seller checks their banking app and replies by hand.
+We are not replacing that process. We are removing the mess around it — which
+means we are not verifying anything, and every name in the system has to admit
+that.
+
+### The rule that decides what gets a table
+
+> **Files hold append-only observations. Tables hold mutable state with a
+> lifecycle that someone is waiting on.**
+
+`gaps.jsonl` and `feedback.jsonl` are written once and never changed; losing a
+line costs a number in a report. An order is mutated (awaiting → confirmed),
+queried by state, and if one is lost a real person who paid money is stranded.
+Same for a pending escalation in feature B.
+
+This rule was written after the fact, so it was checked against the decisions
+already made rather than used to justify them: it predicts gaps-as-file,
+feedback-as-file, and orders-as-table correctly, without special pleading for
+any of them. That is the evidence it is real rather than post-hoc.
+
+The four-table rule still binds, because it binds the **knowledge model**.
+`purchase` holds no knowledge about the business — the price lives in `fact`,
+and an order only records which fact it was read from and what happened next.
+
+### `owner_confirmed`, not `paid`
+
+The state is not called `paid` and the timestamp is not called `verified_at`.
+We cannot verify a payment; the state records that the owner looked at their
+banking app and said so. A state called `paid` would be this system claiming
+knowledge it does not have, every time anyone reads the table.
+
+Wording in a log message drifts as people edit copy. A column name does not.
+That is why this is enforced in the schema rather than in customer-facing text.
+
+### A fact that must never be retrieved — permanent
+
+Payment details (card number, cardholder name, bank, instruction text) are
+stored as facts so the owner can edit them like anything else. But a fact is
+retrievable, and a retrieved fact goes into the answering prompt as context — so
+storing the card number as a fact hands it to the model through the front door,
+which is exactly the rule we thought we were enforcing by assembling the payment
+message in code.
+
+Storing it as a fact does not keep it away from the model. Excluding it from
+retrieval does.
+
+So: payment details live under one reserved subject, and **retrieval excludes
+that subject_key by construction**, in `app/retrieval.py`, so every path
+inherits it. A question about payment details routes to the code-assembled
+message before retrieval, the way triage does.
+
+This is a category nothing else in the schema has, and it is named here
+precisely — *a fact that must never be retrieved* — because the exclusion looks
+like a bug to anyone who finds it without this context. It is not a bug and it
+must not be "fixed". Same reasoning as the emergency numbers in `triage.py`: a
+model that paraphrases a card number is a model that can get it wrong, and there
+is no acceptable failure there.
+
+The rule is enforced by a test, not by intention: ask for the card number in all
+three languages and assert the reply is byte-identical to the template. If the
+model ever composes that string, the test fails.
+
+### Screenshot authenticity is never assessed — permanent
+
+The screenshot is evidence **for the seller**, not verification. Nothing reads
+it, scores it, or believes it — not heuristics, and not vision, which we already
+have and which would be trivial to point at it.
+
+Someone will propose a vision check as an improvement, so the reasoning is
+recorded the same way symptom → specialty mapping is:
+
+- Screenshots are trivially faked, and bank apps differ across the country, so
+  any check would be a probability we would then have to display as something.
+- A seller who loses money because our bot believed a screenshot never trusts us
+  again. The asymmetry is total: a check that is right 95% of the time is a
+  product that steals from its user 5% of the time.
+- The moment we score a screenshot, the owner starts trusting the score instead
+  of their banking app — which is the one source of truth that is actually
+  authoritative. A weak check is worse than none because it displaces a strong
+  one.
+
+Out permanently.
+
+### The amount-reuse window is wider than the expiry window
+
+The unique-amount trick: 250 000 becomes 250 003, so the seller can match one
+payment to one order when three people pay the same afternoon. Suffix 1–50, so
+the most anyone overpays is 50 so'm.
+
+Orders expire after 24 hours — and expiry frees the amount. That is the trap: a
+customer who pays 30 hours late sends an amount that now belongs to somebody
+else's open order, the seller confirms the wrong one, and nobody ever finds out.
+A silent mismatched payment is the worst failure this feature can produce.
+
+So the quarantine is **seven days**, deliberately wider than the 24-hour expiry.
+An amount is not reissued while any order from the last week used it, whatever
+that order's state.
+
+The uniqueness guarantee is split on purpose. The **index** covers open orders
+only — an index predicate has to be immutable and `now()` is not. The
+**seven-day policy** lives in `app/orders.py`. The index is the floor that
+cannot be argued with; the code is the policy that can be tuned.
+
+### An exact price is required; a range is refused, not narrowed
+
+An order needs one exact number, and the standing rule is that costs are quoted
+as approximate ranges. Those do not conflict as long as the split is kept: the
+*agent* still quotes ranges, and the *order* carries an exact figure read from a
+confirmed fact and assembled in code.
+
+The consequence is a refusal. If the stored price is a range (`450 000-500 000
+soʻm`) or a floor (`100 000 soʻmdan`), the item is **not orderable** and the
+owner is told to set an exact amount. Taking the low end would be the model
+inventing a price with extra steps — the same failure as any other fabrication,
+with money attached.
+
+Two more refusals fall out of the same discipline, and both are correct:
+
+- **Several prices.** A doctor has `qabul narxi` and `takroriy qabul narxi`, and
+  a first visit is not a repeat visit. Choosing for the customer is choosing what
+  to charge them. We ask.
+- **Unconfirmed prices are invisible.** Only `confirmed` facts can price an
+  order. An unconfirmed price came out of a file and has not been read by a
+  human, and the gap between reviewing a price and charging one is the entire
+  point of the review queue.
+
+The live base demonstrates all three at once: `MRT bosh miya` carries an
+unconfirmed range from a file *and* a confirmed exact figure from the owner. The
+`confirmed` filter resolves it correctly with nothing else involved.
+
+### What cannot be made reliable, recorded before it is built
+
+1. **We cannot verify a payment.** Confirm is an assertion, not a fact.
+2. **Screenshot authenticity is never assessed.** See above.
+3. **A customer can pay the round number anyway**, typing 250 000 by hand, and
+   the trick that makes matching work has silently failed. Mitigated by
+   prominence in the message and by the "amount does not match" reject path.
+   Not solved.
+4. **Telegram sends can fail** — blocked bot, deleted chat. "The customer always
+   hears something" is best-effort by nature. A send failure must therefore
+   reach the **owner** as a payment-channel notification, not merely be recorded
+   on the row: a customer who blocked the bot after paying is stranded, and
+   "visible in the dashboard" means visible to someone who is not looking.
+5. **The buy-intent classifier will misfire.** The bound we do guarantee: the
+   worst case is an unwanted payment offer, never a charge, because the model
+   routes and code decides.
+6. **Language detection is 53/53 on the test set, not perfect**, and a payment
+   instruction in the wrong language is a bad failure. Mitigation: the card
+   block is identical in every language; only the surrounding text varies.
