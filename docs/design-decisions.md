@@ -1250,3 +1250,73 @@ multiple values for keyword argument 'subject_key'` — the same shape as the
 parameter fixed one instance; the pattern at fault is **splatting a row into
 kwargs beside explicit kwargs**, and it returned the moment a key was added to
 the row. Now named as the pattern rather than the key.
+
+## The failure this codebase keeps producing — 2026-09-05
+
+Five separate incidents have now been written up here as if they were five
+different bugs. They are one, and it is worth stating in its general form
+because the next one will not look like any of them either.
+
+> **A check reads a different object from the one the behaviour uses. It
+> passes. Nothing is wrong with the check, the code, or the result — they are
+> simply about different things, and a green signal cannot tell you that.**
+
+The instances, deliberately listed together so the shape is visible rather than
+the details:
+
+| The check | What it read | What the behaviour used |
+|---|---|---|
+| Grading a `fact` expectation | `r["facts"]`, the exact-match rows | `context_facts` — exact **plus** the scored window plus list expansion |
+| `regrade.py` | a saved snapshot of a run | the live answer path, which had moved on |
+| `check_answer.py` prose questions | the `chunk` table as it happened to be | a table `seed.py` truncates on every run |
+| Buy-intent measurement | canonical subject names | the aliases customers actually type |
+| The amount in a payment message | `payment.som()` | `seed.money()`, differing by one invisible character |
+
+Three of those scored perfectly while broken. The grader scored three correct
+answers as failures; the classifier scored 0 of 90 false positives on a
+classifier that could not fire; the prose questions would have reported four
+retrieval failures that were really one missing source.
+
+### Why it keeps happening
+
+Because the two objects are always *nearly* the same. `facts` really is most of
+`context_facts`. A snapshot really was the truth a minute ago. Canonical names
+really are the subjects. U+00A0 really does look like a space. Nothing about
+the wrong object announces itself as wrong, and the check's own result is the
+last place it will show up.
+
+### What actually helps, in order of strength
+
+1. **Remove the ability to have two of something.** One price query, not two.
+   One money formatter, not two. One `retrievable_fact` that every retrieval
+   path reads. This is the only fix that cannot decay, and it has been the
+   answer three times this week.
+2. **Make the check read the source of truth, structurally.** `check_payment.py`
+   counts the payment rows *before* its transaction instead of asserting a
+   literal; the raw-SQL checks bypass `app/` so they cannot inherit a Python
+   guard's opinion; `check_orders.py` re-reads the row it wrote rather than the
+   dict it passed in.
+3. **Put a can't-fire control in every measurement.** Five real purchase
+   intents exist in `check_buy.py` solely so a silent zero fails. That control
+   is the only reason the alias miss was found, and it was not automatic —
+   somebody had to think of it.
+4. **Ask the question out loud.** When a measurement comes back clean: *could
+   this setup produce this result while broken?* It is a cheap question and it
+   has a real answer surprisingly often.
+
+### The related discipline: unrepresentable beats avoided
+
+`OrderError` collided with its own caller twice — once on `reason`, once on
+`subject_key` — both times because caller DATA and constructor PARAMETERS
+shared one namespace, so any new key in the data could collide. The first fix
+renamed the parameter and left a comment. The comment was correct and it did
+not help, because a comment is a rule someone has to read at the right moment,
+and the second collision arrived a month later in a different file.
+
+`detail` is now one positional dict. There is no shared namespace, so the
+collision is not avoided — it is unrepresentable, and `check_orders.py` asserts
+that a detail key called `reason`, `code`, `detail` or `self` is just a key.
+
+Prefer the version that cannot come back over the version that documents why it
+should not. A rule that depends on being read has already failed once by the
+time you are writing it down.

@@ -48,6 +48,18 @@ def refuses(label, fn, reason):
 
 # --------------------------------------------------------------- amounts only
 
+print("\nOrderError -- the collision is unrepresentable, not merely avoided")
+
+# This class collided with its own caller TWICE: once on `reason`, once on
+# `subject_key`, both when a key was added to data that was splatted into
+# kwargs. `detail` is now one positional dict, so a detail key can be named
+# anything at all -- including this constructor's own parameter names -- and
+# nothing collides. Asserted here rather than trusted to a comment.
+for _key in ("reason", "code", "detail", "self", "subject_key"):
+    _e = orders.OrderError("some_code", {_key: "x"})
+    check(f"a detail key called {_key!r} is just a key",
+          (_e.reason, _e.detail[_key]), ("some_code", "x"))
+
 print("\nparse_amount -- what may become an order")
 for value, want in [
     ("160 000 so'm", 160000),

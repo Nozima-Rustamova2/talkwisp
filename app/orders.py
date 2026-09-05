@@ -71,13 +71,25 @@ class OrderError(Exception):
     matching on message text is how that breaks silently later.
     """
 
-    # The positional is `code`, not `reason`, so that a detail key called
-    # `reason` -- which reject() genuinely wants -- cannot collide with it.
-    # It did, on the first run.
-    def __init__(self, code: str, **detail):
+    # DETAIL IS ONE POSITIONAL DICT, NOT **kwargs, and that is the whole point.
+    #
+    # It was **kwargs twice. The first time, reject() passed `reason=` and
+    # collided with the positional -- fixed by renaming the positional to
+    # `code`. The second time, a `subject_key` key was added to a price row and
+    # `OrderError("not_exact", **row)` collided with the explicit
+    # `subject_key=` beside it. Both were the same fault wearing different
+    # names: a caller's DATA and this constructor's PARAMETERS shared one
+    # namespace, so any new key in the data could collide with a parameter.
+    #
+    # A comment saying "do not splat rows into kwargs" is a rule someone has to
+    # read at the right moment, and it had already failed to be read once. With
+    # a positional dict there is no shared namespace, so the collision is not
+    # avoided -- it is unrepresentable. A detail key called `code`, `reason` or
+    # `self` is now just a key.
+    def __init__(self, code: str, detail: dict | None = None):
         super().__init__(code)
         self.reason = code
-        self.detail = detail
+        self.detail = detail or {}
 
 
 def _row(row) -> dict:
@@ -208,20 +220,16 @@ def price_for(conn: Connection, subject_key: str,
         options = [o for o in options if o["attribute_key"] == attribute_key]
 
     if not options:
-        raise OrderError("no_price", subject_key=subject_key,
-                         attribute_key=attribute_key)
+        raise OrderError("no_price", {"subject_key": subject_key,
+                                      "attribute_key": attribute_key})
     if len(options) > 1:
-        raise OrderError("several_prices", subject_key=subject_key,
-                         options=options)
+        raise OrderError("several_prices", {"subject_key": subject_key,
+                                            "options": options})
 
     chosen = options[0]
     if chosen["amount"] is None:
-        # `chosen` already carries subject_key, so it is NOT passed again --
-        # that collision is the same shape as the `reason` one this class was
-        # renamed to prevent, and it came back the moment a key was added to
-        # the dict. Splatting a row into kwargs beside explicit kwargs is the
-        # pattern at fault, not either key.
-        raise OrderError("not_exact", **chosen)
+        # The whole row, passed as data rather than splatted into parameters.
+        raise OrderError("not_exact", chosen)
     return chosen
 
 
@@ -263,7 +271,7 @@ def create(conn: Connection, chat_id: int, subject_key: str,
         free = [s for s in range(SUFFIX_MIN, SUFFIX_MAX + 1)
                 if base + s not in taken]
         if not free:
-            raise OrderError("amount_exhausted", base_amount=base)
+            raise OrderError("amount_exhausted", {"base_amount": base})
         suffix = free[0]
         try:
             with conn.transaction():
@@ -280,7 +288,7 @@ def create(conn: Connection, chat_id: int, subject_key: str,
             return _row(row)
         except errors.UniqueViolation:
             continue
-    raise OrderError("amount_race", base_amount=base)
+    raise OrderError("amount_race", {"base_amount": base})
 
 
 def _transition(conn: Connection, order_id, to_state: str,
@@ -300,9 +308,10 @@ def _transition(conn: Connection, order_id, to_state: str,
         current = conn.execute("select state from purchase where id = %s",
                                (order_id,)).fetchone()
         if current is None:
-            raise OrderError("no_such_order", order_id=str(order_id))
-        raise OrderError("bad_transition", order_id=str(order_id),
-                         state=current[0], wanted=to_state)
+            raise OrderError("no_such_order", {"order_id": str(order_id)})
+        raise OrderError("bad_transition", {"order_id": str(order_id),
+                                            "state": current[0],
+                                            "wanted": to_state})
     return _row(row)
 
 
@@ -322,7 +331,7 @@ def confirm(conn: Connection, order_id) -> dict:
 
 def reject(conn: Connection, order_id, reason: str) -> dict:
     if reason not in REJECT_REASONS:
-        raise OrderError("bad_reason", reason=reason)
+        raise OrderError("bad_reason", {"reason": reason})
     return _transition(conn, order_id, "owner_rejected",
                        ", reject_reason = %s, owner_rejected_at = now()",
                        (reason,))
