@@ -14,6 +14,37 @@ Grading is on the ROUTE, plus the SCRIPT of the reply. Wording is not graded --
 it is printed for a human to read, because "is this a good reply to a customer"
 is a judgement.
 
+WHAT THIS HARNESS CANNOT SEE, AND IT IS NOT A SMALL GAP
+-------------------------------------------------------
+
+"Wording is not graded" reads like a modest caveat. It is not. **The harness is
+blind to reply quality entirely, and a verdict can move in the opposite
+direction from the answer.** Measured, twice, on 2026-09-05:
+
+- `doctors-ru` -- "which doctors do you have" -- named TWELVE doctors at
+  FACT_WINDOW 8 and FIVE at 12. The verdict went FAIL -> PASS, because the
+  wanted `lavozim` row finally reached the context. The route improved; the
+  answer got worse; the run reported a gain.
+- Across the same two runs, 34 questions kept their verdict and changed their
+  reply. Five got shorter and two of those dropped real information -- one
+  stopped enumerating five turnaround times, another stopped giving both the
+  first-visit and repeat price. Every one of them scored PASS in both runs.
+
+So a green run means the ROUTE is right. It does not mean the customer got a
+good answer, and a rising pass count is not evidence that replies improved.
+
+The consequence for anyone changing retrieval: a change whose damage lands in
+reply quality -- list expansion, the similarity floor, the brevity rule -- CANNOT
+be evaluated by this harness. Judging it needs a human reading the replies. Two
+conclusions have already been drawn on the wrong axis by forgetting that, the
+most recent being a fix to `_expand_list` rejected on recall grounds when the
+damage it was meant to address is in wording.
+
+Related and separate: `want` names exactly ONE "Subject / attribute" pair, so a
+question needing two facts is graded on whichever one it names and passes while
+delivering half an answer. That is a schema limitation, not an unmeasured
+question -- see docs/design-decisions.md.
+
 REWRITTEN 2026-09-02 for Avisena Med, which replaced Shifo Med. What changed:
 
 - The new clinic HOLDS things the old one did not: room numbers, payment

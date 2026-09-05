@@ -4,6 +4,14 @@ by regrade.py (which re-scores the last run for free).
 Kept in one place because the grader has now been wrong three times -- always by
 inspecting a route or a field that the answer path had moved on from -- and each
 time it cost a full 25-question re-run to find out.
+
+THIS GRADES ROUTES, NOT ANSWERS, AND THE TWO CAN MOVE APART. A verdict here can
+improve while the reply gets worse: `doctors-ru` named twelve doctors under one
+setting and five under another, and this file scored the five-doctor run as the
+better one because the row it looks for had arrived in the context. Nothing in
+here reads the sentence the customer would receive. See the limitation section
+at the top of questions.py before using a pass count as evidence that anything
+improved.
 """
 
 import re
