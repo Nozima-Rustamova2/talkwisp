@@ -20,6 +20,26 @@ WHAT THE MODEL MAY DO HERE: pick one name out of a list it was given. It cannot
 invent a subject -- anything not in the list is dropped by code below -- and it
 never sees or produces a price. Model routes, code decides, same as triage and
 NO_ANSWER.
+
+BOOKING IS NOT BUYING, and the reason is specific rather than fastidious.
+The first measurement flagged "Menga ginekologga zapis qberila" -- sign me up
+for the gynaecologist -- as a purchase, and read it correctly: it IS a request
+to act. But AVISENA CANNOT RESERVE A SLOT. Offering to take payment there
+charges someone for a time nobody can promise, and a customer who pays and then
+finds there is no appointment is a worse outcome than a customer who was told
+to call.
+
+At a market stall, paying for a thing and getting the thing are one act, which
+is why the original brief never separated them. At a clinic they are two, and
+this system only does one of them. So prepayment intent qualifies and
+scheduling intent does not; a scheduling request falls through to ordinary
+retrieval, where the clinic's own stated booking instruction answers it -- and
+if the business has not stated one, it refuses honestly and logs a gap.
+
+BOOKING IS DELIBERATELY OUT OF SCOPE, not merely unbuilt. Slot availability,
+calendar state, double-booking, cancellations and no-shows are a larger feature
+than payments and share almost nothing with this code. It must not arrive as a
+small extension of the order flow -- see docs/design-decisions.md.
 """
 
 import json
@@ -38,10 +58,20 @@ Reply with JSON only. No prose, no code fences. Either:
     {"buy": true, "subject": "<a name copied exactly from the list>"}
     {"buy": false}
 
-BUY means the customer is asking to purchase, book, pay for, or sign up for a
-specific named thing, now.
+BUY means the customer is asking to PAY for a specific named thing, now.
 
-These are NOT buying, and are the most common mistake:
+BOOKING IS NOT BUYING, and this is the distinction that matters most here.
+"Sign me up for the gynaecologist", "I want to make an appointment with the
+cardiologist", "menga ginekologga zapis qberila", "хочу записаться к
+кардиологу" are requests to RESERVE A TIME, not to pay. Answer false to all of
+them. Paying for a consultation and holding a slot are different things, and
+this business may not be able to hold one at all.
+
+Answer true only when the customer says they want to PAY, TRANSFER, or SEND
+MONEY for the thing: "to'lamoqchiman", "to'lovni amalga oshirmoqchiman", "хочу
+оплатить", "I want to pay for".
+
+These are also NOT buying, and are the most common mistakes:
 - asking a price ("how much is X", "X narxi qancha", "сколько стоит X")
 - asking whether something or someone exists, or is available
 - asking opening hours, an address, a room number, or a doctor's schedule

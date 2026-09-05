@@ -1271,11 +1271,26 @@ the details:
 | `check_answer.py` prose questions | the `chunk` table as it happened to be | a table `seed.py` truncates on every run |
 | Buy-intent measurement | canonical subject names | the aliases customers actually type |
 | The amount in a payment message | `payment.som()` | `seed.money()`, differing by one invisible character |
+| `gap-appointment`'s recorded reason | "no booking procedure exists" | a procedure **is** stated; it just says nothing about ONLINE |
 
 Three of those scored perfectly while broken. The grader scored three correct
 answers as failures; the classifier scored 0 of 90 false positives on a
 classifier that could not fire; the prose questions would have reported four
 retrieval failures that were really one missing source.
+
+**The last row is the same failure with the volume turned all the way down, and
+it is the worst of them.** `gap-appointment` had the right verdict and a stale
+reason: the recorded justification and the real one had drifted, and the check
+went on passing because the verdict was still correct. Every other row in this
+table eventually produced a wrong number that somebody could look at. A stale
+reason on a passing test produces nothing at all — nothing fails, nothing is
+flagged, no review is prompted, and the note quietly misinforms the next person
+who reads it while the suite stays green.
+
+It surfaced only because the notes were being read for an unrelated purpose.
+There is no mechanism for that one and it would be dishonest to invent one
+here: it is the habit of reading a case's stated reason whenever you touch the
+case, and checking it is still the reason.
 
 ### Why it keeps happening
 
@@ -1296,13 +1311,25 @@ last place it will show up.
    literal; the raw-SQL checks bypass `app/` so they cannot inherit a Python
    guard's opinion; `check_orders.py` re-reads the row it wrote rather than the
    dict it passed in.
-3. **Put a can't-fire control in every measurement.** Five real purchase
-   intents exist in `check_buy.py` solely so a silent zero fails. That control
-   is the only reason the alias miss was found, and it was not automatic —
-   somebody had to think of it.
+3. **Put a can't-fire control in every measurement.** Real purchase intents
+   exist in `check_buy.py` solely so a silent zero fails. That control is the
+   only reason the alias miss was found.
 4. **Ask the question out loud.** When a measurement comes back clean: *could
    this setup produce this result while broken?* It is a cheap question and it
    has a real answer surprisingly often.
+
+The ranking is not decoration, and the gap between 1–2 and 3–4 is a difference
+in kind rather than degree. **Only the first is durable.** Removing the ability
+to have two of something keeps working while everyone forgets why it was done.
+The second decays slowly: a check that reads the source of truth can be
+rewritten to read a copy, and nothing stops it.
+
+**3 and 4 are habits, not mechanisms.** They work exactly as long as somebody
+keeps doing them, and they have no failure signal of their own — a missing
+can't-fire control looks identical to a passing test suite, and an unasked
+question looks identical to a good answer. Nobody was assigned to add the
+control in `check_buy.py`; it happened to occur to whoever wrote the file that
+morning. Write habits down, rely on mechanisms.
 
 ### The related discipline: unrepresentable beats avoided
 
@@ -1320,3 +1347,69 @@ that a detail key called `reason`, `code`, `detail` or `self` is just a key.
 Prefer the version that cannot come back over the version that documents why it
 should not. A rule that depends on being read has already failed once by the
 time you are writing it down.
+
+## Booking is deliberately out of scope — 2026-09-05
+
+Not unbuilt. Out of scope, decided, with a reason — because it is the most
+natural-looking extension of the order flow and it is not one.
+
+### What decided it
+
+The buy-intent classifier flagged `syn-book-gynae` — "Menga ginekologga zapis
+qberila", *sign me up for the gynaecologist* — as a purchase, and it read the
+message correctly. That IS a request to act.
+
+**Avisena cannot reserve a slot.** So offering to take payment there charges
+someone for a time nobody can promise, and a customer who pays and then finds
+there is no appointment is a worse outcome than a customer who was told to
+call. Paying for a consultation and holding a slot are two acts; at a market
+stall — the brief's reference case — they are one, which is why the original
+framing did not separate them. The reference case hid the distinction.
+
+So: **prepayment intent qualifies as buy intent, scheduling intent does not.**
+A scheduling request falls through to ordinary retrieval, where the business's
+own stated booking instruction answers it — Avisena's policy document says to
+call the call centre or come to reception — and if no instruction is stated, it
+refuses honestly and logs a gap. Nothing is inferred either way.
+
+### Why it must not arrive as a small extension
+
+Booking is a bigger feature than payments and shares almost nothing with this
+code. It needs slot availability, calendar state, per-doctor working patterns
+against real dates, double-booking prevention, cancellations, no-shows, and a
+reschedule path. `purchase` models none of that, and the resemblance is
+superficial: an order is a row someone is waiting on, while a booking is a
+claim on a resource that other bookings compete for.
+
+The failure mode if it is bolted on: a bot that confirms appointments it cannot
+guarantee. That is the same class of failure as marking an order paid from a
+screenshot — the system asserting something it does not know — and it is
+excluded for the same reason.
+
+### What was corrected along the way
+
+Three questions were graded `gap` with `want: "no booking procedure exists"`.
+That was true on 2026-09-02 and stopped being true on 09-03, when the policy
+source was ingested. A `gap` expectation is a claim about the DATA, and it
+expires when the data changes — this file has said so since the harness was
+rewritten, and it still took a classifier disagreeing with the grader to notice.
+
+- `live-how-to-book` → `prose`. **The same reply has now been graded three
+  different ways.** It was WRONG when the bot invented a booking procedure
+  around a real phone number; rule 10 made it correctly `gap`, because no
+  procedure was stated anywhere; and it is `prose` now that the policy document
+  states one. The answer text never changed. Correctness here is not a property
+  of the reply — it is a relation between the reply and what the business has
+  actually said, and that relation moves when the data moves.
+
+  Which is the argument for re-examining the harness when DATA changes, not
+  only when code does. A code change announces itself in a diff. An ingested
+  document changes what is true for a dozen questions and touches nothing a
+  reviewer would look at.
+- `syn-book-gynae` → `prose`. Its note said KNOWN BROKEN and it was not broken;
+  the expectation was.
+- `gap-appointment` stays `gap` with a corrected reason: the procedure IS
+  stated, but the question asks specifically about ONLINE booking and the
+  passage says nothing about it. Rule 10 covers it — silence is not a range.
+  The verdict was always right and the reason was stale, which is the harder
+  kind of wrong to notice.

@@ -246,7 +246,15 @@ QUESTIONS = [
     # ---- Boundaries ----
     dict(id="gap-appointment", lang="uz-latn", expect="gap",
          q="Onlayn navbatga yozilsa boʻladimi?",
-         want="no booking procedure exists"),
+         want="the procedure is stated, but says nothing about ONLINE booking",
+         note="STILL `gap`, for a corrected reason -- 2026-09-05. The old want "
+              "said no booking procedure exists; the policy source ingested on "
+              "09-03 states one (call the call centre or come to reception). "
+              "But this question asks specifically whether ONLINE booking is "
+              "possible, and the passage does not say. Rule 10 covers it: "
+              "silence is not a range, so refusing is correct. The verdict was "
+              "always right and the reason was stale, which is the harder kind "
+              "of wrong to notice."),
     dict(id="boundary-close-en", lang="en", expect="fact",
          q="What time do you close?",
          want=f"{CLINIC} / ish vaqti"),
@@ -284,12 +292,21 @@ QUESTIONS = [
     dict(id="live-reschedule", lang="uz-latn", expect="gap",
          q="Ertaga palonchi doxtorga yoziludim, vaxtini sal keginroqa sursa boladimi?",
          want="no booking or rescheduling data exists"),
-    dict(id="live-how-to-book", lang="uz-latn", expect="gap",
+    dict(id="live-how-to-book", lang="uz-latn", expect="prose",
          q="Assalomualaykum, ozi qabulga qanaqa yoziladi, tel qilsh kerakmi?",
-         want="no booking procedure exists",
-         note="Invented a booking procedure around a real phone number for "
-              "weeks. Rule 10 fixed it: a phone number in the context is a "
-              "phone number, not an instruction to call in order to book."),
+         want="the policy passage on how to book",
+         note="FLIPPED from `gap` on 2026-09-05, and the history is the point. "
+              "This invented a booking procedure around a real phone number for "
+              "weeks; rule 10 fixed that -- a phone number in the context is a "
+              "phone number, not an instruction to call in order to book. It "
+              "was then correctly `gap` because no procedure was stated "
+              "anywhere. The policy source ingested on 09-03 states one, so the "
+              "same reply is now grounded rather than invented. Identical "
+              "words, opposite verdict, decided entirely by whether the "
+              "sentence exists in the base. "
+              "REQUIRES the policy source 'Bemorlar uchun qoidalar' "
+              "(data/avisena_policy.txt) -- see PROSE_SOURCE in "
+              "check_answer.py."),
     dict(id="live-lor", lang="uz-latn", expect="fact",
          q="Jonsarak aka (LOR) qachon keladila? Shanbayam ishlidilarmi?",
          want="Nurmatova Ziyoda Anvarovna / qabul vaqti",
@@ -417,15 +434,25 @@ QUESTIONS = [
               "implying it could check availability. Rule 9: being able to "
               "name the day is not permission to answer a different question "
               "about it."),
-    dict(id="syn-book-gynae", lang="uz-latn", expect="gap",
+    dict(id="syn-book-gynae", lang="uz-latn", expect="prose",
          q="Menga ginekologga zapis qberila.",
-         want="no booking procedure exists",
-         note="KNOWN BROKEN. Replies 'call this number to book', which "
-              "live-how-to-book is graded as failing for. Rule 10 fixed that "
-              "one and this phrasing still slips through -- the imperative "
-              "form appears to read as a request to act rather than a question "
-              "about procedure. Useful information about where rule 10's "
-              "coverage ends."),
+         want="the policy passage on how to book",
+         note="WAS 'KNOWN BROKEN', and was not broken -- resolved 2026-09-05. "
+              "The old note said the imperative form reads as a request to act "
+              "rather than a question about procedure. That reading was "
+              "correct: it IS a request to act. What was wrong was the "
+              "expectation, which claimed no booking procedure exists; the "
+              "policy source ingested on 09-03 states one, so answering with it "
+              "is grounded. "
+              "This is also the question that decided a product boundary. The "
+              "buy-intent classifier flags it as a purchase, and it is one -- "
+              "but Avisena CANNOT RESERVE A SLOT, so offering to take payment "
+              "here would charge someone for a time nobody can promise. "
+              "Scheduling intent therefore does not qualify as buy intent; see "
+              "app/buy.py and docs/design-decisions.md. "
+              "REQUIRES the policy source 'Bemorlar uchun qoidalar' "
+              "(data/avisena_policy.txt) -- see PROSE_SOURCE in "
+              "check_answer.py."),
     dict(id="syn-sanepid", lang="uz-latn", expect="gap",
          q="Klinikayla sanepidda tekshiruvdan o'tganmi?",
          want="no certification data exists"),

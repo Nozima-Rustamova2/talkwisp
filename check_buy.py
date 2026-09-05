@@ -29,14 +29,28 @@ from questions import QUESTIONS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-# Real purchase intents, written to be unambiguous. If the classifier misses
-# these it is not conservative, it is broken.
+# PREPAYMENT intents. If the classifier misses these it is not conservative,
+# it is broken -- a detector that never fires scores a perfect false-positive
+# rate and is useless.
 WANTED = [
+    ("uz-latn", "Kardiolog qabuli uchun to'lovni amalga oshirmoqchiman"),
+    ("uz-latn", "EKG uchun pul to'lamoqchiman, qayerga yuboray?"),
+    ("uz-cyrl", "Кардиолог қабули учун тўловни амалга оширмоқчиман"),
+    ("ru", "Хочу оплатить ЭКГ"),
+    ("ru", "Хочу оплатить приём кардиолога"),
+]
+
+# SCHEDULING intents. These MUST NOT fire, and THREE OF THEM WERE IN `WANTED`
+# until 2026-09-05 -- which is exactly why they are written down here instead
+# of assumed. Avisena cannot reserve a slot, so offering to take payment for
+# one charges a customer for a time nobody can promise. They fall through to
+# ordinary retrieval, where the clinic's own stated booking instruction answers
+# them. See app/buy.py.
+NOT_WANTED = [
     ("uz-latn", "Kardiologga yozilmoqchiman"),
-    ("uz-latn", "EKG qildirmoqchiman, to'lovni qanday amalga oshiraman?"),
+    ("uz-latn", "Menga ginekologga zapis qberila."),
     ("uz-cyrl", "Кардиологга ёзилмоқчиман"),
     ("ru", "Хочу записаться к кардиологу"),
-    ("ru", "Хочу оплатить ЭКГ"),
 ]
 
 passed = failed = 0
@@ -71,12 +85,20 @@ with pool:
         # about product feel, not a number this file gets to invent. Printed
         # for a human, and recorded in docs/design-decisions.md.
 
-        print("\nreal purchase intents -- a detector that never fires is useless")
+        print("\nprepayment intents -- these MUST fire")
         for lang, message in WANTED:
             got = buy.classify(conn, message)
             check(f"{lang:8} {message[:44]}", got["buy"], True)
             if got["buy"]:
                 print(f"         -> {got['subjects']}")
+            time.sleep(4)
+
+        print("\nscheduling intents -- these MUST NOT fire")
+        for lang, message in NOT_WANTED:
+            got = buy.classify(conn, message)
+            check(f"{lang:8} {message[:44]}", got["buy"], False)
+            if got["buy"]:
+                print(f"         WRONGLY OFFERED: {got['subjects']}")
             time.sleep(4)
 
         print("\nthe offer, once intent is established")
