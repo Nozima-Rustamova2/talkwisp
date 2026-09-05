@@ -233,10 +233,22 @@ def answer_callback(callback_id, text=""):
                json={"callback_query_id": callback_id, "text": text}, timeout=30)
 
 
-def edit(chat_id, message_id, text):
-    """Replace the buttons with the outcome, so one cannot be tapped twice."""
-    httpx.post(f"{API}/editMessageText",
-               json={"chat_id": chat_id, "message_id": message_id, "text": text},
+def edit(chat_id, message_id, text, as_caption=False):
+    """Replace the buttons with the outcome, so one cannot be tapped twice.
+
+    `as_caption` is not a nicety. A PHOTO message has a caption and no text, and
+    editMessageText answers 400 "there is no text in the message to edit". The
+    owner's payment review IS a photo -- the screenshot with the two buttons on
+    it -- so every Confirm and every Reject would have failed at the instant the
+    owner tapped, with the order left in awaiting_owner and the customer told
+    nothing. The caller reads which kind it is off the callback's own message
+    rather than guessing, because the fallback path in owner_review() sends a
+    plain text message when sendPhoto fails, and then it really is text.
+    """
+    endpoint = "editMessageCaption" if as_caption else "editMessageText"
+    field = "caption" if as_caption else "text"
+    httpx.post(f"{API}/{endpoint}",
+               json={"chat_id": chat_id, "message_id": message_id, field: text},
                timeout=30)
 
 
@@ -310,6 +322,16 @@ def handle_callback(conn, cq):
     action, _, rest = data.partition(":")
     parts = rest.split(":")
     token = parts[0]
+    # Read it off the message we were called about, never assume: the owner's
+    # review is a photo, the fact-approval messages are text, and the fallback
+    # when sendPhoto fails is text too.
+    as_caption = bool(message.get("caption") or message.get("photo"))
+
+    def edit_here(text):
+        """Every edit in this function is on the message the button was
+        attached to, so the caption/text choice is decided once rather than at
+        seven call sites where six of them would be right."""
+        edit(chat_id, message_id, text, as_caption)
 
     # Enforced here too, not only on the message: a button press is a separate
     # request, and anyone who can see the chat can tap it.
@@ -332,7 +354,7 @@ def handle_callback(conn, cq):
         order = orders.get(conn, order_id)
         if order is None:
             answer_callback(cq["id"])
-            edit(chat_id, message_id, EXPIRED)
+            edit_here(EXPIRED)
             return
 
         if action == "rej":
@@ -355,13 +377,13 @@ def handle_callback(conn, cq):
             # A double tap lands here: the transition is refused, not applied
             # twice. Say so rather than pretending it worked.
             answer_callback(cq["id"], "Allaqachon hal qilingan")
-            edit(chat_id, message_id,
+            edit_here(
                  f"Bu buyurtma allaqachon hal qilingan ({exc.detail.get('state', '?')}).")
             return
 
         if action == "conf":
             answer_callback(cq["id"], "Tasdiqlandi")
-            edit(chat_id, message_id,
+            edit_here(
                  f"Tasdiqlandi: {order['item']} — {money(order['amount'])}")
             tell_customer(order,
                           for_order(DELIVERED, DELIVERED_DEFAULT, order),
@@ -369,7 +391,7 @@ def handle_callback(conn, cq):
         else:
             reason = order["reject_reason"]
             answer_callback(cq["id"], "Rad etildi")
-            edit(chat_id, message_id,
+            edit_here(
                  f"Rad etildi ({REJECT_LABELS[reason]}): {order['item']} — "
                  f"{money(order['amount'])}")
             tell_customer(order,
@@ -384,7 +406,7 @@ def handle_callback(conn, cq):
     pending = PENDING.get(token)
     if pending is None:
         answer_callback(cq["id"])
-        edit(chat_id, message_id, EXPIRED)
+        edit_here(EXPIRED)
         return
 
     # PENDING holds two shapes now -- a parsed fact awaiting the owner's
@@ -394,13 +416,13 @@ def handle_callback(conn, cq):
     # wrong dict. Cheap to check, and the alternative is a confusing crash.
     if pending.get("kind") != _KIND_FOR.get(action):
         answer_callback(cq["id"])
-        edit(chat_id, message_id, EXPIRED)
+        edit_here(EXPIRED)
         return
 
     if action == "drop":
         PENDING.pop(token, None)
         answer_callback(cq["id"], "Bekor qilindi")
-        edit(chat_id, message_id, "Bekor qilindi. Hech narsa saqlanmadi.")
+        edit_here("Bekor qilindi. Hech narsa saqlanmadi.")
         return
 
     if action == "pick":
@@ -410,7 +432,7 @@ def handle_callback(conn, cq):
             pending["conflicts"] = conflicts(conn, pending["parsed"])
         pending["candidates"] = []
         answer_callback(cq["id"])
-        edit(chat_id, message_id, preview(pending))
+        edit_here(preview(pending))
         send_kb(chat_id, "Saqlaymizmi?", save_buttons(token))
         return
 
@@ -423,12 +445,12 @@ def handle_callback(conn, cq):
                    if o["amount"] is not None]
         answer_callback(cq["id"])
         if not options:
-            edit(chat_id, message_id,
+            edit_here(
                  _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, ""))
             return
         pending.update({"choose": "price", "options": options,
                         "subject": subject})
-        edit(chat_id, message_id, subject)
+        edit_here(subject)
         send_kb(chat_id, _say(CHOOSE_PRICE, CHOOSE_PRICE_DEFAULT, ""),
                 offer_keyboard(token, pending))
         return
@@ -445,7 +467,7 @@ def handle_callback(conn, cq):
                                   language=pending.get("language"))
         except orders.OrderError as exc:
             answer_callback(cq["id"])
-            edit(chat_id, message_id,
+            edit_here(
                  _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, "")
                  if exc.reason == "not_exact"
                  else _say(ORDER_BROKEN, ORDER_BROKEN_DEFAULT, ""))
@@ -454,7 +476,7 @@ def handle_callback(conn, cq):
             return
         text = payment.order_message(conn, order["language"], order)
         answer_callback(cq["id"])
-        edit(chat_id, message_id,
+        edit_here(
              f"{order['item']} — {option['attribute']}")
         if text is None:
             # Payment details are not filled in. Say so rather than send half
@@ -482,14 +504,14 @@ def handle_callback(conn, cq):
             store_fact(conn, pending["parsed"])
         except Exception as exc:  # noqa: BLE001
             answer_callback(cq["id"], "Xatolik")
-            edit(chat_id, message_id,
+            edit_here(
                  "Saqlab boʻlmadi. Bir ozdan soʻng qaytadan urinib koʻring.")
             log({"chat_id": chat_id, "outcome": "fact_write_error",
                  "error": repr(exc)[:300]})
             return
         p = pending["parsed"]
         answer_callback(cq["id"], "Saqlandi")
-        edit(chat_id, message_id,
+        edit_here(
              f"Saqlandi: {p['subject']} - {p['attribute']}: {p['value']}\n"
              "Endi mijozlar shu savolni bersa, bot javob beradi.")
         log({"chat_id": chat_id, "is_owner": True, "outcome": "fact_written",

@@ -1272,6 +1272,7 @@ the details:
 | Buy-intent measurement | canonical subject names | the aliases customers actually type |
 | The amount in a payment message | `payment.som()` | `seed.money()`, differing by one invisible character |
 | `gap-appointment`'s recorded reason | "no booking procedure exists" | a procedure **is** stated; it just says nothing about ONLINE |
+| `check_bot.py`'s action scan | `if action == "x"` branches | a dispatcher with **two** shapes — that, plus membership in `ORDER_ACTIONS` |
 
 Three of those scored perfectly while broken. The grader scored three correct
 answers as failures; the classifier scored 0 of 90 false positives on a
@@ -1621,3 +1622,35 @@ and the earlier measurement that rejected "expand every attribute over the
 threshold" only tested it against RECALL. It was never tested against reply
 quality, which is where the damage actually is. That is the next thing to look
 at, and it is a generation question, so it needs a harness run rather than SQL.
+
+## Two Telegram bugs found by reading rather than running — 2026-09-05
+
+Both would have fired on the first real payment, and neither is visible to any
+check in this repository, because every check here stops at the edge of the
+Telegram API.
+
+**`editMessageText` cannot edit a photo.** The owner's payment review is the
+screenshot with two buttons on it, so the message has a CAPTION and no text,
+and `editMessageText` answers `400: there is no text in the message to edit`.
+Every Confirm and every Reject would have failed at the instant the owner
+tapped -- leaving the order in `awaiting_owner`, the buttons still live, and the
+customer told nothing. `edit()` now takes `as_caption`, and the caller reads
+which kind it is off the callback's own message rather than guessing, because
+the fallback in `owner_review()` sends plain text when `sendPhoto` fails and
+then it really is text.
+
+**Six of seven call sites were converted, and the seven-th shape was missed.**
+The first pass replaced `edit(chat_id, message_id, ` -- with a trailing space --
+and every MULTI-LINE call ends in a newline after the comma instead. Eight of
+them, including both order-confirm edits, which are exactly the photo ones. The
+search string was about a different program than the one on disk, which is the
+same fault as `check_bot.py` scanning for one dispatcher shape, in the same
+hour. Fixed by routing all of them through one closure, so the decision is made
+once rather than at seven call sites where six would have been right.
+
+### What still cannot be found this way
+
+`sendPhoto`, `callback_data` round-trips and inline keyboards are only really
+tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
+deliberately provokes the paths nobody designed: a double-tapped Confirm, a
+screenshot sent before any order exists, and two screenshots for one order.
