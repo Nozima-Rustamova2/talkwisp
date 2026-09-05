@@ -45,26 +45,63 @@ ast.parse(SOURCE)
 # Read the actions out of the SOURCE, not out of a list someone maintains by
 # hand beside them. A hand-kept list is a second definition of "what actions
 # exist", and it would agree with the code exactly until the day it mattered.
-HANDLED = set(re.findall(r'if action == "(\w+)"', SOURCE))
+# The dispatcher has TWO shapes: a literal `if action == "x"`, and membership
+# in ORDER_ACTIONS for the ones that carry an order id. Both count as handled,
+# and missing the second is how this check first reported `rejr` as unhandled
+# when it works fine. A check that reads only one shape of the code is a check
+# that is about a different program.
+HANDLED = (set(re.findall(r'if action == "(\w+)"', SOURCE))
+           | set(bot.ORDER_ACTIONS))
 
 # Named here so the check states what it believes rather than deriving it from
 # the thing under test. If orders ever become owner-initiated, this line is
 # what should fail.
-OWNER_ONLY = {"drop", "pick", "save"}
+OWNER_ONLY = {"drop", "pick", "save", "conf", "rej", "rejr"}
 
 print("\nthe callback permission model")
 
 check("some actions are actually handled", len(HANDLED) > 0, True)
-check("every handled action is classified in _KIND_FOR",
-      sorted(HANDLED - set(bot._KIND_FOR)), [])
+# ORDER_ACTIONS deliberately carry the order id in callback_data instead of a
+# PENDING token, so they are exempt from the kind check -- and that exemption is
+# asserted rather than assumed, because an order action that quietly acquired a
+# PENDING entry would stop surviving restarts, which is the whole reason they
+# are built this way.
+check("every handled action is either classified or an order action",
+      sorted(HANDLED - set(bot._KIND_FOR) - bot.ORDER_ACTIONS), [])
+check("no order action is in _KIND_FOR",
+      sorted(bot.ORDER_ACTIONS & set(bot._KIND_FOR)), [])
 check("nothing is classified that is not handled",
       sorted(set(bot._KIND_FOR) - HANDLED), [])
+# ORDER_ACTIONS is a declaration, so membership proves nothing on its own --
+# a typo there would name an action no button ever sends. Each one must also
+# appear in the source, in a callback_data string or a branch.
+check("every order action actually appears in the code",
+      sorted(a for a in bot.ORDER_ACTIONS if f'"{a}' not in SOURCE), [])
 check("every customer action is a handled action",
       sorted(bot.CUSTOMER_ACTIONS - HANDLED), [])
 check("no owner action is customer-tappable",
       sorted(bot.CUSTOMER_ACTIONS & OWNER_ONLY), [])
 check("the owner-only actions are still the ones we think they are",
       sorted(HANDLED - bot.CUSTOMER_ACTIONS), sorted(OWNER_ONLY))
+check("confirming and rejecting are NOT customer-tappable",
+      sorted(bot.ORDER_ACTIONS & bot.CUSTOMER_ACTIONS), [])
+
+print("")
+print("every reject reason can actually be told to a customer")
+
+# orders.REJECT_REASONS is the source of truth; the tables in bot.py are what
+# the customer is told. A reason added there without a message here would
+# raise KeyError inside reject(), in front of somebody who has already paid --
+# and the button would have been offered to the owner first, so it would fail
+# at the very last moment.
+import app.orders as orders_mod
+for table, what in ((bot.REJECT_LABELS, "a button label"),
+                    (bot.REJECTED, "a customer message"),
+                    (bot.REJECTED_DEFAULT, "a default message")):
+    check(f"every reason has {what}",
+          sorted(set(orders_mod.REJECT_REASONS) - set(table)), [])
+check("no message exists for a reason the database would refuse",
+      sorted(set(bot.REJECTED) - set(orders_mod.REJECT_REASONS)), [])
 
 print("\nthe gate is an allowlist, not a denylist")
 

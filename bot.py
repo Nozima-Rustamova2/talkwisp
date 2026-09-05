@@ -129,9 +129,17 @@ def _say(table: dict, default: str, question: str) -> str:
     return table.get(detect_language(question), default)
 
 
-def send(chat_id: int, text: str) -> None:
-    httpx.post(f"{API}/sendMessage",
-               json={"chat_id": chat_id, "text": text}, timeout=30)
+def send(chat_id: int, text: str) -> bool:
+    """True if Telegram accepted it. RETURNS a result because some callers must
+    know: a customer who blocked the bot after paying is stranded, and the only
+    person who can rescue them is the owner. See notify_owner_send_failure."""
+    try:
+        r = httpx.post(f"{API}/sendMessage",
+                       json={"chat_id": chat_id, "text": text}, timeout=30)
+        return bool(r.json().get("ok"))
+    except (httpx.HTTPError, ValueError) as exc:
+        print(f"send to {chat_id} failed: {exc!r}", flush=True)
+        return False
 
 
 def log(entry: dict) -> None:
@@ -188,12 +196,17 @@ PENDING: dict[str, dict] = {}
 # Which callback actions a CUSTOMER may tap. Everything absent from this set is
 # owner-only. See the reasoning in handle_callback: allowlist, so forgetting to
 # classify a new action fails closed.
-CUSTOMER_ACTIONS = frozenset({"order", "who"})
+CUSTOMER_ACTIONS = frozenset({"order", "who", "shot"})
+
+# Owner-only, and they carry the order id in callback_data instead of a PENDING
+# token so they keep working across a restart -- the owner may confirm a day
+# later, and a Confirm button that died with the process would strand money.
+ORDER_ACTIONS = frozenset({"conf", "rej", "rejr"})
 
 # Which PENDING shape each action expects. A token from the wrong flow is
 # refused rather than misread.
 _KIND_FOR = {"drop": "fact", "pick": "fact", "save": "fact",
-             "order": "offer", "who": "offer"}
+             "order": "offer", "who": "offer", "shot": "shot"}
 
 
 def is_owner_id(user_id) -> bool:
@@ -311,6 +324,63 @@ def handle_callback(conn, cq):
         answer_callback(cq["id"], "Faqat klinika egasi uchun.")
         return
 
+    # ---- orders: the id travels in callback_data, so these survive a restart.
+    # Handled BEFORE the PENDING lookup, because they deliberately do not use
+    # it. The owner may tap Confirm a day after the process last started.
+    if action in ORDER_ACTIONS:
+        order_id = rest.split(":")[0]
+        order = orders.get(conn, order_id)
+        if order is None:
+            answer_callback(cq["id"])
+            edit(chat_id, message_id, EXPIRED)
+            return
+
+        if action == "rej":
+            # A reason is REQUIRED -- the database refuses a rejection without
+            # one -- so Reject opens a second keyboard rather than rejecting.
+            # "Amount does not match" and "I cannot see it" mean different next
+            # steps for the customer, which is why they cannot be one button.
+            answer_callback(cq["id"])
+            send_kb(chat_id, "Sabab?", keyboard(
+                [[(REJECT_LABELS[r], f"rejr:{order_id}:{r}")]
+                 for r in orders.REJECT_REASONS]))
+            return
+
+        try:
+            if action == "conf":
+                order = orders.confirm(conn, order_id)
+            else:
+                order = orders.reject(conn, order_id, rest.split(":")[1])
+        except orders.OrderError as exc:
+            # A double tap lands here: the transition is refused, not applied
+            # twice. Say so rather than pretending it worked.
+            answer_callback(cq["id"], "Allaqachon hal qilingan")
+            edit(chat_id, message_id,
+                 f"Bu buyurtma allaqachon hal qilingan ({exc.detail.get('state', '?')}).")
+            return
+
+        if action == "conf":
+            answer_callback(cq["id"], "Tasdiqlandi")
+            edit(chat_id, message_id,
+                 f"Tasdiqlandi: {order['item']} — {money(order['amount'])}")
+            tell_customer(order,
+                          for_order(DELIVERED, DELIVERED_DEFAULT, order),
+                          "confirmed")
+        else:
+            reason = order["reject_reason"]
+            answer_callback(cq["id"], "Rad etildi")
+            edit(chat_id, message_id,
+                 f"Rad etildi ({REJECT_LABELS[reason]}): {order['item']} — "
+                 f"{money(order['amount'])}")
+            tell_customer(order,
+                          for_order(REJECTED[reason],
+                                    REJECTED_DEFAULT[reason], order),
+                          f"rejected:{reason}")
+        log({"chat_id": order["chat_id"], "outcome": f"order_{order['state']}",
+             "order_id": str(order["id"]), "amount": order["amount"],
+             "reason": order["reject_reason"]})
+        return
+
     pending = PENDING.get(token)
     if pending is None:
         answer_callback(cq["id"])
@@ -397,6 +467,13 @@ def handle_callback(conn, cq):
         log({"chat_id": chat_id, "outcome": "order_created",
              "order_id": str(order["id"]), "item": order["item"],
              "amount": order["amount"], "attribute": order["attribute"]})
+        return
+
+    if action == "shot":
+        order_id = pending["orders"][int(parts[1])]
+        PENDING.pop(token, None)
+        answer_callback(cq["id"])
+        attach_and_notify(conn, order_id, pending["file_id"], chat_id)
         return
 
     if action == "save":
@@ -490,10 +567,195 @@ def send_offer(chat_id: int, text: str, offer: dict) -> None:
     send_kb(chat_id, prompt, offer_keyboard(token, offer))
 
 
+
+# ------------------------------------------------ the confirmation loop (A3b-2)
+
+SHOT_THANKS = {
+    "Russian": "Спасибо, чек получен. Мы проверим и сообщим вам.",
+    "Uzbek, in CYRILLIC script": "Раҳмат, чек қабул қилинди. Текширамиз ва "
+                                 "хабар берамиз.",
+}
+SHOT_THANKS_DEFAULT = "Rahmat, chek qabul qilindi. Tekshiramiz va xabar beramiz."
+
+NO_OPEN_ORDER_DEFAULT = ("Sizda toʻlov kutayotgan buyurtma yoʻq. Nimani "
+                         "toʻlamoqchi ekaningizni yozing.")
+WHICH_ORDER_DEFAULT = "Bu chek qaysi buyurtma uchun?"
+
+# The delivery message. The most business-specific of these, and the first that
+# should become an owner-editable fact if any of them does.
+DELIVERED = {
+    "Russian": "Оплата подтверждена. Спасибо! Покажите это сообщение в регистратуре.",
+    "Uzbek, in CYRILLIC script": "Тўлов тасдиқланди. Раҳмат! Ушбу хабарни "
+                                 "қабулхонага кўрсатинг.",
+}
+DELIVERED_DEFAULT = ("Toʻlov tasdiqlandi. Rahmat! Ushbu xabarni qabulxonaga "
+                     "koʻrsating.")
+
+# One message per reason, because the reasons exist to mean different NEXT
+# STEPS: pay again correctly, or go and ask your bank. Collapsing them into one
+# apology throws away the only useful thing the owner told us.
+REJECTED = {
+    "amount_mismatch": {
+        "Russian": "Сумма не совпадает с заказом. Пожалуйста, переведите "
+                   "точную сумму, указанную выше.",
+        "Uzbek, in CYRILLIC script": "Сумма буюртмага мос келмади. Илтимос, "
+                                     "юқорида кўрсатилган аниқ суммани юборинг.",
+    },
+    "not_received": {
+        "Russian": "Мы не видим этот платёж. Пожалуйста, проверьте в своём "
+                   "банке и свяжитесь с клиникой.",
+        "Uzbek, in CYRILLIC script": "Биз бу тўловни кўрмаяпмиз. Илтимос, "
+                                     "банкингиздан текширинг ва клиника билан "
+                                     "боғланинг.",
+    },
+}
+REJECTED_DEFAULT = {
+    "amount_mismatch": ("Summa buyurtmaga mos kelmadi. Iltimos, yuqorida "
+                        "koʻrsatilgan aniq summani yuboring."),
+    "not_received": ("Biz bu toʻlovni koʻrmayapmiz. Iltimos, bankingizdan "
+                     "tekshiring va klinika bilan bogʻlaning."),
+}
+REJECT_LABELS = {"amount_mismatch": "Summa mos emas",
+                 "not_received": "Toʻlov koʻrinmadi"}
+
+
+def money(amount: int) -> str:
+    """One definition of how money looks, in app/payment.py."""
+    return payment.som(amount)
+
+
+def for_order(table: dict, default: str, order: dict) -> str:
+    """Pick the customer's language off the ORDER, not off the message that
+    triggered the send -- that message is the OWNER's, and detecting language on
+    it would answer in the wrong person's language. See migration 0006."""
+    return table.get(order.get("language"), default)
+
+
+def send_photo(chat_id: int, file_id: str, caption: str, markup=None) -> bool:
+    payload = {"chat_id": chat_id, "photo": file_id, "caption": caption}
+    if markup:
+        payload["reply_markup"] = markup
+    try:
+        r = httpx.post(f"{API}/sendPhoto", json=payload, timeout=30)
+        return bool(r.json().get("ok"))
+    except (httpx.HTTPError, ValueError) as exc:
+        print(f"sendPhoto to {chat_id} failed: {exc!r}", flush=True)
+        return False
+
+
+def tell_customer(order: dict, text: str, what: str) -> None:
+    """Say something to the customer, and TELL THE OWNER IF IT DID NOT ARRIVE.
+
+    "The customer always hears something" is best-effort by nature -- they can
+    block the bot or delete the chat. What must not happen is the failure being
+    recorded only where nobody looks. Someone who paid and then blocked the bot
+    is stranded, and "visible in the dashboard" means visible to a person who is
+    not looking. So this lands on the payment channel, the one the owner is
+    already watching because money is on it.
+    """
+    if send(order["chat_id"], text):
+        return
+    log({"chat_id": order["chat_id"], "outcome": "customer_unreachable",
+         "order_id": str(order["id"]), "what": what})
+    if OWNER_ID:
+        send(int(OWNER_ID),
+             "Mijozga xabar yetkazib bo'lmadi (" + what + ").\n"
+             f"Buyurtma: {order['item']} — {money(order['amount'])}\n"
+             f"Mijoz chat: {order['chat_id']}\n"
+             "Botni bloklagan bo'lishi mumkin. Iltimos, o'zingiz bog'laning.")
+
+
+def owner_review(order: dict) -> None:
+    """Show the owner the screenshot and the two buttons.
+
+    The order id travels in callback_data rather than in PENDING, and that is
+    deliberate: PENDING dies with the process and the owner may confirm a day
+    later. A Confirm button that stopped working after a restart would strand
+    the money it exists to release. 41 bytes of the 64 Telegram allows.
+    """
+    if not OWNER_ID:
+        return
+    caption = ("Yangi to'lov tekshiruvi\n"
+               f"{order['item']} — {order['attribute']}\n"
+               f"Summa: {money(order['amount'])}\n"
+               f"Mijoz chat: {order['chat_id']}")
+    markup = keyboard([[("Tasdiqlash", f"conf:{order['id']}"),
+                        ("Rad etish", f"rej:{order['id']}")]])
+    if not send_photo(int(OWNER_ID), order["screenshot_file_id"],
+                      caption, markup):
+        # No image in front of them is still better than no notification.
+        send_kb(int(OWNER_ID), caption, markup)
+
+
+def file_id_of(message: dict) -> str | None:
+    """The screenshot, whichever way it was sent.
+
+    `photo` is a list of sizes ordered small to large, so the last is the
+    original. People also send screenshots as a FILE, which arrives as
+    `document` and would otherwise be ignored in silence -- and a payment the
+    customer believes they have proved is the worst thing to ignore silently.
+    """
+    photo = message.get("photo")
+    if photo:
+        return photo[-1]["file_id"]
+    document = message.get("document") or {}
+    if str(document.get("mime_type") or "").startswith("image/"):
+        return document.get("file_id")
+    return None
+
+
+def attach_and_notify(conn, order_id, file_id: str, chat_id: int) -> None:
+    try:
+        order = orders.attach_screenshot(conn, order_id, file_id)
+    except orders.OrderError as exc:
+        log({"chat_id": chat_id, "outcome": "screenshot_refused",
+             "reason": exc.reason, "order_id": str(order_id)})
+        send(chat_id, NO_OPEN_ORDER_DEFAULT)
+        return
+    send(chat_id, for_order(SHOT_THANKS, SHOT_THANKS_DEFAULT, order))
+    owner_review(order)
+    log({"chat_id": chat_id, "outcome": "screenshot_attached",
+         "order_id": str(order["id"]), "amount": order["amount"]})
+
+
+def handle_screenshot(conn, chat_id: int, file_id: str) -> None:
+    """Evidence FOR THE SELLER. Nothing reads it, scores it or believes it."""
+    open_orders = [o for o in orders.open_for_chat(conn, chat_id)
+                   if o["state"] == "awaiting_payment"]
+    if not open_orders:
+        send(chat_id, NO_OPEN_ORDER_DEFAULT)
+        log({"chat_id": chat_id, "outcome": "screenshot_no_order"})
+        return
+    if len(open_orders) > 1:
+        # Attaching to the wrong one would have the owner confirm a payment
+        # against an order the customer never meant. The amounts differ by
+        # construction, so the customer can tell them apart.
+        token = secrets.token_urlsafe(6)
+        PENDING[token] = {"kind": "shot", "file_id": file_id,
+                          "orders": [str(o["id"]) for o in open_orders]}
+        send_kb(chat_id, WHICH_ORDER_DEFAULT,
+                keyboard([[(f"{o['item']} — {money(o['amount'])}",
+                            f"shot:{token}:{i}")]
+                          for i, o in enumerate(open_orders)]))
+        return
+    attach_and_notify(conn, open_orders[0]["id"], file_id, chat_id)
+
+
 def handle(conn, message: dict, last_seen: dict) -> None:
     chat_id = message["chat"]["id"]
     user_id = message.get("from", {}).get("id")
     text = (message.get("text") or "").strip()
+
+    # A payment screenshot arrives with NO TEXT, and this function used to
+    # return immediately on that -- so a customer who paid and sent proof got
+    # silence, which is the worst possible reply to that particular message.
+    # Checked before the owner test and before the throttle: evidence of a
+    # payment is not a question and must not be rate-limited away.
+    file_id = file_id_of(message)
+    if file_id:
+        handle_screenshot(conn, chat_id, file_id)
+        return
+
     if not text:
         return
 
