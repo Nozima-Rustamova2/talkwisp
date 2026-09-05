@@ -73,10 +73,23 @@ def _gemini(system: str, prompt: str,
                 json=payload,
                 timeout=90,
             )
-        except httpx.TimeoutException as exc:
-            # A timeout is an exception, not a status code, so it has to be
-            # caught separately or the retry never sees it.
-            last = f"timeout: {exc!r}"
+        except httpx.TransportError as exc:
+            # A transport failure is an exception, not a status code, so it has
+            # to be caught separately or the retry never sees it.
+            #
+            # This caught only TimeoutException until 2026-09-05, when a
+            # 90-question harness run died nine minutes in on
+            # "[WinError 10054] An existing connection was forcibly closed by
+            # the remote host" -- an httpx.ReadError, which is a TransportError
+            # and not a timeout. The reasoning in the comment was always
+            # general; the catch was not. TransportError is the parent of
+            # TimeoutException, ConnectError, ReadError and the rest, so it now
+            # matches the reasoning.
+            #
+            # This is a production bug and not merely a test annoyance: one
+            # dropped connection was one failed customer message, where a retry
+            # would have worked.
+            last = f"transport: {exc!r}"
         else:
             if response.status_code == 429 and gemini_keys.count() > 1:
                 # Daily quota is per key. Move to the next one and retry at

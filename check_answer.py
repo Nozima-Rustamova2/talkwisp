@@ -14,6 +14,7 @@ import sys
 import time
 
 from app.answer import SIMILARITY_FLOOR, answer
+from app.llm import LLMError
 from app.db import pool
 from grading import grade
 from questions import QUESTIONS
@@ -31,6 +32,15 @@ print(f"similarity floor = {SIMILARITY_FLOOR}\n")
 # forbidden-alias guard in seed.py.
 PROSE_SOURCE = "Bemorlar uchun qoidalar"
 
+def save(rows):
+    """Persist, so re-grading never costs another API call -- and so an
+    interrupted run leaves what it had rather than nothing."""
+    pathlib.Path("results.json").write_text(
+        json.dumps([{"verdict": v, "question": q, "result": r}
+                    for v, q, r in rows], ensure_ascii=False, indent=1),
+        encoding="utf-8")
+
+
 rows = []
 with pool:
     with pool.connection() as conn:
@@ -47,8 +57,33 @@ with pool:
             sys.exit(2)
 
         for q in QUESTIONS:
-            r = answer(conn, q["q"])
-            rows.append((grade(q, r), q, r))
+            # One question's infrastructure failure must not destroy the other
+            # 89 answers. A run costs ninety completion calls and nine minutes,
+            # and the first attempt at this measurement died on a dropped TCP
+            # connection with nothing written -- results are accumulated and
+            # only persisted at the end, so the whole run was lost.
+            #
+            # An LLM error is recorded as ERROR, never as FAIL. Grading it as a
+            # failure would put an infrastructure problem into the same column
+            # as a behavioural one, and the run's headline number would quietly
+            # mean something different.
+            try:
+                r = answer(conn, q["q"])
+                verdict = grade(q, r)
+            except LLMError as exc:
+                r = {"question": q["q"], "status": "error", "source": None,
+                     "facts": [], "chunks": [], "answer": None,
+                     "note": f"LLM ERROR: {exc}"}
+                verdict = "ERROR"
+            rows.append((verdict, q, r))
+            # Written after EVERY question, not once at the end. Two runs in a
+            # row have now cost nine minutes and ninety completion calls and
+            # produced nothing -- one to a dropped TCP connection, one to the
+            # process being killed. Neither was recoverable, because the only
+            # write happened after the loop. A partial results.json is worth
+            # something; an empty one is worth nothing, and the cost of being
+            # sure is one file write per four-second sleep.
+            save(rows)
             time.sleep(4)  # free tier is per-minute limited; pace the loop
 
 for verdict, q, r in rows:
@@ -68,12 +103,15 @@ for verdict, q, r in rows:
     else:
         print(f"{'':9} > (no answer -- model not called, gap logged)")
 
-# Persist, so re-grading never costs another 25 API calls.
-pathlib.Path("results.json").write_text(
-    json.dumps([{"verdict": v, "question": q, "result": r} for v, q, r in rows],
-               ensure_ascii=False, indent=1), encoding="utf-8")
 
 passed = sum(1 for v, *_ in rows if v == "PASS")
 failed = sum(1 for v, *_ in rows if v == "FAIL")
 manual = sum(1 for v, *_ in rows if v is None)
+errored = [q["id"] for v, q, _ in rows if v == "ERROR"]
+if errored:
+    print()
+    print(f"{len(errored)} question(s) never reached the model and are NOT "
+          f"graded either way:")
+    print(f"  {', '.join(errored)}")
+    print("  Re-run before comparing this against anything.")
 print(f"\n{'=' * 70}\n{passed} pass, {failed} fail, {manual} manual, of {len(rows)}")

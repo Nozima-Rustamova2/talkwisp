@@ -1481,3 +1481,68 @@ question does appear in the list, because its chunk window moved — but had the
 ingest not touched its retrieval, nothing here would have said a word. The list
 tells you which cases to open. Reading the stated reason once it is open is
 still a habit, and habits have no failure signal.
+
+## Window width changes which attribute list expansion picks — 2026-09-05
+
+A latent coupling, found while measuring `FACT_WINDOW` and written down even
+though the obvious fix measured badly, because someone will change the window
+for an unrelated reason and walk into it.
+
+### The finding
+
+Recall is not monotonic in window width. Measured over the 26 questions the
+exact tier does not already answer:
+
+    width  4    21/26
+    width  8    20/26      <- widening LOST one
+    width 12    24/26
+
+Traced rather than explained away. `typo-uz`, "kardilog narxi qancha":
+
+- At width 4 the top four hold three `qabul narxi` facts, so `_expand_list`
+  clusters on `qabul narxi`, pulls in every doctor's consultation price, and
+  the wanted fact arrives.
+- At width 8 four `narx` facts outvote them. Expansion clusters on `narx`,
+  pulls in service prices, and the wanted fact is gone.
+
+`_expand_list` picks exactly ONE attribute — `max(counts)`. So the window is
+not only "how much context arrives". **It also decides which attribute wins a
+vote, and that vote decides which entire set gets expanded.** Changing the
+width silently changes what expansion does. Nobody would predict that from the
+name of the constant or from either function on its own.
+
+### The obvious fix, measured before it was proposed
+
+Expanding every attribute that clears `LIST_CLUSTER` rather than only the
+commonest:
+
+    width       one attribute      every attribute      context (one / every)
+      4            21/26               21/26              8.2  /  8.2
+      8            20/26               21/26             14.5  / 16.0
+     12            24/26               24/26             16.9  / 20.6
+     20            25/26               25/26             22.5  / 33.7
+
+It repairs the width-8 dip and buys nothing at 12 or wider, while carrying half
+again as much context at 20. **Not adopted.** Recorded because "we tried the
+obvious thing and it did not help" is knowledge, and the next person will
+otherwise spend an afternoon rediscovering it.
+
+The coupling itself is NOT fixed. It is dormant at width 12 and it will bite
+whoever moves the window next.
+
+### What the measurement structurally cannot see
+
+`check_window.py` asks where the ANSWERING fact ranks, and it takes that fact
+from `want`, which names exactly one `Subject / attribute` pair.
+
+So a question needing TWO facts — a doctor's role and their hours — is graded
+on whichever one `want` happens to name, and passes while delivering half an
+answer. **This is a harness limitation, not a product one, and the distinction
+matters:** it is not "we have not measured that yet", it is "the schema cannot
+express the expectation, so an entire class of partial-answer failure is
+invisible by construction". No amount of running the existing set finds it.
+
+Fixing it means letting `want` name more than one row, which changes
+`questions.py`'s shape and every grader that reads it. That is a real piece of
+work and it is why the `lavozim`-alongside-`qabul vaqti` item stays open — with
+a stated reason now, rather than as a vague todo.
