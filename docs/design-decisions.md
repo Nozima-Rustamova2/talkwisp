@@ -1546,3 +1546,78 @@ Fixing it means letting `want` name more than one row, which changes
 `questions.py`'s shape and every grader that reads it. That is a real piece of
 work and it is why the `lavozim`-alongside-`qabul vaqti` item stays open — with
 a stated reason now, rather than as a vague todo.
+
+## FACT_WINDOW 8 -> 12, and what the confirming run actually showed — 2026-09-05
+
+Two matched harness runs on the same 90 questions. The old 68/19-of-87 number
+was NOT used as the baseline: the set has changed since, and comparing against
+it would have attributed set changes to the window — the drift-table mistake.
+
+    width  8    74 pass / 16 fail
+    width 12    80 pass / 10 fail
+                6 changes, all gains, zero verdict regressions
+
+### The feared direction was measured, and it went the other way
+
+Widening context is the input to the failure mode that produced `tanaffussiz`
+and `sizda information yoqmi`: more material for the model to build a plausible
+wrong answer from. The gap questions are a third of the set and are exactly
+where that shows.
+
+**Wrong answers on gap questions went DOWN, 6 to 4.** Two questions that
+answered at width 8 correctly refuse at width 12:
+
+- `live-mrt-fasting` — at 8 it replied "no metal implants… nothing is stated
+  about fasting", an adjacent-fact answer to a preparation question. At 12 it
+  refuses.
+- `live-reschedule` — at 8 it quoted the late-arrival policy as though it
+  answered a rescheduling question. At 12 it refuses and points at the call
+  centre.
+
+The mechanism is worth stating because it is counterintuitive: with twelve
+facts the model can see that none of them answers the question, where eight
+merely-adjacent ones look like they must be the answer. More context made
+refusal *easier*, not harder.
+
+### The cost is real and it is not in the verdicts
+
+Of 34 questions that kept their verdict but changed their reply, five got
+shorter and two of those lost information. Together with `doctors-ru`, the
+pattern is one thing:
+
+**Replies to list-shaped questions are summarised harder.** Rule 7 asks for one
+or two sentences, and there is now more to compress into them.
+
+- `doctors-ru` — "which doctors do you have" named **twelve** doctors at width
+  8 and **five** at width 12. Route grading scored this as FAIL -> PASS,
+  because the wanted `lavozim` fact finally reached the context. The verdict
+  improved while the answer got worse, and nothing in the harness can see that.
+- `syn-results-ready` — enumerated all five turnaround times at width 8; at 12
+  it gives two and says "for example".
+- `price-uz-cyr` — gave both the first-visit and repeat price at 8; only the
+  first at 12.
+
+This is NOT an argument for reverting. The window change is what put the right
+facts in front of the model; the compression is a separate defect that the
+extra context exposed rather than caused.
+
+### It also diagnosed the open list-expansion item
+
+`doctors-ru`'s context, at both widths:
+
+    context by attribute: {'daraja': 13, 'lavozim': 5, 'xona': 2}
+    EXPANSION pulled:     {'daraja': 8}
+
+`_expand_list` clusters on **`daraja`** — years of experience — and pulls all
+thirteen of those, while `lavozim`, the doctor's actual role, is never expanded
+and arrives two to five at a time. The open item was recorded as "list
+expansion does not bring `lavozim` alongside `qabul vaqti`". That was the
+symptom. The cause is the single-attribute vote picking a nearly useless
+attribute for the question and starving the useful one — the same defect as the
+`typo-uz` width coupling, with a different victim.
+
+So there are now two known failures of the same one line, `max(counts.items())`,
+and the earlier measurement that rejected "expand every attribute over the
+threshold" only tested it against RECALL. It was never tested against reply
+quality, which is where the damage actually is. That is the next thing to look
+at, and it is a generation question, so it needs a harness run rather than SQL.

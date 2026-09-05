@@ -51,7 +51,28 @@ SIMILARITY_FLOOR = 0.55
 # fact that answered it (the clinic's hours) sat at rank 5. Widening is safe
 # only because rule 1b makes the model refuse on merely-adjacent context --
 # without that, more context would mean more confident wrong answers.
-FACT_WINDOW = 8
+# Raised from 8 to 12 on 2026-09-05, measured rather than guessed. Of the 26
+# questions the exact tier does not already answer, a window of 8 reaches 20 of
+# them and 12 reaches 24 -- for 2.4 more facts of context on average. 16 buys
+# nothing over 12; 20 buys one more question for another 5.6 facts. See
+# check_window.py, which computes this from cached question vectors with no API
+# calls. Confirmed by two matched harness runs on the same 90 questions:
+# 74/16 at width 8, 80/10 at width 12, six changes and all of them gains. On
+# the gap questions -- the direction retrieval-only measurement is blind to --
+# wrong answers went DOWN, 6 to 4: more context made the model refuse more
+# rather than less, because twelve facts make it visible that none of them
+# answers the question where eight adjacent ones look like they must.
+#
+# The measured COST is not in the verdicts. Replies to list-shaped questions
+# get summarised harder, because rule 7 asks for two sentences and there is now
+# more to compress: "which doctors do you have" named twelve at width 8 and
+# five at width 12. Route grading scores that as an improvement. It is not one.
+# See docs/design-decisions.md.
+#
+# NOT a free parameter. Widening changes which attribute _expand_list clusters
+# on, so recall is not monotonic in width -- read the coupling note in
+# docs/design-decisions.md before moving it again.
+FACT_WINDOW = 12
 
 # How many retrieved facts must share an attribute before we treat the question
 # as being about the whole set rather than the top few. See _expand_list().
