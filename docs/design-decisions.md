@@ -1413,3 +1413,71 @@ rewritten, and it still took a classifier disagreeing with the grader to notice.
   passage says nothing about it. Rule 10 covers it — silence is not a range.
   The verdict was always right and the reason was stale, which is the harder
   kind of wrong to notice.
+
+## The ingestion diff, and three corrections it forced — 2026-09-05
+
+`check_drift.py`. What changed in retrieval since last time, with no model and
+no API calls. It narrows which cases to read; it does not judge them, and it
+cannot see a stale reason.
+
+### The correction that produced it
+
+The idea was proposed as "diff `check_retrieval.py` before and after an
+ingest — it is deterministic and free." The response to that was that it would
+have printed "exactly the four prose questions plus `live-how-to-book` and
+`syn-book-gynae`" on the day the policy document landed.
+
+**That was stated without being checked, and it was wrong.** `retrieval.py`
+never queries `chunk`, and the policy source produced 8 chunks and 0 facts, so
+`find()` returns byte-identical results before and after. The proposed tool
+would have reported **nothing at all** for the exact ingestion that motivated
+it.
+
+Worth recording next to the drift table rather than only being fixed, because
+it is the same failure in a new costume and it happened *while that table was
+being written*: **a convincing-sounding claim does not announce itself either.**
+The verifier reading the wrong object and the author asserting the unchecked
+thing are one habit. The claim was plausible, specific, and would have been
+believed.
+
+### Two more, found only by running it
+
+**Free and blind is not cheaper than free and useful.** The fix is to embed the
+fixed question set ONCE and cache the vectors. Both vector searches then become
+pure SQL — the chunk and fact embeddings are already in the database — so every
+run after the first is free, deterministic, and covers the whole retrieval
+picture. That is `answer()` minus the model.
+
+The cache is stamped with the embedding model and refuses to load under a
+different one: across a model change every cached vector is meaningless, and
+the arithmetic still works, so the failure would be a diff that is confidently
+wrong rather than obviously broken. A question is keyed by its TEXT, so an
+edited question re-embeds itself; a missing vector aborts the run rather than
+silently diffing 89 of 90.
+
+**A list of everything is the same as no list.** The first working version
+reported 90 of 90 questions on a single document ingest. Restricting to what
+clears `SIMILARITY_FLOOR` — which is all `answer()` ever uses — barely helped:
+88 of 90. That is not noise, it is true. Eight general clinic-policy passages
+really are moderately similar to almost every clinic question, and the first
+document into an empty chunk table really does change the context for nearly
+all of them.
+
+So the fix was not filtering harder but **ranking and capping**: exact-tier
+changes first, then fact-window changes, then chunk changes ordered by the
+score of what ARRIVED — not by the absolute top score, which the first attempt
+used and which ranks questions by how well they already worked.
+
+Verified by simulation, not by argument. The policy chunks were removed and
+restored to reproduce the 2026-09-03 ingest exactly. The ranked output puts
+`live-how-to-book` first, `live-passport-needed` third, `gap-appointment` sixth
+and `what-to-bring-uz` tenth — three of the four expectations that actually went
+stale that day are in the top six of a list somebody would read.
+
+### What it still cannot do
+
+It would not have caught `gap-appointment`'s stale REASON on its own. That
+question does appear in the list, because its chunk window moved — but had the
+ingest not touched its retrieval, nothing here would have said a word. The list
+tells you which cases to open. Reading the stated reason once it is open is
+still a habit, and habits have no failure signal.
