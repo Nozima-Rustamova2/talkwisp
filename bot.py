@@ -31,12 +31,14 @@ import httpx
 import psycopg
 from dotenv import load_dotenv
 
+from app import buy, orders, payment
 from app.answer import answer, detect_language
 from app.followup import rewrite
 from app.db import pool
 from app.llm import LLMError, check_configured
 from app.normalize import normalize
 from app.typed import candidates, conflicts
+from app.triage import triage
 from app.typed import parse as parse_fact, store as store_fact
 
 load_dotenv()
@@ -183,6 +185,20 @@ def remember(chat_id: int, question: str, answer_text: str | None) -> None:
 # the owner never actually saw.
 PENDING: dict[str, dict] = {}
 
+# Which callback actions a CUSTOMER may tap. Everything absent from this set is
+# owner-only. See the reasoning in handle_callback: allowlist, so forgetting to
+# classify a new action fails closed.
+CUSTOMER_ACTIONS = frozenset({"order", "who"})
+
+# Which PENDING shape each action expects. A token from the wrong flow is
+# refused rather than misread.
+_KIND_FOR = {"drop": "fact", "pick": "fact", "save": "fact",
+             "order": "offer", "who": "offer"}
+
+
+def is_owner_id(user_id) -> bool:
+    return OWNER_ID is not None and str(user_id) == str(OWNER_ID)
+
 NOT_OWNER = ("Bu buyruq faqat klinika egasi uchun.\n"
              "Эта команда доступна только владельцу клиники.")
 EXPIRED = "Bu taklif eskirgan. Iltimos, /fact buyrugʻini qaytadan yuboring."
@@ -253,6 +269,7 @@ def handle_fact_command(conn, chat_id, is_owner, line):
         return
 
     token = secrets.token_urlsafe(8)
+    result["kind"] = "fact"
     PENDING[token] = result
 
     # Ambiguity first: never offer a Save button for a subject that could mean
@@ -277,17 +294,35 @@ def handle_callback(conn, cq):
     message_id = message.get("message_id")
     user_id = cq.get("from", {}).get("id")
 
-    # Enforced here too, not only on the message: a button press is a separate
-    # request, and anyone who can see the chat can tap it.
-    if not (OWNER_ID is not None and str(user_id) == str(OWNER_ID)):
-        answer_callback(cq["id"], "Faqat klinika egasi uchun.")
-        return
-
     action, _, rest = data.partition(":")
     parts = rest.split(":")
     token = parts[0]
+
+    # Enforced here too, not only on the message: a button press is a separate
+    # request, and anyone who can see the chat can tap it.
+    #
+    # AN ALLOWLIST, NOT A DENYLIST, and that is the whole point. Until orders
+    # existed every callback was owner-only and one blanket check was enough.
+    # Now customers tap buttons too, so the check has to be per action -- and
+    # written this way round, an action added later and not classified is
+    # owner-only by default. A denylist would make it public by default, and
+    # the failure would be silent: the button would simply work for everyone.
+    if action not in CUSTOMER_ACTIONS and not is_owner_id(user_id):
+        answer_callback(cq["id"], "Faqat klinika egasi uchun.")
+        return
+
     pending = PENDING.get(token)
     if pending is None:
+        answer_callback(cq["id"])
+        edit(chat_id, message_id, EXPIRED)
+        return
+
+    # PENDING holds two shapes now -- a parsed fact awaiting the owner's
+    # approval, and a purchase offer awaiting the customer's choice. A token is
+    # only ever handed out inside one of those messages, but callback_data is
+    # client-supplied and a token from the wrong flow would be read as the
+    # wrong dict. Cheap to check, and the alternative is a confusing crash.
+    if pending.get("kind") != _KIND_FOR.get(action):
         answer_callback(cq["id"])
         edit(chat_id, message_id, EXPIRED)
         return
@@ -307,6 +342,61 @@ def handle_callback(conn, cq):
         answer_callback(cq["id"])
         edit(chat_id, message_id, preview(pending))
         send_kb(chat_id, "Saqlaymizmi?", save_buttons(token))
+        return
+
+    if action == "who":
+        # Axis one resolved: the customer said which person. Now the prices for
+        # that one -- the second axis, and the normal case, since every doctor
+        # has both a first-visit and a repeat-visit fee.
+        subject = pending["subjects"][int(parts[1])]
+        options = [o for o in orders.price_options(conn, normalize(subject))
+                   if o["amount"] is not None]
+        answer_callback(cq["id"])
+        if not options:
+            edit(chat_id, message_id,
+                 _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, ""))
+            return
+        pending.update({"choose": "price", "options": options,
+                        "subject": subject})
+        edit(chat_id, message_id, subject)
+        send_kb(chat_id, _say(CHOOSE_PRICE, CHOOSE_PRICE_DEFAULT, ""),
+                offer_keyboard(token, pending))
+        return
+
+    if action == "order":
+        # THE ONLY PLACE AN ORDER IS CREATED, and it takes a human tap to get
+        # here. create() reads the price itself from the confirmed fact; the
+        # button supplies a row selector, never an amount.
+        option = pending["options"][int(parts[1])]
+        PENDING.pop(token, None)
+        try:
+            order = orders.create(conn, chat_id, option["subject_key"],
+                                  option["attribute_key"],
+                                  language=pending.get("language"))
+        except orders.OrderError as exc:
+            answer_callback(cq["id"])
+            edit(chat_id, message_id,
+                 _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, "")
+                 if exc.reason == "not_exact"
+                 else _say(ORDER_BROKEN, ORDER_BROKEN_DEFAULT, ""))
+            log({"chat_id": chat_id, "outcome": "order_refused",
+                 "reason": exc.reason, "detail": str(exc.detail)[:300]})
+            return
+        text = payment.order_message(conn, order["language"], order)
+        answer_callback(cq["id"])
+        edit(chat_id, message_id,
+             f"{order['item']} — {option['attribute']}")
+        if text is None:
+            # Payment details are not filled in. Say so rather than send half
+            # an instruction; the order still exists and the owner can see it.
+            send(chat_id, _say(ORDER_BROKEN, ORDER_BROKEN_DEFAULT, ""))
+            log({"chat_id": chat_id, "outcome": "order_no_payment_details",
+                 "order_id": str(order["id"])})
+            return
+        send(chat_id, text)
+        log({"chat_id": chat_id, "outcome": "order_created",
+             "order_id": str(order["id"]), "item": order["item"],
+             "amount": order["amount"], "attribute": order["attribute"]})
         return
 
     if action == "save":
@@ -330,6 +420,76 @@ def handle_callback(conn, cq):
              "value": p["value"]})
 
 
+# ------------------------------------------------------------------- purchases
+
+# CODE CONSTANTS, not facts. Nine editable strings on a settings screen for a
+# feature with no users yet is speculative configuration, and each one under
+# the payment subject would grow the "must never be retrieved" exception for
+# hypothetical benefit. Promote any of these to a fact the day an owner asks to
+# change it -- promotion is easy, un-promotion is not.
+CHOOSE_PRICE = {
+    "Russian": "Что именно вы хотите оплатить?",
+    "Uzbek, in CYRILLIC script": "Аниқ нимани тўламоқчисиз?",
+}
+CHOOSE_PRICE_DEFAULT = "Aniq nimani toʻlamoqchisiz?"
+
+CHOOSE_WHO = {
+    "Russian": "К кому именно?",
+    "Uzbek, in CYRILLIC script": "Аниқ кимга?",
+}
+CHOOSE_WHO_DEFAULT = "Aniq kimga?"
+
+# A range is refused, never narrowed -- taking the low end would be inventing a
+# price with money attached. See app/orders.py.
+NOT_ORDERABLE = {
+    "Russian": "Стоимость этой услуги указана диапазоном, поэтому оплатить её "
+               "через бот пока нельзя. Пожалуйста, свяжитесь с клиникой.",
+    "Uzbek, in CYRILLIC script": "Бу хизматнинг нархи оралиқ кўрсатилган, "
+                                 "шунинг учун бот орқали тўлаб бўлмайди. "
+                                 "Илтимос, клиника билан боғланинг.",
+}
+NOT_ORDERABLE_DEFAULT = ("Bu xizmatning narxi oraliq koʻrsatilgan, shuning "
+                         "uchun bot orqali toʻlab boʻlmaydi. Iltimos, klinika "
+                         "bilan bogʻlaning.")
+
+ORDER_BROKEN = {
+    "Russian": "Не удалось оформить оплату. Пожалуйста, свяжитесь с клиникой.",
+    "Uzbek, in CYRILLIC script": "Тўловни расмийлаштириб бўлмади. Илтимос, "
+                                 "клиника билан боғланинг.",
+}
+ORDER_BROKEN_DEFAULT = ("Toʻlovni rasmiylashtirib boʻlmadi. Iltimos, klinika "
+                        "bilan bogʻlaning.")
+
+
+def offer_keyboard(token: str, offer: dict) -> dict:
+    """Buttons for a purchase offer. The label is assembled from stored columns,
+    never phrased by a model: mislabelling which price belongs to which visit is
+    a money error, not a wording one."""
+    if offer.get("choose") == "subject":
+        return keyboard([[(name, f"who:{token}:{i}")]
+                         for i, name in enumerate(offer["subjects"])])
+    many = len({o["subject_key"] for o in offer["options"]}) > 1
+    rows = []
+    for i, o in enumerate(offer["options"]):
+        label = f"{o['subject']} — {o['attribute']} — {o['value']}" if many             else f"{o['attribute']} — {o['value']}"
+        rows.append([(label, f"order:{token}:{i}")])
+    return keyboard(rows)
+
+
+def send_offer(chat_id: int, text: str, offer: dict) -> None:
+    """Put the offer in front of the customer. NOTHING is written here -- the
+    order is created when a human taps, which is what keeps a classifier false
+    positive costing one unwanted button and zero rows."""
+    token = secrets.token_urlsafe(6)
+    offer["kind"] = "offer"
+    offer["language"] = detect_language(text)
+    PENDING[token] = offer
+    prompt = (_say(CHOOSE_WHO, CHOOSE_WHO_DEFAULT, text)
+              if offer.get("choose") == "subject"
+              else _say(CHOOSE_PRICE, CHOOSE_PRICE_DEFAULT, text))
+    send_kb(chat_id, prompt, offer_keyboard(token, offer))
+
+
 def handle(conn, message: dict, last_seen: dict) -> None:
     chat_id = message["chat"]["id"]
     user_id = message.get("from", {}).get("id")
@@ -337,7 +497,7 @@ def handle(conn, message: dict, last_seen: dict) -> None:
     if not text:
         return
 
-    is_owner = OWNER_ID is not None and str(user_id) == str(OWNER_ID)
+    is_owner = is_owner_id(user_id)
 
     if text.startswith("/fact"):
         handle_fact_command(conn, chat_id, is_owner,
@@ -367,6 +527,35 @@ def handle(conn, message: dict, last_seen: dict) -> None:
              "outcome": "throttled"})
         return
     last_seen[chat_id] = (tokens - 1.0, now)
+
+    # A purchase, maybe. TRIAGE OUTRANKS COMMERCE: someone describing chest
+    # pain who also says "to'lash" gets the emergency reply, never a payment
+    # offer. triage() is pure and costs nothing, so it is asked first.
+    #
+    # preflight() is a COST filter -- see app/buy.py. Its block is logged, with
+    # the message, so the miss rate can be measured by replaying blocked
+    # messages through the classifier offline. An unmeasurable filter drifts
+    # silently, and nothing here can know what it threw away.
+    prefilter = buy.preflight(text) if triage(text) is None else None
+    if prefilter:
+        try:
+            offer = buy.offer(conn, text)
+        except LLMError:
+            offer = None  # fall through and answer the question normally
+        if offer is not None:
+            if offer.get("refusal"):
+                send(chat_id, _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, text))
+            else:
+                send_offer(chat_id, text, offer)
+            log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                 "outcome": "offer", "prefilter": prefilter,
+                 "refusal": offer.get("refusal"),
+                 "subjects": offer.get("subjects")
+                             or [offer.get("subject")]})
+            return
+    else:
+        log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+             "outcome": "buy_prefilter_blocked"})
 
     # Resolve a follow-up into a standalone question. After the social
     # short-circuit and after the throttle, so neither spends a model call.

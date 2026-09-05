@@ -60,7 +60,7 @@ REJECT_REASONS = ("amount_mismatch", "not_received")
 _FIELDS = ("id", "chat_id", "item", "subject_key", "attribute", "base_amount",
            "suffix", "amount", "state", "screenshot_file_id", "reject_reason",
            "created_at", "expires_at", "screenshot_at", "owner_confirmed_at",
-           "owner_rejected_at")
+           "owner_rejected_at", "language")
 _SELECT = ", ".join(_FIELDS)
 
 
@@ -249,7 +249,8 @@ def _taken_amounts(conn: Connection, low: int, high: int) -> set[int]:
 # ------------------------------------------------------------------ lifecycle
 
 def create(conn: Connection, chat_id: int, subject_key: str,
-           attribute_key: str | None = None) -> dict:
+           attribute_key: str | None = None,
+           language: str | None = None) -> dict:
     """Open one order. Reads the price itself; the caller supplies no amount.
 
     That is not convenience. An amount passed in as an argument is an amount
@@ -259,6 +260,10 @@ def create(conn: Connection, chat_id: int, subject_key: str,
     `attribute_key` chooses between several prices when a subject has more than
     one -- every doctor has both `qabul narxi` and `takroriy qabul narxi`. It
     selects a row; it never supplies a figure.
+
+    `language` is stored because the owner may confirm a day later, from their
+    own chat: at that moment the only text available is the OWNER's, so
+    detecting it then would detect the wrong person. See migration 0006.
     """
     price = price_for(conn, subject_key, attribute_key)
     base = price["amount"]
@@ -277,13 +282,14 @@ def create(conn: Connection, chat_id: int, subject_key: str,
             with conn.transaction():
                 row = conn.execute(
                     "insert into purchase (chat_id, item, subject_key,"
-                    " attribute, base_amount, suffix, amount, expires_at)"
-                    " values (%s, %s, %s, %s, %s, %s, %s,"
+                    " attribute, base_amount, suffix, amount, language,"
+                    " expires_at)"
+                    " values (%s, %s, %s, %s, %s, %s, %s, %s,"
                     "         now() + (%s || ' hours')::interval)"
                     " returning " + _SELECT,
                     (chat_id, price["subject"], subject_key,
                      price["attribute"], base, suffix, base + suffix,
-                     EXPIRE_HOURS),
+                     language, EXPIRE_HOURS),
                 ).fetchone()
             return _row(row)
         except errors.UniqueViolation:
