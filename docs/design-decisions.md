@@ -1406,6 +1406,36 @@ matters because two of them lied. A number with no method beside it is a guess
 that has been promoted, and the promotion is invisible a week later — by then it
 reads exactly like a fact.
 
+### The same day, twice more: the tool is part of the result
+
+**Reasoning stood in for measurement on 360px, and was wrong.** The direction
+doc calls a mid-range Android at 360px non-negotiable. Chrome on Windows will
+not make a window that narrow, so the README said "reasoned, not observed" —
+correctly, and the reasoning was still wrong. A 360px **iframe** is a real 360px
+viewport (`vw` and media queries resolve against the frame), and inside one the
+Add-knowledge screen measured **364px wide against a 360px viewport**: a
+sideways scroll on every phone the product is for. `minmax(340px, 1fr)` is a
+floor a grid track cannot go below, so two cards refused to fit in 312px of
+content. `minmax(min(340px, 100%), 1fr)` fixes it. The lesson is not about CSS:
+*"it should collapse"* and *"it collapses"* are two different claims, and only
+one of them had been checked.
+
+**A tool silently corrupted source files during that fix.** A one-line
+PowerShell `Get-Content -Raw` / `Set-Content` round-trip over two `.tsx` files
+re-encoded every non-ASCII character — 27 em dashes and quotes turned to
+mojibake, plus a BOM on each file — because PowerShell 5.1 reads with the system
+codepage, not UTF-8. **The build stayed green**: mojibake inside comments and
+string literals is valid TypeScript. It was caught by decoding the bytes and
+counting the markers, not by anything in the pipeline. Restored from the commit
+and redone through Python with an explicit encoding.
+
+The through-line for all four: **the tool that produced the number is part of
+the number.** PowerShell and httpx both refused a URL at 65 536 and looked like
+a server. A window manager refused a width and looked like a browser limit.
+PowerShell's default encoding rewrote a file and looked like a successful edit.
+None of these announce themselves, and each is indistinguishable from the thing
+you were trying to observe unless you already suspect the instrument.
+
 ### The related discipline: unrepresentable beats avoided
 
 `OrderError` collided with its own caller twice — once on `reason`, once on

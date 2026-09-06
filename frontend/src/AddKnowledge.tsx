@@ -59,7 +59,7 @@ function Row(props: {
         borderTop: "1px solid var(--rule)",
         padding: "14px 0",
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+        gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
         gap: "8px 20px",
         alignItems: "start",
       }}
@@ -352,7 +352,12 @@ export default function AddKnowledge() {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+            // min(340px, 100%), NOT a bare 340px. A minmax floor is a floor the
+            // track cannot go below, so at 360px these two cards stayed 340px
+            // wide inside 312px of content and pushed the page into a sideways
+            // scroll -- measured at 364px against a 360px viewport, not guessed.
+            // min() lets the track collapse to the container instead.
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))",
             gap: 20,
             alignItems: "stretch",
           }}

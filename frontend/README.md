@@ -59,13 +59,26 @@ backend has no such thing and an inert control is a lie:
   lists only unconfirmed facts, so no endpoint can bring them back. The fact is
   in the knowledge base; only this band forgets it.
 
-## Not verified
+## 360px, observed
 
-**360px.** The design direction calls a mid-range Android at 360px
-non-negotiable. The layouts use `minmax` grids that should collapse to one
-column well before that, but Chrome on Windows will not make a window narrow
-enough to check, so this has **not been looked at** — it is reasoned, not
-observed, and those are different things.
+Chrome on Windows will not make a *window* that narrow, but a 360px **iframe**
+is a real 360px viewport — `vw` units and media queries resolve against the
+frame — so both screens were loaded inside one and measured:
+
+| | Review | Add knowledge |
+|---|---|---|
+| viewport | 360 | 360 |
+| document width | 345 | 345 |
+| horizontal overflow | none | none |
+| controls below the 44px floor | none of 9 | none of 7 |
+
+**This found a real bug rather than confirming a guess.** `minmax(340px, 1fr)`
+is a floor the grid track cannot go below, so the two input cards stayed 340px
+wide inside 312px of content and pushed the page to 364px — a sideways scroll on
+every phone. The fix is `minmax(min(340px, 100%), 1fr)`, applied to every
+auto-fit grid on both screens. Reasoning had said this was fine.
+
+Re-run it after any layout change; it takes about a minute.
 
 ## Two departures from the prototype, on purpose
 
