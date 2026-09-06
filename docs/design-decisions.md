@@ -1335,7 +1335,18 @@ last place it will show up.
    counts the payment rows *before* its transaction instead of asserting a
    literal; the raw-SQL checks bypass `app/` so they cannot inherit a Python
    guard's opinion; `check_orders.py` re-reads the row it wrote rather than the
-   dict it passed in.
+   dict it passed in — and, after the smoke test, counts `purchase` before and
+   after instead of asserting the table is empty.
+
+   **The cheapest instance of this in the whole list is printing one real
+   response.** The `conflicts` bug — a warning that could never fire, because
+   the code asked for a key the server does not send — cost one `print` of a
+   live `/fact` reply to find, and would have survived any amount of reading the
+   docstring, because the docstring is *about* the response and is not the
+   response. It is worth reaching for first whenever the question is "what does
+   this actually return". A build that compiles, type-checks and passes is a
+   claim about types; whether the server sends that key is a different claim,
+   and only one of the two was ever checked.
 3. **Put a can't-fire control in every measurement.** Real purchase intents
    exist in `check_buy.py` solely so a silent zero fails. That control is the
    only reason the alias miss was found.
@@ -1355,6 +1366,45 @@ can't-fire control looks identical to a passing test suite, and an unasked
 question looks identical to a good answer. Nobody was assigned to add the
 control in `check_buy.py`; it happened to occur to whoever wrote the file that
 morning. Write habits down, rely on mechanisms.
+
+## A different failure: a number written down as "measured" that was not
+
+This is **not** the drift pattern and does not belong in that table. Drift is two
+nearly-identical objects pulling apart, and every instance of it is discoverable
+by comparing them. This one has no second object. It is a plausible number,
+written into a comment with the word *measured* beside it, that nobody measured.
+
+Twice this session:
+
+| The claim | What was actually true |
+|---|---|
+| A `find()`-only diff would have caught the policy ingest | It would have reported **nothing** |
+| "uvicorn rejects a request line above ~8 KB, so ~2 500 Cyrillic characters" | ~65 468 characters, so ~10 900 Cyrillic — **5× out**, and in the safe direction only by luck |
+
+The second is the more instructive, because measuring it properly took three
+attempts and the first two were also wrong:
+
+- `Invoke-WebRequest` refuses to bind a URI over ~65 536 characters.
+- `httpx` raises `InvalidURL: URL component 'query' too long` at the same size.
+
+Both fail at a round number, on the request, before the server is involved —
+which is indistinguishable from a server limit unless you already suspect it.
+Believing either would have replaced one invented number with a second one, and
+this time with a genuine-looking experiment behind it. The real ceiling came
+from a raw socket and a binary search: **65 468 accepted, 65 625 refused.**
+
+The damage from the original guess was not a broken screen. `PASTE_LIMIT = 2000`
+worked perfectly — it simply refused, silently and forever, four fifths of the
+pastes the server would have accepted, with a comment explaining that this was
+the measured limit. Nothing fails. Nobody investigates a limit that is
+documented.
+
+**There is no mechanism for this one, and inventing one here would repeat the
+error.** It is a habit, and it is a smaller one than it looks: *do not write
+"measured" unless you measured it, and say which tool measured it.* The tool
+matters because two of them lied. A number with no method beside it is a guess
+that has been promoted, and the promotion is invisible a week later — by then it
+reads exactly like a fact.
 
 ### The related discipline: unrepresentable beats avoided
 

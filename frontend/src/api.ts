@@ -43,6 +43,59 @@ export type FactResult = {
   id?: string;
 };
 
+/* Every type below is written from a PRINTED response, and the shape that
+ * surprised me is quoted where it matters. The one bug this file has already
+ * produced came from writing a plausible key name instead. */
+
+export type Proposal = {
+  id: string;
+  subject: string;
+  attribute: string;
+  value: string;
+  confidence: number | null;
+  source: {
+    id: string;
+    label: string | null;
+    filename: string | null;
+    kind: string;
+    excerpt: string | null;
+  } | null;
+  created_at: string;
+};
+
+export type ConflictValue = {
+  id: string;
+  subject: string;
+  attribute: string;
+  value: string;
+  confirmed: boolean;
+  confidence: number | null;
+  typed: boolean;
+  source_id: string | null;
+};
+
+export type Conflict = {
+  subject_key: string;
+  attribute_key: string;
+  values: ConflictValue[];
+};
+
+/* The key is `now_conflicts_with`, and it is what confirming this fact would
+ * put it into disagreement with -- not a refusal. The backend surfaces
+ * conflicts and never resolves them; two opening-hours values may both be true.
+ * Observed:
+ *   {"id": "...", "confirmed": true, "now_conflicts_with": [
+ *     {"id": "...", "value": "Dushanba-Juma 08:00 - 20:00, ...",
+ *      "confirmed": true}]} */
+export type Confirmed = {
+  id: string;
+  subject: string;
+  attribute: string;
+  value: string;
+  confirmed: boolean;
+  now_conflicts_with: ConflictValue[];
+};
+
 export type Stats = {
   facts: number;
   facts_awaiting_review: number;
@@ -134,6 +187,34 @@ export const uploadFile = (file: File) => {
  * embedding all happen inside this one request. Tens of seconds is normal, and
  * there is no progress to report -- which is why the row says "Reading" and
  * nothing pretends to know how far along it is. */
+// --- review -----------------------------------------------------------------
+
+export const listProposals = () => request<Proposal[]>("/review");
+
+export const listConflicts = () => request<Conflict[]>("/conflicts");
+
+export const confirmFact = (id: string) =>
+  request<Confirmed>(`/review/${id}/confirm`, { method: "POST" });
+
+/* Corrects a proposal WITHOUT confirming it -- the backend is explicit that
+ * these are two steps. "Fix" on the screen is therefore edit-then-confirm, two
+ * requests, and if the first succeeds and the second fails the correction is
+ * still saved. That is the right way round. */
+export const editFact = (id: string, fields: Partial<ParsedFact>) =>
+  request<{ id: string; edited: boolean; confirmed: boolean }>(
+    `/review/${id}?${q(fields as Record<string, string>)}`,
+    { method: "PATCH" },
+  );
+
+/* Unconfirmed facts only. There is no undo and no un-confirm endpoint: the
+ * backend's own 404 says confirmed facts are removed elsewhere, because
+ * rejecting means the extraction was wrong, not that the thing stopped being
+ * true. The screen must not offer an Undo it cannot honour. */
+export const rejectFact = (id: string) =>
+  request<{ id: string; rejected: boolean }>(`/review/${id}`, {
+    method: "DELETE",
+  });
+
 export const extractSource = (id: string) =>
   request<{ status: string; error: string | null; facts: unknown[] }>(
     `/source/${id}/extract`,

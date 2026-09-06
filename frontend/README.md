@@ -1,8 +1,15 @@
 # frontend
 
-The owner's screens. Vite + React + TypeScript. One screen so far: **Add
-knowledge**, ported from `prototype/Add Knowledge.dc.html` and wired to the real
-API in `app/main.py`.
+The owner's screens. Vite + React + TypeScript, wired to the real API in
+`app/main.py`. Two screens:
+
+- **Add knowledge** (`#/`) — from `prototype/Add Knowledge.dc.html`
+- **Review** (`#/review`) — from `prototype/Onboarding Review.dc.html`, at
+  ledger density rather than the onboarding card
+
+Routing is the **hash**, not the path. `StaticFiles` serves `index.html` for the
+mount root and 404s below it, so `/app/review` would work while clicking and
+404 on reload or on a shared link. Real paths need a server catch-all first.
 
 ## One process
 
@@ -16,6 +23,11 @@ proxy.
 While working on a screen, keep the build running instead of rebuilding by hand:
 
     npm --prefix frontend run build -- --watch
+
+After a rebuild, **reload the page**. Moving between `#/` and `#/review` is a
+same-document navigation and does not refetch anything, so a hash change after a
+rebuild shows you the old build — which looks exactly like a change that did not
+take effect.
 
 `vite.config.ts` sets `base: "/app/"` and `app/main.py` mounts `dist` at `/app`.
 **Those two strings must agree.** If they drift, every asset 404s in the built
@@ -47,6 +59,14 @@ backend has no such thing and an inert control is a lie:
   lists only unconfirmed facts, so no endpoint can bring them back. The fact is
   in the knowledge base; only this band forgets it.
 
+## Not verified
+
+**360px.** The design direction calls a mid-range Android at 360px
+non-negotiable. The layouts use `minmax` grids that should collapse to one
+column well before that, but Chrome on Windows will not make a window narrow
+enough to check, so this has **not been looked at** — it is reasoned, not
+observed, and those are different things.
+
 ## Two departures from the prototype, on purpose
 
 **Typing a fact takes two taps, not one.** The prototype shows the read-back
@@ -59,3 +79,20 @@ second writes it.
 **The paste field has a character limit**, because the POST endpoints take query
 parameters rather than bodies. See `PASTE_LIMIT` in `api.ts` for the measured
 ceiling and how it was measured.
+
+## Three more on the Review screen
+
+**A conflict is not a question.** The prototype asks *"which is current?"* with
+two buttons. `/conflicts` surfaces and never resolves — two opening-hours values
+may both be true — so a contradiction is shown beside the proposal as
+information, and keeping one does not delete the other. A choice would invent a
+resolution the system does not have.
+
+**There is no Undo, on Keep or on Remove.** Confirming has no inverse endpoint,
+and `DELETE /review/{id}` refuses confirmed facts on purpose. The prototype
+offers Undo on both. Rather than a button that 404s, Remove asks once and Keep
+says plainly that it is done.
+
+**"Keep all" is N requests, not one.** No bulk endpoint exists. It reports
+progress and, on failure, says how many were actually kept — a button that
+silently kept 5 of 12 would be worse than the count.
