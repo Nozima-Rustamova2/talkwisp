@@ -95,6 +95,14 @@ for value, want in [
 
 with pool:
     with pool.connection() as conn:
+        # Counted BEFORE, and compared to the count after, because the question
+        # is "did this check leave anything behind" and not "is the table
+        # empty". Those were the same number until the day a real order existed,
+        # and then this failed with nothing wrong -- the first live payment the
+        # bot ever took broke a green check by being a legitimate row. Same
+        # shape as every other entry in the drift table: the assertion read a
+        # different object from the one the behaviour touches.
+        before = conn.execute("select count(*) from purchase").fetchone()[0]
         try:
             with conn.transaction() as tx:
 
@@ -263,8 +271,8 @@ with pool:
         except psycopg.Rollback:
             pass
 
-        left = conn.execute("select count(*) from purchase").fetchone()[0]
-        check("\nthe database is left untouched", left, 0)
+        after = conn.execute("select count(*) from purchase").fetchone()[0]
+        check("\nthe database is left as it was found", after, before)
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

@@ -1273,6 +1273,8 @@ the details:
 | The amount in a payment message | `payment.som()` | `seed.money()`, differing by one invisible character |
 | `gap-appointment`'s recorded reason | "no booking procedure exists" | a procedure **is** stated; it just says nothing about ONLINE |
 | `check_bot.py`'s action scan | `if action == "x"` branches | a dispatcher with **two** shapes — that, plus membership in `ORDER_ACTIONS` |
+| `check_orders.py`'s cleanup assertion | `count(*) from purchase == 0`, the whole table | whether *this run* left rows behind |
+| The frontend's conflict warning | `result.conflict`, a key the API never sends | `result.conflicts`, plural, a list |
 
 Three of those scored perfectly while broken. The grader scored three correct
 answers as failures; the classifier scored 0 of 90 false positives on a
@@ -1292,6 +1294,28 @@ It surfaced only because the notes were being read for an unrelated purpose.
 There is no mechanism for that one and it would be dishonest to invent one
 here: it is the habit of reading a case's stated reason whenever you touch the
 case, and checking it is still the reason.
+
+**The `check_orders.py` row is the first one broken by success rather than by a
+change to the code.** Nothing was edited. The first real payment the bot ever
+took — the smoke test passing, end to end, exactly as intended — left one
+legitimate `owner_confirmed` row in `purchase`, and a check that had passed 55
+times began to fail. The assertion meant *this test cleaned up after itself* and
+said *the table is empty*; those were the same number for as long as no customer
+had ever bought anything, which is to say for as long as the feature did not
+work. The fix is to count before and compare after, which is what it always
+meant. Worth noting because it inverts the usual reading of a red check: this
+one went red because the product started working.
+
+**The frontend row is the same shape crossing a language boundary, which is
+where it is hardest to see.** `/fact` returns `conflicts` — plural, a list.
+The TypeScript declared `conflict?: unknown` and tested `!= null`. It compiled,
+the build was clean, the type checker was satisfied, and the conflict warning
+could never appear: `undefined != null` is false for a key that is never sent.
+Nothing would have failed. An owner adding a phone number that contradicts a
+confirmed one would simply not have been told. It was caught by printing one
+real response instead of reading the docstring — which is the only remedy that
+has ever worked on this class, and is remedy #1, not a habit: **the type is now
+written from an observed response, quoted in the comment beside it.**
 
 ### Why it keeps happening
 

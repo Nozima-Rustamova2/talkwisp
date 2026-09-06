@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
 from app import console, extract, review, sources, vision
@@ -35,6 +38,32 @@ def health_db() -> dict[str, str | None]:
             " (select extversion from pg_extension where extname = 'vector')"
         ).fetchone()
     return {"status": "ok", "database": database, "pgvector": pgvector}
+
+
+@app.get("/stats")
+def stats() -> dict:
+    """What the status plate on the Add-knowledge screen states.
+
+    Confirmed and unconfirmed are counted SEPARATELY and never summed: "the
+    agent knows N facts" must mean facts it will actually answer with, and an
+    unconfirmed extraction is a proposal, not knowledge. Adding them together
+    would make the number go up the moment a file is read, which is the one
+    moment nothing has been learned yet.
+    """
+    with pool.connection() as conn:
+        confirmed, waiting = conn.execute(
+            "select count(*) filter (where confirmed),"
+            "       count(*) filter (where not confirmed) from fact"
+        ).fetchone()
+        source_count = conn.execute("select count(*) from source").fetchone()[0]
+        last = conn.execute(
+            "select greatest("
+            "  (select max(created_at) from fact),"
+            "  (select max(created_at) from source))"
+        ).fetchone()[0]
+    return {"facts": confirmed, "facts_awaiting_review": waiting,
+            "sources": source_count,
+            "last_added": last.isoformat() if last else None}
 
 
 @app.get("/ask")
@@ -250,3 +279,26 @@ def console_feedback(q: str, verdict: str, reason: str | None = None) -> dict:
             return console.record(conn, q, verdict, reason)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# --- the owner's screens ----------------------------------------------------
+# One process: uvicorn serves the API and the built frontend. Mounted at /app
+# rather than at / on purpose -- a mount at / is checked only after every route
+# above it, so it works today and silently shadows any endpoint added later
+# whose path happens to collide with a built asset.
+#
+# Registered LAST so nothing here can shadow an endpoint above.
+
+_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if _DIST.is_dir():
+    app.mount("/app", StaticFiles(directory=_DIST, html=True), name="app")
+
+    @app.get("/", include_in_schema=False)
+    def _root() -> RedirectResponse:
+        return RedirectResponse("/app/")
+else:  # pragma: no cover - a build that has not been run yet
+    @app.get("/", include_in_schema=False)
+    def _root() -> dict[str, str]:
+        return {"status": "no frontend build",
+                "run": "npm --prefix frontend run build"}
