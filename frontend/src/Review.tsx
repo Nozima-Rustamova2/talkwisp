@@ -8,6 +8,7 @@ import {
   rejectFact,
   type Conflict,
   type ConflictValue,
+  type ParsedFact,
   type Proposal,
 } from "./api";
 
@@ -77,11 +78,16 @@ function Excerpt({ text, value }: { text: string; value: string }) {
   );
 }
 
+/* `kept` carries the fact AS THE SERVER RETURNED IT, not the proposal we sent.
+ * After Fix the two differ, and showing the proposal is actively misleading:
+ * the owner corrects a value, taps Save, and reads their correction sitting
+ * beside the word "Kept" in its uncorrected form. Observed doing exactly that
+ * -- the edit had been written and the screen said otherwise. */
 type RowState =
   | { kind: "open" }
   | { kind: "fixing"; subject: string; attribute: string; value: string }
   | { kind: "confirming" }
-  | { kind: "kept"; alsoConflicts: ConflictValue[] }
+  | { kind: "kept"; fact: ParsedFact; alsoConflicts: ConflictValue[] }
   | { kind: "removing" }
   | { kind: "removed" }
   | { kind: "failed"; message: string };
@@ -124,7 +130,15 @@ export default function Review() {
     set(p.id, { kind: "confirming" });
     try {
       const result = await confirmFact(p.id);
-      set(p.id, { kind: "kept", alsoConflicts: result.now_conflicts_with ?? [] });
+      set(p.id, {
+        kind: "kept",
+        fact: {
+          subject: result.subject,
+          attribute: result.attribute,
+          value: result.value,
+        },
+        alsoConflicts: result.now_conflicts_with ?? [],
+      });
     } catch (exc) {
       set(p.id, {
         kind: "failed",
@@ -144,7 +158,15 @@ export default function Review() {
         value: s.value,
       });
       const result = await confirmFact(p.id);
-      set(p.id, { kind: "kept", alsoConflicts: result.now_conflicts_with ?? [] });
+      set(p.id, {
+        kind: "kept",
+        fact: {
+          subject: result.subject,
+          attribute: result.attribute,
+          value: result.value,
+        },
+        alsoConflicts: result.now_conflicts_with ?? [],
+      });
     } catch (exc) {
       set(p.id, {
         kind: "failed",
@@ -175,7 +197,15 @@ export default function Review() {
       setBulk(`Keeping ${done + 1} of ${open.length}…`);
       try {
         const result = await confirmFact(p.id);
-        set(p.id, { kind: "kept", alsoConflicts: result.now_conflicts_with ?? [] });
+        set(p.id, {
+        kind: "kept",
+        fact: {
+          subject: result.subject,
+          attribute: result.attribute,
+          value: result.value,
+        },
+        alsoConflicts: result.now_conflicts_with ?? [],
+      });
         done += 1;
       } catch (exc) {
         setBulk(
@@ -313,7 +343,9 @@ export default function Review() {
                           overflowWrap: "anywhere",
                         }}
                       >
-                        {p.subject} — {p.attribute}: {p.value}
+                        {s.kind === "kept"
+                          ? `${s.fact.subject} — ${s.fact.attribute}: ${s.fact.value}`
+                          : `${p.subject} — ${p.attribute}: ${p.value}`}
                       </span>
                       <div
                         style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}

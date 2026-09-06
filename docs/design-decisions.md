@@ -1429,6 +1429,22 @@ string literals is valid TypeScript. It was caught by decoding the bytes and
 counting the markers, not by anything in the pipeline. Restored from the commit
 and redone through Python with an explicit encoding.
 
+This is the most alarming of the four, and it is the only one where the whole
+downstream pipeline would have shipped the damage: `tsc`, `vite`, the browser,
+and a code review that reads the diff in an editor which renders the mojibake
+back as the character you expected. Nothing in that chain has an opinion about
+encoding. The obvious remedy — *stop doing PowerShell round-trips on source
+files* — is a habit, and by this document's own ranking habits are the weakest
+remedy because they have no failure signal. So it is a mechanism now:
+**`check_encoding.py`**, which asserts every tracked source file is valid UTF-8,
+carries no BOM, and contains no mojibake markers. It takes about a second.
+
+It failed on its first run, on a file nobody had touched in weeks: the root
+`README.md` was **UTF-16**, created by a PowerShell `>` redirect in the first
+commit and never looked at since. That is the argument for the mechanism in one
+line — the corruption had been sitting in the repository from the beginning,
+survived every build and every commit, and no habit was ever going to find it.
+
 The through-line for all four: **the tool that produced the number is part of
 the number.** PowerShell and httpx both refused a URL at 65 536 and looked like
 a server. A window manager refused a width and looked like a browser limit.
