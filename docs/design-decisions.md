@@ -222,10 +222,19 @@ this file wins.
   prices and names that appear in no extracted fact, and surface those as a gap
   for the owner. Not built. Build it before extraction is trusted on real
   documents.
-- Multi-tenancy. Tables carry no `business_id` yet; the schema is single-tenant-
-  shaped on purpose. Adding it later is a known migration — add a column,
-  backfill one value, extend the indexes. Not an oversight. A `business` *table*
-  would be a fifth table and needs approval.
+- ~~Multi-tenancy.~~ **Done, 2026-09-07** — see "Multi-tenancy is enforced below
+  the query layer" below. The prediction that it was "a known migration — add a
+  column, backfill one value, extend the indexes" was right about the shape and
+  wrong about the cost: the column was the easy half, and the two global unique
+  constraints and the three ways RLS silently does nothing were the rest.
+- **`escalation`: approved, and now deferred rather than absent.** It was
+  approved as a sixth table for forwarding unanswered questions and never
+  created. Approved-and-absent is the worst of the three states — it reads as
+  built to anyone scanning this list. It was not created in the tenancy
+  migration either, because a table with no writer is schema for later, and the
+  migration that adds it costs the same ten lines whenever it happens: the
+  backfill argument does not apply to an empty table. Decide it again when
+  Feature B is actually built.
 
 ## Vision — measured, not assumed
 
@@ -1774,3 +1783,214 @@ once rather than at seven call sites where six would have been right.
 tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
 deliberately provokes the paths nobody designed: a double-tapped Confirm, a
 screenshot sent before any order exists, and two screenshots for one order.
+
+## Multi-tenancy is enforced below the query layer — 2026-09-07
+
+`business_id` on `source`, `fact`, `alias`, `chunk`, `purchase`, plus a
+`business` table. Migration `0007_multitenancy.sql`.
+
+The failure being designed against is the worst class this project can have: a
+query missing its filter returns another business's data. One clinic's price
+answering another clinic's customer, silently — no error, no wrong number
+anyone can look at, and it would pass every check we had. There are 63 SQL table
+references across 13 modules in `app/`, and "everyone remembers the WHERE
+clause" is discipline. Discipline has no failure signal. Same argument that
+turned the payment exclusion into a view plus a check constraint in 0005.
+
+So the filter is row-level security, and a forgotten `WHERE` returns that
+tenant's rows rather than everyone's.
+
+### Three ways RLS does nothing while looking enabled
+
+All three were live in this database, and none of them raise. This is the part
+worth keeping, because it is the same shape as every instrument failure in the
+section above: the configuration would have passed inspection.
+
+1. **A superuser bypasses RLS entirely.** Not partially, not with a warning, and
+   not overridable — not by `FORCE`, not by any policy. Measured before the
+   change: `current_user` postgres, `usesuper` true. Enabling RLS on all five
+   tables would have applied and changed nothing.
+2. **A table's owner bypasses its own RLS** unless `FORCE ROW LEVEL SECURITY` is
+   also set. All five tables were owned by the connecting role.
+3. **A plain view evaluates RLS as the view's owner, not the caller.** That is
+   `retrievable_fact` — the view *every* retrieval path reads. Postgres 15+
+   needs `WITH (security_invoker = true)`. Without it, every answering query
+   would have read every tenant's facts through a view that looked correctly
+   filtered.
+
+The response to (1) is `app/db.py: assert_app_role()`, which **fails the boot**
+rather than warning. It is outside the migration on purpose: SQL cannot stop
+someone pointing `DATABASE_URL` back at postgres afterwards. A warning gets read
+once and scrolled past for the rest of the deployment's life.
+
+### Why this was cheap: the connection is already passed down
+
+46 functions across `app/` take `conn` as a parameter and never touch the pool.
+Only `main.py` (21), `extract.py` (3) and `bot.py` (3) check a connection out.
+So the tenant binds at the checkout — `app.db.connection(business_id)`, which
+is now the only checkout in the codebase — and the other 46 inherit it without
+being edited. That was not designed for this; it just happened to be the shape
+that made a mechanism affordable instead of a 63-site edit.
+
+The same property makes the write path free. `business_id` has a column default
+of `app_current_business()`, so every existing `INSERT` — none of which mention
+the column — gets the connection's tenant, and the policies' `WITH CHECK`
+clauses make naming a different one impossible.
+
+And the payment exclusion needed **no tenancy logic at all**. `tolov
+malumotlari` is a Talkwisp convention with the same normalized spelling for
+every business, so the view's predicate is unchanged; RLS on `fact` scopes it
+for free. Two mechanisms below `app/` composing without either knowing about the
+other is the argument for building tenancy this way rather than as a rule.
+
+### What RLS does not cover, and there is no mechanism for it
+
+**Unique constraints are outside RLS.** A policy filters what a query *sees*; a
+unique index checks what *exists*, across every tenant, and nothing narrows it.
+There were two, and one was load-bearing:
+
+- `alias (alias_key, subject_key)` — two clinics may each have a "Rasulova". The
+  second one was unwritable.
+- `purchase_open_amount_idx` on `amount` — the urgent one. The unique-amount
+  trick exists so a seller can tell two payments apart **against one card**. Two
+  businesses have two cards. Left global, business B's open order silently
+  blocks business A from creating theirs, and it surfaces to a real customer as
+  an unexplained failure to place an order.
+
+Both now lead with `business_id`. There is no mechanism that catches a missed
+one — the only defence is the block comment in the migration saying so, placed
+where the next person adding a table will read it.
+
+Two further consequences of a global unique constraint, both real: a write fails
+for a reason the writer cannot see, because the colliding row is in a tenant
+they cannot read; and the error is an inference channel, since a uniqueness
+violation proves a value exists somewhere you have no access to.
+
+**Files are not rows.** `gaps.jsonl`, `feedback.jsonl` and `messages.jsonl` had
+no tenant. The gap log in particular is a per-business feature — "what your
+customers asked that I could not answer" is on the dashboard — so all three now
+carry `business_id` per line. It has to be written at the time: a log without it
+cannot be split afterwards, and afterwards is the only time anyone reads it.
+
+The value comes from a `ContextVar` set in the *same statement* that sets the
+Postgres GUC, so the file and the database cannot disagree about which business
+a line belongs to. One setter, not two.
+
+### The bot's tenant is its token
+
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_OWNER_ID` could only ever describe one
+tenant. Both moved onto the `business` row, and the bot resolves which business
+it serves from the token that received the update. That is the real multi-tenant
+shape — one poll loop per token — and it makes onboarding a new customer the
+same action as fixing the current install: create a bot in BotFather, paste the
+token.
+
+`bot_token` lives on `business` and never in `fact`, by the 0005 argument: a
+fact is retrievable, a retrieved fact enters the answering prompt, and a model
+that can paraphrase a card number can paraphrase a token. No app-role query can
+read another business's token either — the `business` policy is `id =
+app_current_business()`, and the only two things that see across tenants are two
+`SECURITY DEFINER` resolvers that each return an id and nothing else.
+
+### The check runs as the role that ships
+
+`check_tenancy.py`, 28 checks. The standard it holds to is the one this project
+keeps relearning: **a check must read the object the behaviour uses.** A tenancy
+test run as postgres would pass or fail on a different object from the one that
+deploys, because superusers bypass RLS — exactly the drift pattern. So every
+check connects as `talkwisp_app`, and the endpoint checks go through the real
+FastAPI app, the real dependency and the real policies, overriding only *which
+business the request is for* — the thing auth will supply later and that does
+not exist yet.
+
+Section 2 runs the same `select count(*) from fact` as both roles and shows the
+two answers: postgres counts everything, the app role raises.
+
+**The `SET LOCAL` proof, and its two controls.** Everything above rests on
+`set_config('app.business_id', …, true)` not outliving its transaction on a
+pooled connection — if it did, the setting would follow the connection to the
+next request and the next business would read the previous one's rows with
+nothing failing. That was reasoned, not measured, so it is now measured, with
+two controls without which the section proves nothing:
+
+- `pg_backend_pid()`, asserted equal across checkouts. A *fresh* connection
+  would also show no setting, so "the value is gone" is only evidence if it is
+  the same connection.
+- A bare `SET`, which must be **seen to survive**. A test that cannot detect
+  survival at all has nothing to say about `SET LOCAL`. This is the negative
+  control the payment check taught us to write.
+
+Both pass: the pid matches, `SET LOCAL` is gone, and the bare `SET` survives.
+
+### The unique-constraint check was blind, and only a control found it
+
+The first version of `check_tenancy.py` section 4 wrote each row inside a
+transaction it then rolled back, one tenant at a time. So A's alias was already
+gone by the time B's was written and **the two rows never coexisted** — which is
+the only condition under which a global unique index can fail.
+
+It reported both businesses happy. It would have reported both businesses happy
+against the pre-0007 schema too.
+
+That was measured rather than reasoned: the old global indexes were recreated
+alongside the new ones and section 4's exact code re-run.
+
+```
+  the same alias:              BLIND - passed with the GLOBAL constraint in place
+  the same open-order amount:  BLIND - passed with the GLOBAL constraint in place
+```
+
+Two green checks about the one part of tenancy that RLS does not cover, neither
+of which could fail. The fix is one line of sequencing — commit A's row before
+attempting B's — but the fix is not the point. The point is that the check had
+the right name, the right table, the right two tenants, and still tested
+nothing, and nothing about reading it says so.
+
+So the control is now **inside** the check. Each pair runs twice: once as the
+schema stands, where both inserts must succeed, and once with the pre-0007
+global index temporarily restored, where the second must fail.
+
+```
+  [ok  ] both businesses may have the same alias
+  [ok  ] control: with the OLD global index, the same alias is refused
+  [ok  ] both businesses may have the same open-order amount
+  [ok  ] control: with the OLD global index, the same open-order amount is refused
+```
+
+This generalizes past this file, and it is the same lesson as the bare `SET` in
+section 1 one screen above: **a check that has never been observed to fail is a
+claim, not evidence.** The cheapest way to find out is to break the thing on
+purpose and confirm the check notices. Section 1 had that control from the
+start because the assumption was flagged as unmeasured. Section 4 did not,
+because "insert the same alias for two businesses" reads like it obviously works
+— and reading it is exactly what fails to catch this.
+
+Added to the remedy ranking as a corollary to #2 (make the check read the source
+of truth): **for any check whose failure mode is silence, restore the bug and
+watch it go red.** It is a mechanism, not a habit, when the restoration lives
+inside the check itself rather than in someone's memory of having done it once.
+
+### A check that had never been run against itself
+
+`check_encoding.py` went green at 87/87 the day it was written, then failed the
+moment it was re-run — on itself. It necessarily contains every mojibake marker
+as the literal that defines it, and `git ls-files` had not listed the file on
+the first run because it was not yet committed. So the first green result was
+over 87 files that did not include the one file guaranteed to fail.
+
+Another entry for the list: the first run of a check is measuring a slightly
+different set from every run after it. It now skips its own marker scan, by
+name, with the reason written down, and is still checked for a BOM and valid
+UTF-8 — the two failures it can actually have. 88/88.
+
+### What is deliberately still missing
+
+- **Auth.** There is none. `app.main.current_business()` is the stand-in and
+  returns `app_sole_business()`, which **raises** when there is more than one
+  business rather than choosing. That is what makes deploying auth before
+  tenancy fail loudly instead of merging two businesses into one table with
+  nothing to separate them by afterwards.
+- **Self-serve signup**, which must not exist until auth does.
+- **A rate limit on extraction.** Auth turns an anonymous Gemini-token burn into
+  an attributable one, which is enough for v1 and is not the same as fixing it.
+- **`escalation`**, still deferred. See the Open list.

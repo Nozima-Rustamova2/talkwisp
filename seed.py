@@ -27,7 +27,7 @@ import json
 import pathlib
 import sys
 
-from app.db import pool
+from app.db import connection, pool
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.normalize import normalize
 from app import payment
@@ -275,7 +275,7 @@ FILE_SOURCE = (
 
 def main() -> None:
     with pool:
-        with pool.connection() as conn:
+        with connection() as conn:
             # One statement, one transaction: the tables are never half-loaded.
             conn.execute("truncate fact, alias, chunk, source restart identity cascade")
 

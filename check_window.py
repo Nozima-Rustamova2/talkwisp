@@ -37,7 +37,7 @@ import sys
 
 from app.answer import (FACT_WINDOW, SIMILARITY_FLOOR, _SEARCH_FACTS,
                         _expand_list)
-from app.db import pool
+from app.db import connection, pool
 from app.embeddings import DIMENSIONS, MODEL
 from app.retrieval import find
 from grading import matches
@@ -67,7 +67,7 @@ def key(text):
 
 rows = []
 with pool:
-    with pool.connection() as conn:
+    with connection() as conn:
         for q in QUESTIONS:
             if " / " not in q.get("want", ""):
                 continue  # a shape, not a row -- nothing to rank

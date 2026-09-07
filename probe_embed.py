@@ -2,7 +2,7 @@
 
 import sys
 
-from app.db import pool
+from app.db import connection, pool
 from app.embeddings import embed_query
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -15,7 +15,7 @@ QS = [
 ]
 
 with pool:
-    with pool.connection() as conn:
+    with connection() as conn:
         for lang, q in QS:
             v = str(embed_query(q))
             rows = conn.execute(

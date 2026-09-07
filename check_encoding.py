@@ -62,6 +62,18 @@ MARKERS = {
 
 BOM = b"\xef\xbb\xbf"
 
+# This file necessarily CONTAINS every marker above, as the literals that
+# define them, so it is the one file the marker scan must skip -- it would
+# otherwise report itself forever. It is still checked for a BOM and for valid
+# UTF-8, which are the two failures it can actually have.
+#
+# Found the day after this check was written, and only because it had since
+# been COMMITTED: `git ls-files` did not list it on its first run, so the first
+# green result was over 87 files that did not include this one. A check that
+# has never been run against itself has an untested case, and the untested
+# case here was a guaranteed failure.
+SELF = pathlib.Path(__file__).name
+
 passed = failed = 0
 
 
@@ -97,6 +109,10 @@ for name in files:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         fail(name, f"is not valid UTF-8: {exc}")
+        continue
+
+    if pathlib.Path(name).name == SELF:
+        passed += 1
         continue
 
     hit = next(((m, why) for m, why in MARKERS.items() if m in text), None)

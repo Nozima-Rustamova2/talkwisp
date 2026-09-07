@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 from app import buy, orders, payment
 from app.answer import answer, detect_language
 from app.followup import rewrite
-from app.db import pool
+from app.db import assert_app_role, business_for_token, connection, pool
 from app.llm import LLMError, check_configured
 from app.normalize import normalize
 from app.typed import candidates, conflicts
@@ -45,9 +45,17 @@ load_dotenv()
 sys.stdout.reconfigure(encoding="utf-8")
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-# Optional. Numeric Telegram user id. The owner is recognised now so that the
-# step 23 write path has an identity to trust; it grants nothing yet.
-OWNER_ID = os.getenv("TELEGRAM_OWNER_ID")
+
+# Both resolved in main() from the BUSINESS ROW this token belongs to, not
+# from the environment. The token is the tenant: an update arrives on one
+# bot, that bot belongs to one business, and everything this process reads or
+# writes is that business's. An env var could only ever describe one of them,
+# which is exactly the assumption being removed.
+#
+# The owner id moves with it. "Who may tap the owner buttons" is a different
+# answer per business, so it cannot stay a single global.
+BUSINESS_ID: str | None = None
+OWNER_ID: str | None = None
 
 API = f"https://api.telegram.org/bot{TOKEN}"
 POLL_TIMEOUT = 30  # seconds Telegram holds the connection open with no updates
@@ -143,6 +151,11 @@ def send(chat_id: int, text: str) -> bool:
 
 
 def log(entry: dict) -> None:
+    # business_id on every line. Without it these files are one stream with
+    # several businesses' customers mixed together, and no way to split them
+    # afterwards -- the attribution has to be written at the time or not at
+    # all. Same reason gaps.jsonl and feedback.jsonl carry it.
+    entry["business_id"] = BUSINESS_ID
     entry["at"] = datetime.datetime.now(datetime.UTC).isoformat()
     with MESSAGE_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -908,6 +921,10 @@ def check_database() -> None:
     try:
         # Short timeout: 30 seconds of silence before an error message is its
         # own kind of unhelpful when you are standing in front of people.
+        # The one pool.connection() left in the codebase, and it asks
+        # about the SERVER, not about anyone's data. Nothing tenant-
+        # scoped is readable on it: every policy raises without a
+        # business bound.
         with pool.connection(timeout=5) as conn:
             conn.execute("select 1")
     except Exception as exc:  # noqa: BLE001 - any failure to reach it is fatal
@@ -932,6 +949,8 @@ def main() -> None:
     if not me.get("ok"):
         raise RuntimeError(f"Telegram rejected the token: {me}")
 
+    global BUSINESS_ID, OWNER_ID
+
     offset = None
     last_seen: dict[int, tuple[float, float]] = {}
     with pool:
@@ -939,9 +958,29 @@ def main() -> None:
         # last line printed is always true.
         check_database()
         print("database reachable.")
+
+        # A superuser bypasses every row-level policy, so on that connection
+        # this bot would answer one business's customers out of another
+        # business's facts and nothing would fail. Boot failure, not a warning.
+        assert_app_role()
+
+        BUSINESS_ID = business_for_token(TOKEN)
+        if BUSINESS_ID is None:
+            raise RuntimeError(
+                "No business owns this bot token, so there is no way to tell "
+                "whose questions these are.\n"
+                "  Link it once:  update business set bot_token = "
+                "'<the token in .env>' where name = 'Default business';\n"
+                "  migrate.py does this automatically while exactly one "
+                "business exists and has no token yet.")
+
+        with connection(BUSINESS_ID) as conn:
+            name, OWNER_ID = conn.execute(
+                "select name, owner_telegram_id from business").fetchone()
+        print(f"serving {name}.")
         if not OWNER_ID:
-            print("TELEGRAM_OWNER_ID not set -- /fact will refuse everyone, "
-                  "including you.")
+            print("business.owner_telegram_id is not set -- /fact will refuse "
+                  "everyone, including you.")
         print(f"@{me['result']['username']} polling. Ctrl-C to stop.")
         while True:
             try:
@@ -960,13 +999,13 @@ def main() -> None:
             for update in updates:
                 offset = update["update_id"] + 1
                 if "callback_query" in update:
-                    with pool.connection() as conn:
+                    with connection(BUSINESS_ID) as conn:
                         handle_callback(conn, update["callback_query"])
                     continue
                 message = update.get("message")
                 if not message:
                     continue
-                with pool.connection() as conn:
+                with connection(BUSINESS_ID) as conn:
                     handle(conn, message, last_seen)
 
 

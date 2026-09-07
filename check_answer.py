@@ -15,7 +15,7 @@ import time
 
 from app.answer import SIMILARITY_FLOOR, answer
 from app.llm import LLMError
-from app.db import pool
+from app.db import connection, pool
 from grading import grade
 from questions import QUESTIONS
 
@@ -43,7 +43,7 @@ def save(rows):
 
 rows = []
 with pool:
-    with pool.connection() as conn:
+    with connection() as conn:
         needs_prose = [q["id"] for q in QUESTIONS if q["expect"] == "prose"]
         if needs_prose and not conn.execute(
                 "select count(*) from chunk").fetchone()[0]:

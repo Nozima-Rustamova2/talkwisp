@@ -14,7 +14,7 @@ import sys
 
 import psycopg
 
-from app.db import pool
+from app.db import connection, pool
 from app.normalize import normalize
 from app import orders
 
@@ -94,7 +94,7 @@ for value, want in [
 # --------------------------------------------------------- everything with a DB
 
 with pool:
-    with pool.connection() as conn:
+    with connection() as conn:
         # Counted BEFORE, and compared to the count after, because the question
         # is "did this check leave anything behind" and not "is the table
         # empty". Those were the same number until the day a real order existed,

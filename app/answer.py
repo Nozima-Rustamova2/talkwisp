@@ -22,6 +22,7 @@ import zoneinfo
 
 from psycopg import Connection
 
+from app.db import current_business_id
 from app.embeddings import embed_query
 from app.llm import complete
 from app import payment
@@ -392,6 +393,11 @@ def _log_gap(question: str, retrieval: dict, chunks: list[dict],
     different problems -- one is a floor to lower, the other is missing
     knowledge -- and the question alone cannot tell them apart."""
     entry = {
+        # Whose customer asked. "What your customers asked that I could not
+        # answer" is a per-business report, so the line has to say which
+        # business at the moment it is written -- a log without it cannot be
+        # split afterwards, and afterwards is the only time anyone reads it.
+        "business_id": current_business_id(),
         "at": datetime.datetime.now(datetime.UTC).isoformat(),
         "question": question,
         "question_key": retrieval["question_key"],

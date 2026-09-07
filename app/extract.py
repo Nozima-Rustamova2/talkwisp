@@ -22,7 +22,7 @@ import re
 from psycopg import Connection
 
 from app import chunks
-from app.db import pool
+from app.db import connection
 from app.llm import complete
 from app.normalize import normalize
 
@@ -134,7 +134,7 @@ def read(conn: Connection, source: dict) -> list[dict]:
     return facts
 
 
-def store(source_id: str, facts: list[dict],
+def store(business: str, source_id: str, facts: list[dict],
           embedded_prose: list[tuple[str, str]] | None = None) -> int:
     """Step 13. ONE transaction: every fact, every chunk, and the source status.
 
@@ -149,7 +149,7 @@ def store(source_id: str, facts: list[dict],
     embeds on confirmation. Chunks are different -- review is facts-only, so
     prose goes live immediately and must be embedded to be findable.
     """
-    with pool.connection() as conn:
+    with connection(business) as conn:
         conn.execute("delete from fact where source_id = %s and not confirmed",
                      (source_id,))
         chunks.store(conn, source_id, embedded_prose or [])
@@ -184,22 +184,28 @@ def store(source_id: str, facts: list[dict],
     return len(facts)
 
 
-def _mark_failed(source_id: str, reason: str) -> None:
+def _mark_failed(business: str, source_id: str, reason: str) -> None:
     """On its own connection, because the transaction that would have carried
     this is the one being rolled back."""
-    with pool.connection() as conn:
+    with connection(business) as conn:
         conn.execute(
             "update source set status = 'failed', error = %s where id = %s",
             (reason[:1000], source_id))
 
 
-def run(source: dict) -> dict:
-    """Read then store. A failure leaves no facts behind, only an explanation."""
+def run(business: str, source: dict) -> dict:
+    """Read then store. A failure leaves no facts behind, only an explanation.
+
+    Takes the business rather than a connection, unlike everything else in app/.
+    This function deliberately holds no transaction across its model calls --
+    that is the point of splitting read from store -- so it opens three short
+    connections of its own and each one has to be told whose data it is.
+    """
     try:
-        with pool.connection() as conn:
+        with connection(business) as conn:
             facts = read(conn, source)
     except Exception as exc:  # noqa: BLE001 - every failure must be recorded
-        _mark_failed(source["id"], repr(exc))
+        _mark_failed(business, source["id"], repr(exc))
         return {"source_id": source["id"], "status": "failed",
                 "error": repr(exc)[:300], "facts": []}
 
@@ -209,14 +215,14 @@ def run(source: dict) -> dict:
         passages, rejected = chunks.find_prose(source["content"] or "")
         embedded = chunks.embed_all(passages)
     except Exception as exc:  # noqa: BLE001
-        _mark_failed(source["id"], repr(exc))
+        _mark_failed(business, source["id"], repr(exc))
         return {"source_id": source["id"], "status": "failed",
                 "error": repr(exc)[:300], "facts": [], "chunks": 0}
 
     try:
-        store(source["id"], facts, embedded)
+        store(business, source["id"], facts, embedded)
     except Exception as exc:  # noqa: BLE001
-        _mark_failed(source["id"], repr(exc))
+        _mark_failed(business, source["id"], repr(exc))
         return {"source_id": source["id"], "status": "failed",
                 "error": repr(exc)[:300], "facts": [], "chunks": 0}
 

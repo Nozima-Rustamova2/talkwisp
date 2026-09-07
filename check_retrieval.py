@@ -15,7 +15,7 @@ lavozim"). Those print as MANUAL and are not counted either way.
 
 import sys
 
-from app.db import pool
+from app.db import connection, pool
 from app.normalize import normalize
 from app.retrieval import find
 from questions import QUESTIONS
@@ -46,7 +46,7 @@ def grade(q: dict, r: dict) -> str | None:
 
 
 with pool:
-    with pool.connection() as conn:
+    with connection() as conn:
         scored: list[tuple[str, dict, dict, str | None]] = []
         for q in QUESTIONS:
             r = find(conn, q["q"])

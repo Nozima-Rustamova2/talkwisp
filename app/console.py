@@ -25,6 +25,7 @@ from psycopg import Connection
 from app.answer import answer as answer_question
 from app.answer import detect_language
 from app.normalize import normalize
+from app.db import current_business_id
 from app.retrieval import find
 
 # Not a table. Feedback is an observation about an answer, not knowledge the
@@ -294,7 +295,12 @@ def suggestions(conn: Connection, limit: int = 3) -> list[dict]:
 # --- feedback ---------------------------------------------------------------
 
 def _log(entry: dict) -> None:
-    entry = {"at": datetime.datetime.now(datetime.UTC).isoformat(), **entry}
+    # business_id goes on HERE, not at the call sites. There are two of them --
+    # a verdict and a refused suggestion -- and adding the field to one of them
+    # is how a log ends up half-attributed. The funnel is the only place it
+    # cannot be forgotten.
+    entry = {"business_id": current_business_id(),
+             "at": datetime.datetime.now(datetime.UTC).isoformat(), **entry}
     with FEEDBACK_LOG.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
 

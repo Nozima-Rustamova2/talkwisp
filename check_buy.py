@@ -23,7 +23,7 @@ Costs one completion call per question. Nothing is written to the database.
 import sys
 import time
 
-from app.db import pool
+from app.db import connection, pool
 from app import buy, orders, payment
 from questions import QUESTIONS
 
@@ -74,7 +74,7 @@ def check(label, got, want):
 
 def main():
     with pool:
-        with pool.connection() as conn:
+        with connection() as conn:
 
             print("\nfalse positives -- 90 questions, none of them a purchase")
             fired = []
