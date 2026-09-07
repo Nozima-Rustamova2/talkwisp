@@ -4,6 +4,11 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.141.1",
+    # Vertex AI takes OAuth2 bearer tokens from a service account, not an
+    # API key, and they expire hourly. This mints and refreshes them.
+    # Only app/llm.py's vertex provider uses it; embeddings stay on the
+    # AI Studio key and need nothing from here.
+    "google-auth>=2.43.0",
     "httpx>=0.28.1",
     "psycopg[binary,pool]>=3.3.4",
     "python-dotenv>=1.2.3",

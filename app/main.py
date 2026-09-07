@@ -9,15 +9,19 @@ from fastapi.staticfiles import StaticFiles
 from app.answer import answer as answer_question
 from app import console, extract, review, sources, vision
 from app.db import assert_app_role, connection, pool, sole_business
-from app.llm import check_configured
+from app.llm import check_configured, check_reachable
 from app.retrieval import find
 from app.typed import parse as parse_fact, store as store_fact
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Fail here, not on the first customer message.
+    # Fail here, not on the first customer message. check_configured() is
+    # config only; check_reachable() spends one tiny generation proving the
+    # pinned model actually answers for this credential, which is the half a
+    # .env cannot tell you.
     check_configured()
+    check_reachable()
     pool.open()
     # And fail here rather than on the first cross-tenant read, which would not
     # fail at all. See app/db.py: a superuser bypasses every policy in 0007.

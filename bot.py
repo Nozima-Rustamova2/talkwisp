@@ -35,7 +35,7 @@ from app import buy, orders, payment
 from app.answer import answer, detect_language
 from app.followup import rewrite
 from app.db import assert_app_role, business_for_token, connection, pool
-from app.llm import LLMError, check_configured
+from app.llm import LLMError, check_configured, check_reachable
 from app.normalize import normalize
 from app.typed import candidates, conflicts
 from app.triage import triage
@@ -943,7 +943,12 @@ def main() -> None:
             "TELEGRAM_BOT_TOKEN is not set. Get one from @BotFather and add it "
             "to .env."
         )
-    check_configured()  # fail now, not on the first customer message
+    # Fail now, not on the first customer message. The second call
+    # spends one tiny generation to prove the pinned model answers for
+    # this credential -- a wrong Vertex model id authenticates fine and
+    # 404s at answer time, which is a boot-time fact found too late.
+    check_configured()
+    check_reachable()
 
     me = httpx.get(f"{API}/getMe", timeout=30).json()
     if not me.get("ok"):
