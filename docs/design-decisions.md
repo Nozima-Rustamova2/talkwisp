@@ -1970,6 +1970,27 @@ of truth): **for any check whose failure mode is silence, restore the bug and
 watch it go red.** It is a mechanism, not a habit, when the restoration lives
 inside the check itself rather than in someone's memory of having done it once.
 
+**And the asymmetry between the two sections is the part to keep.** Section 1
+had its control from the beginning, and only because the assumption underneath
+it had been explicitly labelled *reasoned, not observed* — the label is what
+made someone go and check. Section 4 had no control, and not because anyone
+weighed it and declined: the question never came up, because "insert the same
+alias for two businesses" reads as obviously working.
+
+So the selection pressure runs the wrong way. **The checks most likely to be
+blind are the ones that look most obviously correct**, because looking obviously
+correct is exactly what stops anyone asking whether they can fail. A check that
+makes you uneasy gets a control. A check that reads cleanly gets a green tick
+and no further thought, and it can sit there for years being about nothing.
+
+Which means the trigger for writing a control cannot be "this one feels
+uncertain". That instinct is anti-correlated with where controls are needed. The
+usable trigger is structural instead: **does this check have a failure mode that
+would be silent?** Section 4's failure mode was two rows never meeting — nothing
+raises, nothing prints, the count is right. That question can be asked of a
+check that looks perfect, and this one's answer would have been yes on the day
+it was written.
+
 ### A check that had never been run against itself
 
 `check_encoding.py` went green at 87/87 the day it was written, then failed the
