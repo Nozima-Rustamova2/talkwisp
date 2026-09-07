@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f4f6f9; color: #14181f; font-family: Manrope, system-ui, sans-serif; }
+  a { color: #1657c0; text-decoration: none; }
+  a:hover { color: #14181f; text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f6f9; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 14px 14px 40px;">
+
+  <div style="width: 100%; max-width: 740px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 4px 22px;">
+    <span style="font-family: Manrope, system-ui, sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">Talkwisp</span>
+    <div style="display: flex; align-items: center; gap: 2px; background: #e9edf3; border-radius: 999px; padding: 3px;">
+      <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+      <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+      <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+    </div>
+  </div>
+
+  <div style="width: 100%; max-width: 740px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 4px;">
+      <span style="font-size: 14px; font-weight: 600; color: #646c78;">Step 3 of 5</span>
+      <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Save and finish later</a>
+    </div>
+
+    <div style="background: #fff; border-radius: 16px; padding: 28px 24px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 26px;">
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <h1 style="margin: 0; font-family: Manrope, system-ui, sans-serif; font-size: clamp(27px, 7.5vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">{{ headline }}</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">{{ lede }}</p>
+      </div>
+
+      <sc-if value="{{ stillReading }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #f5f9ff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 15px; font-weight: 600; line-height: 1.45; color: #14181f; text-wrap: pretty;">One file is still being read — we'll add what it finds here.</span>
+          <span style="font-size: 13px; line-height: 1.5; color: #646c78;">narx-royxati.jpg · page 3 of 4 · nothing here changes while you work</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ nothingExtracted }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="background: #fdf0dc; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 16px; font-weight: 700; line-height: 1.4; color: #8a5a12; text-wrap: pretty;">We couldn't get any facts out of that file.</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #8a5a12; text-wrap: pretty;">IMG_2291.jpg is too blurry to make out the numbers. Nothing was added, and nothing else was affected.</span>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;">Try a clearer photo</button>
+            <button type="button" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #14181f; cursor: pointer;">Write the facts yourself instead</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasDecisions }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <span style="font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">{{ decisionsTitle }}</span>
+            <span style="font-size: 13px; color: #646c78;">{{ decisionsMeta }}</span>
+          </div>
+
+          <sc-if value="{{ conflictOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="background: #f5f9ff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span style="font-size: 13px; font-weight: 700; color: #1657c0;">One question</span>
+                <span style="font-size: 17px; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: #14181f; text-wrap: pretty;">A consultation reads two different prices. Which is current?</span>
+              </div>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button type="button" onClick="{{ pickNew }}" style="flex: 1 1 260px; min-height: 44px; text-align: left; background: #fff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 13px 15px; font-family: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 3px; box-shadow: 0 1px 2px rgba(20,24,31,0.05);">
+                  <span style="font-size: 16px; font-weight: 700; color: #14181f;">примерно 250 000 сум</span>
+                  <span style="font-size: 12px; color: #5c6675;">You typed this · 14 August</span>
+                </button>
+                <button type="button" onClick="{{ pickOld }}" style="flex: 1 1 260px; min-height: 44px; text-align: left; background: #fff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 13px 15px; font-family: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 3px; box-shadow: 0 1px 2px rgba(20,24,31,0.05);">
+                  <span style="font-size: 16px; font-weight: 700; color: #14181f;">taxminan 200 000–300 000 so'm</span>
+                  <span style="font-size: 12px; color: #5c6675;">Read from Siyosat_va_qoidalar.docx · today</span>
+                </button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ conflictDone }}" hint-placeholder-val="{{ false }}">
+            <div style="background: #f7f9fc; border-radius: 12px; padding: 13px 15px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+              <span style="font-size: 15px; line-height: 1.45; color: #14181f;">Consultation — {{ conflictChoice }}</span>
+              <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                <span style="font-size: 13px; color: #646c78;">settled</span>
+                <a href="#" onClick="{{ undoConflict }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Undo</a>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-for list="{{ decisions }}" as="d" hint-placeholder-count="2">
+            <div style="{{ d.wrapStyle }}">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 18px; align-items: start;">
+                <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+                  <span style="{{ d.factStyle }}">{{ d.fact }}</span>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="flex: 0 0 auto; white-space: nowrap; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #fdf0dc; color: #8a5a12;">{{ d.pill }}</span>
+                    <span style="font-size: 13px; color: #646c78;">{{ d.kind }}</span>
+                  </div>
+                </div>
+                <div style="min-width: 0; background: #f7f9fc; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 13px; line-height: 1.55; color: #646c78; text-wrap: pretty;">{{ d.before }}<span style="font-weight: 700; color: #14181f; background: #fdf0dc;">{{ d.match }}</span>{{ d.after }}</span>
+                  <span style="font-size: 12px; color: #646c78;">{{ d.locator }}</span>
+                </div>
+              </div>
+              <sc-if value="{{ d.open }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <button type="button" onClick="{{ d.keep }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;">Keep</button>
+                  <button type="button" onClick="{{ d.fix }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #14181f; cursor: pointer;">Fix</button>
+                  <button type="button" onClick="{{ d.remove }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: transparent; border: none; padding: 0 8px; font-family: inherit; font-size: 15px; font-weight: 600; color: #5c6675; cursor: pointer;">Remove</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ d.fixing }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                  <input type="text" defaultValue="{{ d.fact }}" style="width: 100%; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 14px 15px; font-family: inherit; font-size: 16px; color: #14181f;">
+                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" onClick="{{ d.keep }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;">Save</button>
+                    <button type="button" onClick="{{ d.cancelFix }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: transparent; border: none; padding: 0 8px; font-family: inherit; font-size: 15px; font-weight: 600; color: #5c6675; cursor: pointer;">Cancel</button>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ d.settled }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                  <span style="font-size: 13px; color: #646c78;">{{ d.settledNote }}</span>
+                  <a href="#" onClick="{{ d.undo }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Undo</a>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ allClean }}" hint-placeholder-val="{{ false }}">
+        <p style="margin: 0; font-size: 16px; font-weight: 600; line-height: 1.5; color: #14181f; text-wrap: pretty;">{{ cleanLine }}</p>
+      </sc-if>
+
+      <sc-if value="{{ showAccepted }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <span style="font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">Everything else it read</span>
+          <span style="font-size: 13px; color: #646c78;">{{ acceptedMeta }}</span>
+        </div>
+        <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #5c6675; background: #f7f9fc; border-radius: 10px; padding: 12px 14px; text-wrap: pretty;">{{ typedNote }}</p>
+
+        <sc-for list="{{ groups }}" as="group" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-size: 14px; font-weight: 700; color: #3a4250;">{{ group.title }}</span>
+            <div style="display: flex; flex-direction: column;">
+              <sc-for list="{{ group.rows }}" as="row" hint-placeholder-count="3">
+                <div style="border-top: 1px solid #eef1f5; padding: 12px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 18px; align-items: start;">
+                  <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                    <span style="{{ row.factStyle }}">{{ row.fact }}</span>
+                    <span style="font-size: 13px; color: #646c78;">{{ row.kind }}</span>
+                  </div>
+                  <div style="min-width: 0; background: #f7f9fc; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
+                    <span style="font-size: 13px; line-height: 1.55; color: #646c78; text-wrap: pretty;">{{ row.before }}<span style="font-weight: 700; color: #14181f; background: #fdf0dc;">{{ row.match }}</span>{{ row.after }}</span>
+                    <span style="font-size: 12px; color: #646c78;">{{ row.locator }}</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <sc-if value="{{ row.live }}" hint-placeholder-val="{{ true }}">
+                      <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                        <a href="#" onClick="{{ row.edit }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Edit</a>
+                        <a href="#" onClick="{{ row.remove }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Remove</a>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ row.removed }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                        <span style="font-size: 13px; color: #646c78;">Removed</span>
+                        <a href="#" onClick="{{ row.undo }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 700; color: #1657c0;">Undo</a>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+
+        <div style="border-top: 1px solid #eef1f5; padding-top: 14px; display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 14px; font-weight: 700; color: #3a4250;">Policy text</span>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 18px; align-items: start;">
+            <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+              <span style="font-size: 15px; font-weight: 600; line-height: 1.45; color: #14181f; text-wrap: pretty;">2 pages of policy text</span>
+              <span style="font-size: 13px; color: #646c78;">Kept whole, not split into facts</span>
+            </div>
+            <div style="min-width: 0; background: #f7f9fc; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-size: 13px; line-height: 1.55; color: #646c78; text-wrap: pretty;">«Bemorlar navbatsiz qabul qilinadi soat 13:00 gacha. Undan keyin qabul faqat oldindan kelishilgan vaqt bo'yicha amalga oshiriladi…»</span>
+              <span style="font-size: 12px; color: #646c78;">Siyosat_va_qoidalar.docx · kept whole, quoted as written</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+              <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">See the full text</a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ showContinue }}" hint-placeholder-val="{{ true }}">
+        <div style="border-top: 1px solid #eef1f5; padding-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+          <button type="button" style="display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">{{ continueLabel }}</button>
+          <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">Next: talk to your agent before anyone else can.</p>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;three decisions&quot;,&quot;all clean&quot;,&quot;still reading&quot;,&quot;nothing extracted&quot;],&quot;default&quot;:&quot;three decisions&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", conflict: null, negation: "open", cancel: "open", removed: {} };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; cursor: pointer; background: " +
+      (on ? "#fff" : "transparent") + "; color: " + (on ? "#14181f" : "#5c6675") +
+      "; box-shadow: " + (on ? "0 1px 2px rgba(20,24,31,0.12)" : "none") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "three decisions";
+    const clean = view === "all clean";
+    const nothing = view === "nothing extracted";
+
+    const conflict = this.state.conflict ?? (clean ? "250" : null);
+    const kState = clean ? "settled" : this.state.negation;
+    const oState = clean ? "settled" : this.state.cancel;
+
+    const mk = (id, o) => {
+      const st = o.st;
+      const settled = st === "settled" || st === "removed";
+      return {
+        fact: o.fact,
+        kind: o.kind,
+        pill: o.pill,
+        before: o.before,
+        match: o.match,
+        after: o.after,
+        locator: o.locator,
+        open: st === "open",
+        fixing: st === "fixing",
+        settled,
+        settledNote: st === "removed" ? "Removed from the knowledge base" : "Kept, as you left it",
+        factStyle: "font-size: 16px; font-weight: 600; line-height: 1.45; color: " +
+          (st === "removed" ? "#646c78" : "#14181f") + "; text-decoration: " + (st === "removed" ? "line-through" : "none") + "; text-wrap: pretty;",
+        wrapStyle: "background: " + (settled ? "#f7f9fc" : "#fff") + "; border: 1px solid " +
+          (settled ? "#eef1f5" : "#fdd9a8") + "; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;",
+        keep: () => this.setState(s => ({ [id]: "settled" })),
+        fix: () => this.setState(s => ({ [id]: "fixing" })),
+        cancelFix: () => this.setState(s => ({ [id]: "open" })),
+        remove: () => this.setState(s => ({ [id]: "removed" })),
+        undo: () => this.setState(s => ({ [id]: "open" }))
+      };
+    };
+
+    const decisions = [
+      mk("negation", {
+        st: kState,
+        fact: "Tahlil natijalarini telefon orqali aytish mumkin",
+        kind: "Policy · Uzbek",
+        pill: "Not sure — 58%",
+        before: "\u00ab\u2026 Natijalarni klinikadan olib ketish yoki Telegram orqali olish mumkin. ",
+        match: "Telefon orqali natija aytilmaydi, chunki bu bemorning shaxsiy ma'lumotlariga tegishli",
+        after: " va biz uni faqat bemorning o'ziga \u2026 beramiz.\u00bb",
+        locator: "Siyosat_va_qoidalar.docx \u00b7 read the passage \u2014 the source says the opposite"
+      }),
+      mk("cancel", {
+        st: oState,
+        fact: "Bekor qilish uchun kamida 2 soat oldin xabar berish kerak",
+        kind: "Policy · Uzbek",
+        pill: "Check the wording",
+        before: "\u00ab\u2026 Agar siz kelolmasangiz, iltimos, ",
+        match: "kamida 2 soat oldin xabar bering",
+        after: ". Ikki marta ogohlantirmasdan kelmagan bemorlar uchun keyingi navbat faqat oldindan to'lov bilan beriladi.\u00bb",
+        locator: "Siyosat_va_qoidalar.docx \u00b7 the second sentence wasn't captured as a fact"
+      })
+    ];
+
+    const openCount = (conflict ? 0 : 1) + decisions.filter(d => d.open || d.fixing).length;
+
+    const row = (id, fact, kind, ctx, locator) => {
+      const removed = !!this.state.removed[id];
+      return {
+        fact, kind, locator,
+        before: ctx[0], match: ctx[1], after: ctx[2],
+        live: !removed,
+        removed,
+        factStyle: "font-size: 15px; font-weight: 600; line-height: 1.45; color: " +
+          (removed ? "#646c78" : "#14181f") + "; text-decoration: " + (removed ? "line-through" : "none") + "; text-wrap: pretty;",
+        edit: () => {},
+        remove: () => this.setState(s => ({ removed: Object.assign({}, s.removed, { [id]: true }) })),
+        undo: () => this.setState(s => {
+          const next = Object.assign({}, s.removed);
+          delete next[id];
+          return { removed: next };
+        })
+      };
+    };
+
+    const extractedRows = [
+      row("e1", "Oddiy tahlillar 1\u20132 ish kunida tayyor bo'ladi", "Policy \u00b7 Uzbek",
+        ["\u00ab\u2026 Tahlil natijalari. ", "Oddiy qon va siydik tahlillari 1\u20132 ish kunida tayyor bo'ladi.", " Murakkab tahlillar, masalan gormonlar yoki biopsiya, 5 ish kunigacha vaqt olishi mumkin\u2026\u00bb"],
+        "Siyosat_va_qoidalar.docx"),
+      row("e2", "Bemorlar navbatsiz qabul qilinadi soat 13:00 gacha", "Policy \u00b7 Uzbek",
+        ["\u00ab\u2026 Qabul va navbat. ", "Bemorlar navbatsiz qabul qilinadi soat 13:00 gacha.", " Undan keyin qabul faqat oldindan kelishilgan vaqt bo'yicha amalga oshiriladi\u2026\u00bb"],
+        "Siyosat_va_qoidalar.docx"),
+      row("e3", "To'lov: naqd pul, karta, Payme yoki Click", "Policy \u00b7 Uzbek",
+        ["\u00ab\u2026 To'lov. ", "To'lov naqd pul, Payme yoki Click orqali amalga oshiriladi. Bank kartasi bilan to'lov ham qabul qilinadi.", " Sug'urta polisi bo'lgan bemorlar\u2026\u00bb"],
+        "Siyosat_va_qoidalar.docx")
+    ];
+
+    const groups = [{ title: "Read from Siyosat_va_qoidalar.docx", rows: extractedRows }];
+
+    // --- counts: every string below derives from these, nothing is hardcoded ---
+    const TYPED = 31;                                  // owner-typed, not listed on this screen
+    const acceptedCount = groups.reduce((n, g) => n + g.rows.length, 0);
+    const decisionCount = 1 + decisions.length;        // the conflict + each flagged fact
+    const extractedCount = acceptedCount + decisionCount;
+    const totalCount = TYPED + extractedCount;
+    const word = n => ["none", "one", "two", "three", "four", "five", "six"][n] || String(n);
+
+    const decisionsTitle = openCount === 0 ? "All sorted." : openCount === 1 ? "One thing needs you" : openCount + " things need you";
+
+    return {
+      headline: nothing ? "Nothing to check yet." : clean ? "Check what it read." : "Check what it read.",
+      lede: nothing
+        ? "The file we tried to read gave us nothing, so there's nothing here to look over."
+        : clean
+          ? "You added " + totalCount + " facts and " + TYPED + " of them you typed yourself, so there's nothing to check there. The " + extractedCount + " that came out of your file look sound — have a skim if you like."
+          : "You added " + totalCount + " facts. " + TYPED + " you typed yourself, so those are already confirmed. " + extractedCount + " came out of Siyosat_va_qoidalar.docx and " + word(openCount) + " of them need a moment.",
+      stillReading: view === "still reading",
+      nothingExtracted: nothing,
+      hasDecisions: !clean && !nothing,
+      allClean: clean,
+      cleanLine: "Nothing needs a decision. Have a skim if you like.",
+      decisionsTitle,
+      decisionsMeta: openCount === 0 ? "you can undo any of them" : "each one is a single tap",
+      conflictOpen: !conflict,
+      conflictDone: !!conflict,
+      conflictChoice: conflict === "150" ? "примерно 150 000 сум" : "примерно 250 000 сум",
+      pickNew: () => this.setState({ conflict: "250" }),
+      pickOld: () => this.setState({ conflict: "150" }),
+      undoConflict: () => this.setState({ conflict: null }),
+      decisions,
+      groups,
+      acceptedMeta: acceptedCount + (acceptedCount === 1 ? " fact read from your file, kept as-is" : " facts read from your file, kept as-is"),
+      typedNote: "The " + TYPED + " facts you typed yourself aren't listed here \u2014 you wrote them, so there was never anything to check. They went straight into your knowledge base.",
+      showAccepted: !nothing,
+      showContinue: !nothing,
+      continueLabel: openCount === 0 ? "Looks right — continue →" : "Continue with " + totalCount + " facts →",
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

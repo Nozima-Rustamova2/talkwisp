@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f4f6f9; color: #14181f; font-family: Manrope, system-ui, sans-serif; }
+  a { color: #1657c0; text-decoration: none; }
+  a:hover { color: #14181f; text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f6f9; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 14px 14px 40px;">
+
+  <div style="width: 100%; max-width: 468px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 4px 22px;">
+    <span style="font-family: Manrope, system-ui, sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">Talkwisp</span>
+    <div style="display: flex; align-items: center; gap: 2px; background: #e9edf3; border-radius: 999px; padding: 3px;">
+      <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+      <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+      <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+    </div>
+  </div>
+
+  <div style="width: 100%; max-width: 468px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 4px;">
+      <span style="font-size: 14px; font-weight: 600; color: #646c78;">Step 1 of 5</span>
+      <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Save and finish later</a>
+    </div>
+
+    <div style="background: #fff; border-radius: 16px; padding: 30px 24px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 24px;">
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <sc-if value="{{ isResumed }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size: 14px; line-height: 1.5; color: #5c6675; text-wrap: pretty;">Welcome back. You picked Clinic on 30 August.</span>
+        </sc-if>
+        <h1 style="margin: 0; font-family: Manrope, system-ui, sans-serif; font-size: clamp(27px, 7.5vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">What kind of business is this?</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">This shapes the examples we suggest and how your agent reads your price list.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <sc-for list="{{ types }}" as="type" hint-placeholder-count="5">
+          <button type="button" onClick="{{ type.pick }}" style="{{ type.rowStyle }}">
+            <span style="{{ type.labelStyle }}">{{ type.label }}</span>
+            <sc-if value="{{ type.on }}" hint-placeholder-val="{{ false }}">
+              <span style="flex: 0 0 auto; width: 20px; height: 20px; border-radius: 999px; background: #1f6feb; color: #fff; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center;">✓</span>
+            </sc-if>
+          </button>
+        </sc-for>
+        <sc-if value="{{ otherPicked }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 4px 0 0;">
+            <label style="font-size: 14px; font-weight: 600; color: #3a4250;">What should we call it?</label>
+            <input type="text" onInput="{{ onOtherName }}" placeholder="Veterinary clinic, driving school, photo studio…" style="width: 100%; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 14px 15px; font-family: inherit; font-size: 16px; color: #14181f;">
+            <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">{{ otherNote }}</p>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="border-top: 1px solid #eef1f5; padding-top: 20px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #3a4250; text-wrap: pretty;">Your agent answers repeat questions — hours, prices, who works when, what you offer.</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">That's what it does today. Bookings, payments and feedback aren't built yet.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <sc-if value="{{ showNudge }}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #8a5a12; background: #fdf0dc; border-radius: 10px; padding: 10px 12px; text-wrap: pretty;">Pick one so we can suggest the right examples.</p>
+        </sc-if>
+        <sc-if value="{{ saveFailed }}" hint-placeholder-val="{{ false }}">
+          <div style="background: #fdf0dc; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 14px; line-height: 1.5; color: #8a5a12; text-wrap: pretty;">We couldn't save that — the connection dropped. Your answer is still here.</span>
+            <a href="#" onClick="{{ retry }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 700; color: #8a5a12;">Try again</a>
+          </div>
+        </sc-if>
+        <button type="button" onClick="{{ onContinue }}" style="{{ continueStyle }}">{{ continueLabel }}</button>
+        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">Next: add what your agent should know.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;arrival&quot;,&quot;resumed&quot;,&quot;something else&quot;,&quot;saving&quot;,&quot;error&quot;],&quot;default&quot;:&quot;arrival&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", picked: null, otherName: "", nudge: false, saving: false, failed: null };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; cursor: pointer; background: " +
+      (on ? "#fff" : "transparent") + "; color: " + (on ? "#14181f" : "#5c6675") +
+      "; box-shadow: " + (on ? "0 1px 2px rgba(20,24,31,0.12)" : "none") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "arrival";
+    const saving = this.state.saving || view === "saving";
+    const failed = this.state.failed ?? (view === "error");
+
+    const defaultPick = view === "resumed" ? "clinic" : view === "something else" ? "other" : view === "saving" || view === "error" ? "clinic" : null;
+    const picked = this.state.picked ?? defaultPick;
+
+    const labels = [
+      { id: "clinic", label: "Clinic" },
+      { id: "salon", label: "Salon" },
+      { id: "tutoring", label: "Tutoring centre" },
+      { id: "service", label: "Service business" },
+      { id: "other", label: "Something else" }
+    ];
+
+    const types = labels.map(t => {
+      const on = picked === t.id;
+      return {
+        label: t.label,
+        on,
+        rowStyle: "display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; min-height: 52px; padding: 13px 16px; border-radius: 12px; font-family: inherit; cursor: " +
+          (saving ? "default" : "pointer") + "; background: " + (on ? "#f5f9ff" : "#fff") +
+          "; border: 1px solid " + (on ? "#d5e2f7" : "#dfe4ec") + "; opacity: " + (saving ? "0.65" : "1") + ";",
+        labelStyle: "font-size: 16px; line-height: 1.35; color: #14181f; font-weight: " + (on ? "700" : "500") + ";",
+        pick: () => { if (!saving) this.setState({ picked: t.id, nudge: false }); }
+      };
+    });
+
+    const named = this.state.otherName.trim().length > 0;
+
+    return {
+      types,
+      isResumed: view === "resumed",
+      otherPicked: picked === "other",
+      onOtherName: e => this.setState({ otherName: e.target.value }),
+      otherNote: named
+        ? "We'll suggest examples for that and call the people who message you your customers."
+        : "Leave this blank and you'll get general examples — hours, prices, what you offer — and we'll say \u201Ccustomers\u201D rather than something closer to home.",
+      showNudge: this.state.nudge && !picked,
+      saveFailed: failed,
+      retry: () => this.setState({ failed: false }),
+      onContinue: () => {
+        if (!picked) this.setState({ nudge: true });
+        else this.setState({ saving: true, nudge: false });
+      },
+      continueLabel: saving ? "Saving…" : "Continue",
+      continueStyle: "display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9); opacity: " + (saving ? "0.75" : "1") + ";",
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

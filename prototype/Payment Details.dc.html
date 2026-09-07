@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f4f6f9; color: #14181f; font-family: Manrope, system-ui, sans-serif; }
+  a { color: #1657c0; text-decoration: none; }
+  a:hover { color: #14181f; text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; align-items: stretch; background: #f4f6f9; font-family: Manrope, system-ui, sans-serif;">
+
+  <nav style="flex: 0 0 232px; background: #fff; padding: 18px 0; display: flex; flex-direction: column; gap: 24px; box-shadow: 1px 0 0 #eef1f5;">
+    <div style="padding: 0 18px; display: flex; flex-direction: column; gap: 2px;">
+      <span style="font-size: 18px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">Talkwisp</span>
+      <span style="font-size: 13px; color: #646c78;">Agent console</span>
+    </div>
+    <div style="padding: 0 10px; display: flex; flex-direction: column; gap: 2px;">
+      <a href="Dashboard.dc.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #3a4250; text-decoration: none;" style-hover="background: #f4f6f9; color: #14181f;">Dashboard</a>
+      <a href="Add Knowledge.dc.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #3a4250; text-decoration: none;" style-hover="background: #f4f6f9; color: #14181f;">Knowledge base</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #3a4250; text-decoration: none;" style-hover="background: #f4f6f9; color: #14181f;"><span>Gaps</span><span style="flex: 0 0 auto; font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e7f0ff; color: #1657c0;">41</span></a>
+      <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #3a4250; text-decoration: none;" style-hover="background: #f4f6f9; color: #14181f;">Conversations</a>
+      <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #3a4250; text-decoration: none;" style-hover="background: #f4f6f9; color: #14181f;">Test console</a>
+      <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #3a4250; text-decoration: none;" style-hover="background: #f4f6f9; color: #14181f;">Templates</a>
+      <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 700; color: #1657c0; background: #f5f9ff; text-decoration: none;">Settings</a>
+    </div>
+  </nav>
+
+  <main style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;">
+
+    <header style="background: #fff; box-shadow: 0 1px 0 #eef1f5; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 24px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 1px;">
+        <span style="font-size: 16px; font-weight: 700; color: #14181f;">Shifo Med — clinic</span>
+        <span style="font-size: 13px; color: #646c78;">Settings · Payment details</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 2px; background: #e9edf3; border-radius: 999px; padding: 3px;">
+          <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+          <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+          <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 30px; height: 30px; border-radius: 999px; background: #e7f0ff; color: #1657c0; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center;">DM</span>
+          <span style="font-size: 14px; font-weight: 600; color: #3a4250;">Dilnoza M.</span>
+        </div>
+      </div>
+    </header>
+
+    <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 760px;">
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <h1 style="margin: 0; font-size: clamp(26px, 3.4vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">Payment details</h1>
+        <p style="margin: 0; font-size: 16px; line-height: 1.55; color: #3a4250; max-width: 62ch; text-wrap: pretty;">Your agent sends these to a customer when they ask how to pay. Nothing here is checked by us — you're telling customers where to send money.</p>
+      </div>
+
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <section style="background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 14px;">
+          <span style="font-size: 19px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.25; color: #14181f;">No card added yet.</span>
+          <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #3a4250; max-width: 60ch; text-wrap: pretty;">Until you add these, your agent tells customers you'll get back to them about payment — it won't invent a number or take an order through to confirmation.</p>
+          <button type="button" onClick="{{ startEdit }}" style="align-self: flex-start; flex: 0 0 auto; min-height: 48px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 20px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">Add payment details</button>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isSaved }}" hint-placeholder-val="{{ true }}">
+        <section style="background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+            <span style="font-size: 13px; font-weight: 600; color: #646c78;">Where customers send money</span>
+            <button type="button" onClick="{{ startEdit }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: transparent; border: 1px solid #dfe4ec; border-radius: 12px; padding: 0 16px; font-family: inherit; font-size: 14px; font-weight: 700; color: #14181f; cursor: pointer;">Change</button>
+          </div>
+          <span style="font-size: 27px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.25; color: #14181f; font-variant-numeric: tabular-nums;">8600 1234 5678 4417</span>
+          <span style="font-size: 15px; line-height: 1.5; color: #3a4250;">RASULOVA NIGORA · Kapitalbank</span>
+          <span style="font-size: 13px; line-height: 1.5; color: #646c78;">Last changed 12 August. Shown to customers exactly as written here.</span>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isEditing }}" hint-placeholder-val="{{ false }}">
+        <section style="background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 18px;">
+
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 14px; font-weight: 700; color: #14181f;">Card number</label>
+            <input type="text" inputmode="numeric" defaultValue="{{ cardValue }}" placeholder="8600 1234 5678 9012" style="width: 100%; max-width: 22ch; background: #fff; border: 1px solid {{ cardBorder }}; border-radius: 12px; padding: 14px 15px; font-family: inherit; font-size: 19px; font-weight: 600; letter-spacing: 0.04em; color: #14181f; font-variant-numeric: tabular-nums;">
+            <sc-if value="{{ cardInvalid }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size: 14px; line-height: 1.5; color: #8a5a12; background: #fdf0dc; border-radius: 10px; padding: 10px 12px; text-wrap: pretty;">{{ cardInvalidText }}</span>
+            </sc-if>
+            <span style="font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">Shown in full — your customers see this number anyway, so you should be able to check it against your bank app without a tap.</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 14px; font-weight: 700; color: #14181f;">Cardholder name</label>
+            <input type="text" defaultValue="RASULOVA NIGORA" placeholder="RASULOVA NIGORA" style="width: 100%; max-width: 34ch; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 13px 14px; font-family: inherit; font-size: 16px; color: #14181f;">
+            <span style="font-size: 13px; line-height: 1.5; color: #8a5a12; text-wrap: pretty;">Exactly as it appears on the card. If it doesn't match, transfers can be rejected.</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 14px; font-weight: 700; color: #14181f;">Bank</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <sc-for list="{{ banks }}" as="bank" hint-placeholder-count="7">
+                <button type="button" onClick="{{ bank.pick }}" style="{{ bank.style }}">{{ bank.label }}</button>
+              </sc-for>
+            </div>
+            <sc-if value="{{ bankOther }}" hint-placeholder-val="{{ false }}">
+              <input type="text" placeholder="Which bank?" style="width: 100%; max-width: 30ch; margin-top: 4px; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 13px 14px; font-family: inherit; font-size: 16px; color: #14181f;">
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ hasInFlight }}" hint-placeholder-val="{{ false }}">
+            <div style="background: #fdf0dc; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span style="font-size: 15px; font-weight: 700; line-height: 1.4; color: #14181f; text-wrap: pretty;">{{ inFlightTitle }}</span>
+                <span style="font-size: 14px; line-height: 1.55; color: #6b4a10; text-wrap: pretty;">They were sent the old card and haven't paid yet. Only you know whether the old card still works.</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <sc-for list="{{ inFlightChoices }}" as="choice" hint-placeholder-count="2">
+                  <button type="button" onClick="{{ choice.pick }}" style="{{ choice.style }}">
+                    <span style="flex: 0 0 auto; width: 20px; height: 20px; border-radius: 999px; border: 1px solid {{ choice.dotBorder }}; background: {{ choice.dotFill }}; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff;">{{ choice.mark }}</span>
+                    <span style="min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left;">
+                      <span style="font-size: 15px; font-weight: {{ choice.weight }}; line-height: 1.35; color: #14181f;">{{ choice.label }}</span>
+                      <span style="font-size: 13px; line-height: 1.45; color: #5c6675; text-wrap: pretty;">{{ choice.sub }}</span>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="border-top: 1px solid #eef1f5; padding-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <button type="button" onClick="{{ save }}" style="flex: 0 0 auto; min-height: 48px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 20px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">{{ saveLabel }}</button>
+            <button type="button" onClick="{{ cancel }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: transparent; border: none; padding: 0 8px; font-family: inherit; font-size: 15px; font-weight: 600; color: #5c6675; cursor: pointer;">Cancel</button>
+          </div>
+
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showInstructions }}" hint-placeholder-val="{{ true }}">
+        <section style="background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <h2 style="margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.2; color: #14181f;">What the agent says</h2>
+            <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #5c6675; max-width: 64ch; text-wrap: pretty;">One message per language — the customer gets the one matching how they wrote to you. The card number is always inserted from above, so don't type it into the text.</p>
+          </div>
+
+          <sc-if value="{{ hasMissingLang }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size: 14px; line-height: 1.55; color: #8a5a12; background: #fdf0dc; border-radius: 10px; padding: 10px 12px; text-wrap: pretty;">{{ missingLangText }}</span>
+          </sc-if>
+
+          <div style="display: flex; flex-direction: column; gap: 18px;">
+            <sc-for list="{{ templates }}" as="tpl" hint-placeholder-count="3">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                  <label style="font-size: 14px; font-weight: 700; color: #14181f;">{{ tpl.language }}</label>
+                  <span style="font-size: 13px; color: {{ tpl.stateColor }};">{{ tpl.state }}</span>
+                </div>
+                <textarea rows="{{ tpl.rows }}" defaultValue="{{ tpl.body }}" placeholder="{{ tpl.placeholder }}" style="width: 100%; background: #fff; border: 1px solid {{ tpl.border }}; border-radius: 12px; padding: 13px 14px; font-family: inherit; font-size: 15px; line-height: 1.55; color: #14181f; resize: vertical;"></textarea>
+                <sc-if value="{{ tpl.hasPreview }}" hint-placeholder-val="{{ true }}">
+                  <div style="background: #f7f9fc; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;">
+                    <span style="font-size: 12px; font-weight: 700; color: #646c78;">What the customer receives</span>
+                    <div style="align-self: flex-start; max-width: 44ch; background: #e7f0ff; border-radius: 14px 14px 14px 4px; padding: 10px 13px;">
+                      <span style="font-size: 14px; line-height: 1.55; color: #14181f; white-space: pre-line; text-wrap: pretty;">{{ tpl.preview }}</span>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="border-top: 1px solid #eef1f5; padding-top: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <button type="button" onClick="{{ save }}" style="flex: 0 0 auto; min-height: 48px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 20px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">{{ saveLabel }}</button>
+            <span style="font-size: 13px; color: #646c78;">{{ savedNote }}</span>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showConsequence }}" hint-placeholder-val="{{ true }}">
+        <section style="display: flex; flex-direction: column; gap: 6px; padding: 0 4px;">
+          <span style="font-size: 15px; font-weight: 700; color: #14181f;">What this lets the agent do</span>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #5c6675; max-width: 66ch; text-wrap: pretty;">Your agent can answer “how do I pay?” and take an order as far as awaiting payment. When a customer says they've sent the money, you confirm it yourself in Telegram — we never check whether money arrived, so an order is only ever <strong style="font-weight: 700; color: #3a4250;">confirmed by you</strong>.</p>
+          <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">See open orders</a>
+        </section>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;saved&quot;,&quot;empty&quot;,&quot;changing card&quot;,&quot;invalid number&quot;,&quot;missing a language&quot;,&quot;saving&quot;],&quot;default&quot;:&quot;saved&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;ordersAwaitingPayment&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:3,&quot;min&quot;:0,&quot;max&quot;:9,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Context&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", mode: null, bank: "Kapitalbank", inFlight: null };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; cursor: pointer; background: " +
+      (on ? "#fff" : "transparent") + "; color: " + (on ? "#14181f" : "#5c6675") +
+      "; box-shadow: " + (on ? "0 1px 2px rgba(20,24,31,0.12)" : "none") + ";";
+  }
+
+  chip(on) {
+    return "flex: 0 0 auto; min-height: 44px; white-space: nowrap; padding: 0 15px; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: " +
+      (on ? "700" : "600") + "; cursor: pointer; background: " + (on ? "#e7f0ff" : "#fff") +
+      "; border: 1px solid " + (on ? "#9dc0f2" : "#dfe4ec") + "; color: " + (on ? "#1657c0" : "#3a4250") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "saved";
+    const orders = this.props.ordersAwaitingPayment ?? 3;
+
+    const mode = this.state.mode ?? (
+      view === "empty" ? "empty" :
+      view === "changing card" || view === "invalid number" ? "editing" : "saved"
+    );
+    const saving = view === "saving";
+    const invalid = view === "invalid number";
+    const missingRu = view === "missing a language";
+
+    // Digits and length only — no checksum. A validator that rejects a correct
+    // card number is a dead end with money behind it.
+    const cardInvalidText = invalid
+      ? "A card number is 16 digits. That's 14 \u2014 check it against your bank app and try again. Nothing has been changed."
+      : "";
+
+    const bankNames = ["Kapitalbank", "Hamkorbank", "Ipoteka Bank", "TBC", "Anor Bank", "Uzum Bank", "Other"];
+    const banks = bankNames.map(label => ({
+      label,
+      style: this.chip(this.state.bank === label),
+      pick: () => this.setState({ bank: label })
+    }));
+
+    const inFlightPick = this.state.inFlight ?? "keep";
+    const choiceDefs = [
+      { id: "keep", label: "Let those finish on the old card", sub: "Nothing changes for them. New orders use the new card." },
+      { id: "notify", label: "Send those customers the new details", sub: "We message all " + orders + " with the new card and reset their deadline." }
+    ];
+    const inFlightChoices = choiceDefs.map(c => {
+      const on = inFlightPick === c.id;
+      return {
+        label: c.label,
+        sub: c.sub,
+        mark: on ? "\u2713" : "",
+        weight: on ? "700" : "600",
+        dotBorder: on ? "#1f6feb" : "#c3cad6",
+        dotFill: on ? "#1f6feb" : "transparent",
+        style: "display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 44px; padding: 12px 14px; border-radius: 12px; font-family: inherit; cursor: pointer; background: " +
+          (on ? "#fff" : "rgba(255,255,255,0.55)") + "; border: 1px solid " + (on ? "#e0d0b0" : "#ecdcbd") + ";",
+        pick: () => this.setState({ inFlight: c.id })
+      };
+    });
+
+    const card = "8600 1234 5678 4417";
+    const holder = "RASULOVA NIGORA";
+    const bankLabel = this.state.bank === "Other" ? "your bank" : this.state.bank;
+
+    const tplDefs = [
+      {
+        language: "Uzbek",
+        body: "To'lov uchun karta: {{card}}\nKarta egasi: {{name}} ({{bank}})\nSumma: {{amount}}\nTo'lagandan keyin menga yozing, xo'jayin tasdiqlaydi.",
+        filled: "To'lov uchun karta: " + card + "\nKarta egasi: " + holder + " (" + bankLabel + ")\nSumma: 250 000 so'm\nTo'lagandan keyin menga yozing, xo'jayin tasdiqlaydi."
+      },
+      {
+        language: "Russian",
+        body: "\u041a\u0430\u0440\u0442\u0430 \u0434\u043b\u044f \u043e\u043f\u043b\u0430\u0442\u044b: {{card}}\n\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446: {{name}} ({{bank}})\n\u0421\u0443\u043c\u043c\u0430: {{amount}}\n\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u043c\u043d\u0435 \u043f\u043e\u0441\u043b\u0435 \u043e\u043f\u043b\u0430\u0442\u044b \u2014 \u0432\u043b\u0430\u0434\u0435\u043b\u0435\u0446 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442.",
+        filled: "\u041a\u0430\u0440\u0442\u0430 \u0434\u043b\u044f \u043e\u043f\u043b\u0430\u0442\u044b: " + card + "\n\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446: " + holder + " (" + bankLabel + ")\n\u0421\u0443\u043c\u043c\u0430: 250 000 \u0441\u0443\u043c\n\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u043c\u043d\u0435 \u043f\u043e\u0441\u043b\u0435 \u043e\u043f\u043b\u0430\u0442\u044b \u2014 \u0432\u043b\u0430\u0434\u0435\u043b\u0435\u0446 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442."
+      },
+      {
+        language: "English",
+        body: "Card for payment: {{card}}\nCardholder: {{name}} ({{bank}})\nAmount: {{amount}}\nMessage me once you've sent it and the owner will confirm.",
+        filled: "Card for payment: " + card + "\nCardholder: " + holder + " (" + bankLabel + ")\nAmount: 250 000 UZS\nMessage me once you've sent it and the owner will confirm."
+      }
+    ];
+
+    const templates = tplDefs.map(t => {
+      const blank = missingRu && t.language === "Russian";
+      return {
+        language: t.language,
+        body: blank ? "" : t.body,
+        placeholder: "Card for payment: {{card}} \u2026",
+        border: blank ? "#e0d0b0" : "#dfe4ec",
+        state: blank ? "Empty" : "Edited by you",
+        stateColor: blank ? "#8a5a12" : "#646c78",
+        hasPreview: !blank,
+        // derived from the content + 1 line of edit headroom \u2014 never a fixed guess
+        rows: blank ? 3 : t.body.split("\n").length + 1,
+        preview: t.filled
+      };
+    });
+
+    return {
+      isEmpty: mode === "empty",
+      isSaved: mode === "saved",
+      isEditing: mode === "editing",
+      startEdit: () => this.setState({ mode: "editing" }),
+      cancel: () => this.setState({ mode: "saved", inFlight: null }),
+      save: () => this.setState({ mode: "saved", inFlight: null }),
+      saveLabel: saving ? "Saving\u2026" : "Save",
+      savedNote: "Last saved 12 August.",
+
+      cardValue: invalid ? "8600 1234 5678" : card,
+      cardBorder: invalid ? "#e0d0b0" : "#dfe4ec",
+      cardInvalid: invalid,
+      cardInvalidText,
+
+      banks,
+      bankOther: this.state.bank === "Other",
+
+      hasInFlight: mode === "editing" && orders > 0,
+      inFlightTitle: orders === 1
+        ? "One order is waiting for payment on the old card"
+        : orders + " orders are waiting for payment on the old card",
+      inFlightChoices,
+
+      showInstructions: mode !== "empty",
+      hasMissingLang: missingRu,
+      missingLangText: "Your Russian message is empty. A customer who writes in Russian gets no payment details at all \u2014 the agent will say it can't help with payment.",
+      templates,
+
+      showConsequence: mode !== "empty",
+
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

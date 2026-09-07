@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<!--
+  CUT SCREEN — kept as a record, not part of the product. Do not rebuild.
+
+  This was step 2 of onboarding: "What should your agent do?" (multi-select:
+  answer repeat questions / take bookings / collect payments in chat / collect
+  feedback). Cut on 2 Sep 2026.
+
+  WHY IT WAS CUT
+  Only one option — answering repeat questions — exists today, and it was
+  checked by default. So for nearly every owner the question could not change
+  what happened next: it was a demand-signal survey wearing a configuration
+  step's clothes, sitting between the owner and a working agent.
+
+  WHERE IT WENT
+  - The one live statement folded into step 1 (business type), as its second
+    half: pick your business type, see one line on what the agent does today.
+  - The three unbuilt intents moved to a "What else should it do?" card on the
+    dashboard, shown only AFTER the agent has answered something real. An owner
+    who has seen it work knows better what they want next.
+
+  BEFORE REBUILDING THIS, CHECK: do at least two of the four options actually
+  exist and configure something downstream? If not, the same failure returns.
+
+  Full rationale in docs/design-decisions.md (Screen B section).
+-->
+
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-fe763c99-19b8-4614-a4f8-6d4eab48130a/styles.css">
+<script src="_ds/industry-fe763c99-19b8-4614-a4f8-6d4eab48130a/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); }
+  a { color: var(--color-accent-700); text-decoration: none; }
+  a:hover { color: var(--color-accent-800); text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: var(--color-bg); font-family: var(--font-body);">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 20.4px; padding: 13.6px 27.2px; border-bottom: 1px solid var(--color-divider); flex-wrap: wrap;">
+    <div style="display: flex; flex-direction: column; gap: 1.7px;">
+      <span style="font-family: var(--font-heading); font-weight: 700; font-size: 22px; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1;">Talkwisp</span>
+      <span style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-neutral-600);">Setting up your agent</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 20.4px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: stretch; border: 1px solid var(--color-divider);">
+        <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+        <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+        <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+      </div>
+      <a href="#" style="font-size: 14px; color: var(--color-neutral-700); white-space: nowrap;">Save and finish later</a>
+    </div>
+  </header>
+
+  <div style="padding: 27.2px; display: flex; flex-direction: column; gap: 27.2px; width: 100%; max-width: 900px;">
+
+    <section style="display: flex; flex-direction: column; gap: 6.8px;">
+      <div style="display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid var(--color-divider);">
+        <sc-for list="{{ steps }}" as="step" hint-placeholder-count="7">
+          <div style="{{ step.cellStyle }}">
+            <span style="font-family: var(--font-heading); font-size: 13px; letter-spacing: 0.06em;">{{ step.n }}</span>
+            <span style="font-size: 12px; line-height: 1.2; text-wrap: pretty;">{{ step.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <span style="font-size: 13px; color: var(--color-neutral-600); text-wrap: pretty;">Saved as you go. You can close this and come back — you'll land back here.</span>
+    </section>
+
+    <sc-if value="{{ isResumed }}" hint-placeholder-val="{{ false }}">
+      <section class="blueprint" style="position: relative; padding: 13.6px 20.4px; display: flex; flex-direction: column; gap: 3.4px;">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <span style="font-family: var(--font-heading); font-size: 22px; line-height: 1.1;">Welcome back.</span>
+        <span style="font-size: 15px; line-height: 1.45; color: var(--color-neutral-700); text-wrap: pretty;">You left off here on 30 August. Your business type — clinic — and what you picked below are saved.</span>
+      </section>
+    </sc-if>
+
+    <section style="display: flex; flex-direction: column; gap: 6.8px;">
+      <h1 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: clamp(30px, 4vw, 42px); line-height: 1.05; letter-spacing: -0.01em; text-wrap: pretty;">What should your agent do?</h1>
+      <p style="margin: 0; font-size: 16px; line-height: 1.45; color: var(--color-neutral-700); max-width: 64ch; text-wrap: pretty;">Answering repeat questions is what it does today, and it's what we set up next. The other three aren't built yet — tick them and we'll tell you the moment they are.</p>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 13.6px;">
+      <sc-for list="{{ options }}" as="opt" hint-placeholder-count="4">
+        <div onClick="{{ opt.toggle }}" class="blueprint" style="{{ opt.plateStyle }}">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <span style="{{ opt.boxStyle }}">{{ opt.mark }}</span>
+          <div style="min-width: 0; display: flex; flex-direction: column; gap: 5px;">
+            <div style="display: flex; align-items: baseline; gap: 10.2px; flex-wrap: wrap;">
+              <span style="font-family: var(--font-heading); font-weight: 600; font-size: 26px; line-height: 1.05;">{{ opt.name }}</span>
+              <sc-if value="{{ opt.hasTag }}" hint-placeholder-val="{{ true }}">
+                <span class="{{ opt.tagClass }}" style="flex: 0 0 auto; white-space: nowrap; height: auto; font-size: 13px;">{{ opt.tag }}</span>
+              </sc-if>
+            </div>
+            <span style="font-size: 15px; line-height: 1.45; color: var(--color-neutral-700); max-width: 62ch; text-wrap: pretty;">{{ opt.consequence }}</span>
+            <span style="font-size: 14px; line-height: 1.4; color: {{ opt.changesColor }}; max-width: 62ch; text-wrap: pretty;">{{ opt.changes }}</span>
+          </div>
+        </div>
+      </sc-for>
+      <span style="font-size: 14px; color: var(--color-neutral-600); text-wrap: pretty;">You can turn any of these on later in Settings. Nothing here is permanent.</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10.2px;">
+      <sc-if value="{{ showNudge }}" hint-placeholder-val="{{ false }}">
+        <span style="font-size: 15px; color: var(--color-accent-900); text-wrap: pretty;">Pick at least one. Most people start with answering repeat questions.</span>
+      </sc-if>
+      <sc-if value="{{ saveFailed }}" hint-placeholder-val="{{ false }}">
+        <div class="blueprint" style="position: relative; padding: 13.6px 20.4px; display: flex; flex-direction: column; gap: 5px;">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <span style="font-size: 15px; line-height: 1.4;">We couldn't save that — the connection dropped. Your answers are still here.</span>
+          <div style="display: flex; align-items: center; gap: 13.6px; flex-wrap: wrap;">
+            <a href="#" onClick="{{ retry }}" style="font-size: 14px;">Try again</a>
+            <span style="font-size: 13px; color: var(--color-neutral-600);">You can keep going — we'll save when you're back online.</span>
+          </div>
+        </div>
+      </sc-if>
+      <div style="display: flex; align-items: center; gap: 13.6px 20.4px; flex-wrap: wrap;">
+        <a href="#" style="font-size: 15px; color: var(--color-neutral-700); white-space: nowrap;">Back</a>
+        <button type="button" onClick="{{ onContinue }}" class="btn btn-primary blueprint" style="position: relative; display: block; text-align: left; flex: 0 0 auto; white-space: nowrap; height: auto; min-height: 0; font-size: 17px; padding: 13.6px 20.4px; cursor: pointer;">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          {{ continueLabel }}
+        </button>
+        <span style="font-size: 14px; color: var(--color-neutral-600); text-wrap: pretty;">{{ selectionSummary }}</span>
+      </div>
+      <span style="font-size: 13px; color: var(--color-neutral-600); text-wrap: pretty;">Next: add what your agent should know. Nothing goes live until you've tested it yourself.</span>
+    </section>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;arrival&quot;,&quot;resumed&quot;,&quot;saving&quot;,&quot;error&quot;],&quot;default&quot;:&quot;arrival&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;businessType&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Clinic&quot;,&quot;Salon&quot;,&quot;Tutoring centre&quot;,&quot;Service business&quot;],&quot;default&quot;:&quot;Clinic&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;From step 1&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", picked: null, nudge: false, saving: false, failed: null };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: var(--font-heading); font-size: 14px; letter-spacing: 0.06em; padding: 5px 10px; cursor: pointer; border: none; background: " +
+      (on ? "var(--color-accent)" : "transparent") + "; color: " + (on ? "#fff" : "var(--color-neutral-700)") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "arrival";
+    const trade = this.props.businessType ?? "Clinic";
+    const saving = this.state.saving || view === "saving";
+    const failed = this.state.failed ?? (view === "error");
+
+    const customer = { Clinic: "patient", Salon: "client", "Tutoring centre": "parent", "Service business": "customer" }[trade] || "customer";
+    const example = {
+      Clinic: "Opening hours, roughly what a visit costs, which doctors work which days — the questions you get twenty times a day.",
+      Salon: "Opening hours, roughly what a cut or colour costs, which stylists work which days — the questions you get twenty times a day.",
+      "Tutoring centre": "Class times, roughly what a course costs, which tutors teach what — the questions you get twenty times a day.",
+      "Service business": "Opening hours, roughly what a job costs, what areas you cover — the questions you get twenty times a day."
+    }[trade] || "The questions you get twenty times a day.";
+
+    const defaults = view === "resumed" ? ["core", "feedback"] : ["core"];
+    const picked = this.state.picked ?? defaults;
+
+    const defs = [
+      {
+        id: "core", name: "Answer repeat questions", live: true,
+        consequence: example,
+        changes: "Sets up your knowledge base next — you'll add your info and check what it read.",
+        tag: "Works today", tagClass: "tag tag-accent"
+      },
+      {
+        id: "bookings", name: "Take bookings", live: false,
+        consequence: "A " + customer + " asks for a time and the agent writes the request down for you to confirm.",
+        changes: "Not built yet. Ticking it puts you on the list — we'll email you when it's ready.",
+        tag: "Not built yet", tagClass: "tag tag-outline"
+      },
+      {
+        id: "payments", name: "Collect payments in chat", live: false,
+        consequence: "The agent sends a Payme or Click link in the conversation and tells you when it's paid.",
+        changes: "Not built yet. Ticking it puts you on the list — we'll email you when it's ready.",
+        tag: "Not built yet", tagClass: "tag tag-outline"
+      },
+      {
+        id: "feedback", name: "Collect feedback", live: false,
+        consequence: "After a conversation ends the agent asks the " + customer + " how it went.",
+        changes: "Not built yet. Ticking it puts you on the list — we'll email you when it's ready.",
+        tag: "Not built yet", tagClass: "tag tag-outline"
+      }
+    ];
+
+    const options = defs.map(d => {
+      const on = picked.indexOf(d.id) !== -1;
+      const accent = on && d.live;
+      return {
+        name: d.name,
+        consequence: d.consequence,
+        changes: d.changes,
+        changesColor: d.live ? "var(--color-accent-700)" : "var(--color-neutral-600)",
+        hasTag: true,
+        tag: on && !d.live ? "On the list" : d.tag,
+        tagClass: on && !d.live ? "tag tag-accent" : d.tagClass,
+        mark: on ? "✕" : "",
+        plateStyle: "position: relative; padding: 20.4px; display: flex; align-items: flex-start; gap: 13.6px; cursor: " +
+          (saving ? "default" : "pointer") + "; background: " + (accent ? "var(--color-accent-100)" : "transparent") +
+          "; border-color: " + (on ? "var(--color-accent)" : "var(--color-divider)") + "; opacity: " + (saving ? "0.7" : "1") + ";",
+        boxStyle: "flex: 0 0 auto; width: 26px; height: 26px; margin-top: 3px; display: flex; align-items: center; justify-content: center; font-family: var(--font-heading); font-size: 17px; line-height: 1; border: 1px solid " +
+          (on ? "var(--color-accent)" : "var(--color-neutral-500)") + "; background: " + (on ? "var(--color-accent-200)" : "transparent") +
+          "; color: var(--color-accent-800);",
+        toggle: () => {
+          if (saving) return;
+          const next = picked.indexOf(d.id) !== -1 ? picked.filter(x => x !== d.id) : picked.concat([d.id]);
+          this.setState({ picked: next, nudge: false });
+        }
+      };
+    });
+
+    const liveCount = picked.indexOf("core") !== -1 ? 1 : 0;
+    const waiting = picked.filter(p => p !== "core").length;
+    let summary;
+    if (picked.length === 0) summary = "nothing picked";
+    else if (liveCount && waiting) summary = "answering questions now · " + waiting + (waiting === 1 ? " more on the list" : " more on the list");
+    else if (liveCount) summary = "answering questions";
+    else summary = waiting + " on the list · nothing to set up yet";
+
+    const stepLabels = ["Business", "What it does", "Add info", "Check it", "Test", "Telegram", "Live"];
+    const steps = stepLabels.map((label, i) => {
+      const n = i + 1;
+      const done = n < 2;
+      const now = n === 2;
+      return {
+        n: done ? "✓" : String(n),
+        label,
+        cellStyle: "padding: 10.2px; display: flex; flex-direction: column; gap: 3.4px; border-left: " +
+          (i === 0 ? "none" : "1px solid var(--color-divider)") + "; background: " +
+          (now ? "var(--color-accent)" : "transparent") + "; color: " +
+          (now ? "#fff" : done ? "var(--color-text)" : "var(--color-neutral-600)") + ";"
+      };
+    });
+
+    return {
+      steps,
+      isResumed: view === "resumed",
+      options,
+      showNudge: this.state.nudge && picked.length === 0,
+      saveFailed: failed,
+      retry: () => this.setState({ failed: false }),
+      onContinue: () => {
+        if (picked.length === 0) this.setState({ nudge: true });
+        else this.setState({ saving: true, nudge: false });
+      },
+      continueLabel: saving ? "Saving…" : "Continue",
+      selectionSummary: summary,
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

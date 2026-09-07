@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f4f6f9; color: #14181f; font-family: Manrope, system-ui, sans-serif; }
+  a { color: #1657c0; text-decoration: none; }
+  a:hover { color: #14181f; text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f6f9; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 14px 14px 40px;">
+
+  <div style="width: 100%; max-width: 700px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 4px 22px;">
+    <span style="font-size: 18px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">Talkwisp</span>
+    <div style="display: flex; align-items: center; gap: 2px; background: #e9edf3; border-radius: 999px; padding: 3px;">
+      <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+      <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+      <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+    </div>
+  </div>
+
+  <div style="width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 4px;">
+      <span style="font-size: 14px; font-weight: 600; color: #646c78;">Step 5 of 5</span>
+      <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Save and finish later</a>
+    </div>
+
+    <div style="background: #fff; border-radius: 16px; padding: 28px 24px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 24px;">
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <h1 style="margin: 0; font-size: clamp(27px, 7.5vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">{{ headline }}</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">{{ lede }}</p>
+        <sc-if value="{{ showInstagramNote }}" hint-placeholder-val="{{ true }}">
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #646c78; text-wrap: pretty;">Instagram is coming; Telegram is what works today.</p>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+
+          <sc-if value="{{ returned }}" hint-placeholder-val="{{ false }}">
+            <div style="background: #f5f9ff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 12px 14px;">
+              <span style="font-size: 15px; font-weight: 600; line-height: 1.45; color: #14181f; text-wrap: pretty;">Welcome back — paste your code below. Your place here was kept.</span>
+            </div>
+          </sc-if>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <sc-for list="{{ paths }}" as="path" hint-placeholder-count="2">
+              <button type="button" onClick="{{ path.pick }}" style="{{ path.rowStyle }}">
+                <span style="flex: 0 0 auto; width: 20px; height: 20px; margin-top: 3px; border-radius: 999px; border: 1px solid {{ path.dotBorder }}; background: {{ path.dotFill }}; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff;">{{ path.mark }}</span>
+                <span style="min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                  <span style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                    <span style="{{ path.labelStyle }}">{{ path.label }}</span>
+                    <sc-if value="{{ path.recommended }}" hint-placeholder-val="{{ false }}">
+                      <span style="flex: 0 0 auto; white-space: nowrap; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #e7f0ff; color: #1657c0;">Recommended</span>
+                    </sc-if>
+                  </span>
+                  <span style="font-size: 14px; line-height: 1.5; color: #5c6675; text-wrap: pretty;">{{ path.sub }}</span>
+                </span>
+              </button>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <sc-for list="{{ instructions }}" as="step" hint-placeholder-count="3">
+              <div style="display: flex; align-items: flex-start; gap: 12px;">
+                <span style="flex: 0 0 auto; width: 26px; height: 26px; border-radius: 999px; background: #f2f5f9; color: #3a4250; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center;">{{ step.n }}</span>
+                <div style="min-width: 0; display: flex; flex-direction: column; gap: 8px;">
+                  <span style="font-size: 16px; font-weight: 600; line-height: 1.45; color: #14181f; text-wrap: pretty;">{{ step.title }}</span>
+                  <sc-if value="{{ step.hasBody }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size: 14px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">{{ step.body }}</span>
+                  </sc-if>
+                  <sc-if value="{{ step.hasCommand }}" hint-placeholder-val="{{ false }}">
+                    <span style="align-self: flex-start; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 14px; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 8px; padding: 6px 10px; color: #14181f;">{{ step.command }}</span>
+                  </sc-if>
+                  <sc-if value="{{ step.hasButton }}" hint-placeholder-val="{{ false }}">
+                    <button type="button" style="align-self: flex-start; flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #14181f; cursor: pointer;">{{ step.buttonLabel }}</button>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="border-top: 1px solid #eef1f5; padding-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+            <label style="font-size: 14px; font-weight: 600; color: #3a4250;">Paste the code here</label>
+            <input type="text" defaultValue="{{ tokenValue }}" placeholder="8123456789:AAF…" style="width: 100%; background: #fff; border: 1px solid {{ tokenBorder }}; border-radius: 12px; padding: 14px 15px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 15px; color: #14181f;">
+            <sc-if value="{{ tokenError }}" hint-placeholder-val="{{ false }}">
+              <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #8a5a12; background: #fdf0dc; border-radius: 10px; padding: 10px 12px; text-wrap: pretty;">{{ tokenErrorText }}</p>
+            </sc-if>
+            <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">We use this to send and receive messages as your bot. Nothing else.</p>
+            <button type="button" onClick="{{ connect }}" style="{{ connectStyle }}">{{ connectLabel }}</button>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isConnected }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+
+          <div style="background: #f5f9ff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 19px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.25; color: #14181f;">Connected — @shifomed_bot</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #3a4250; text-wrap: pretty;">{{ connectedSub }}</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-size: 15px; font-weight: 700; color: #14181f;">{{ selfTestTitle }}</span>
+            <sc-if value="{{ selfTestPassed }}" hint-placeholder-val="{{ true }}">
+              <div style="background: #f7f9fc; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-size: 12px; font-weight: 700; color: #646c78;">We sent</span>
+                  <span style="font-size: 14px; line-height: 1.5; color: #3a4250; text-wrap: pretty;">«Ish vaqtingiz qanday?»</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-size: 12px; font-weight: 700; color: #1657c0;">It answered</span>
+                  <span style="font-size: 14px; line-height: 1.5; color: #14181f; text-wrap: pretty;">«Ish vaqti: dushanbadan shanbagacha, 09:00–18:00. Yakshanba — dam olish kuni.»</span>
+                </div>
+                <span style="font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">Sent through Telegram to your bot and back, just now — not a simulation.</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ selfTestFailed }}" hint-placeholder-val="{{ false }}">
+              <div style="background: #fdf0dc; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+                <span style="font-size: 14px; line-height: 1.55; color: #8a5a12; text-wrap: pretty;">We sent «Ish vaqtingiz qanday?» to your bot and nothing came back within 20 seconds. The code is valid, so the likeliest cause is that another service is still connected to this bot and receiving its messages instead.</span>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                  <button type="button" onClick="{{ retryTest }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #fff; border: 1px solid #e0d0b0; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #8a5a12; cursor: pointer;">Try the test again</button>
+                  <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #8a5a12;">What to check in BotFather</a>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="border-top: 1px solid #eef1f5; padding-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+            <sc-if value="{{ selfTestPassed }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button type="button" style="display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">Take it live →</button>
+                <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #3a4250; text-wrap: pretty;">Your customers can message @shifomed_bot from the moment you tap this. Until then, only you can reach it.</p>
+              </div>
+            </sc-if>
+            <sc-if value="{{ selfTestFailed }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #3a4250; text-wrap: pretty;">We won't take you live while the bot isn't answering — a live agent that says nothing is worse than one that isn't connected yet.</p>
+                <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 15px; font-weight: 600; color: #5c6675;">Leave it connected and finish later</a>
+              </div>
+            </sc-if>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+        <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #8a5a12; background: #fdf0dc; border-radius: 10px; padding: 12px 14px; text-wrap: pretty;">We can't check the code right now — the connection dropped. It's saved and we'll try again on its own. Nothing you've pasted is lost.</p>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;new bot&quot;,&quot;existing bot&quot;,&quot;returned from telegram&quot;,&quot;checking&quot;,&quot;bad token&quot;,&quot;already in use&quot;,&quot;connected&quot;,&quot;self-test failed&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;new bot&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;botName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;shifomed&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;From step 1&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", path: null, checking: false, stage: null };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; cursor: pointer; background: " +
+      (on ? "#fff" : "transparent") + "; color: " + (on ? "#14181f" : "#5c6675") +
+      "; box-shadow: " + (on ? "0 1px 2px rgba(20,24,31,0.12)" : "none") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "new bot";
+    const business = this.props.botName ?? "shifomed";
+
+    const stage = this.state.stage ?? (
+      view === "connected" || view === "self-test failed" ? "connected" : "setup"
+    );
+    const checking = this.state.checking || view === "checking";
+    const badToken = view === "bad token";
+    const inUse = view === "already in use";
+    const offline = view === "offline";
+    const failed = view === "self-test failed";
+
+    const chosen = this.state.path ?? (view === "existing bot" ? "existing" : "new");
+
+    const pathDefs = [
+      {
+        id: "new", label: "Create a new bot", recommended: true,
+        sub: "Two minutes in Telegram. You'll get a name like @" + business + "_bot."
+      },
+      {
+        id: "existing", label: "Connect a bot you already have", recommended: false,
+        sub: "If someone already made one for your business."
+      }
+    ];
+
+    const paths = pathDefs.map(p => {
+      const on = chosen === p.id;
+      return {
+        label: p.label,
+        sub: p.sub,
+        recommended: p.recommended,
+        mark: on ? "\u2713" : "",
+        dotBorder: on ? "#1f6feb" : "#c3cad6",
+        dotFill: on ? "#1f6feb" : "transparent",
+        labelStyle: "font-size: 17px; line-height: 1.35; color: #14181f; font-weight: " + (on ? "700" : "600") + ";",
+        rowStyle: "display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; min-height: 44px; padding: 14px 16px; border-radius: 12px; font-family: inherit; cursor: pointer; background: " +
+          (on ? "#f5f9ff" : "#fff") + "; border: 1px solid " + (on ? "#d5e2f7" : "#dfe4ec") + ";",
+        pick: () => this.setState({ path: p.id })
+      };
+    });
+
+    const newSteps = [
+      {
+        n: "1", title: "Open @BotFather in Telegram",
+        hasBody: false,
+        hasCommand: false,
+        hasButton: true, buttonLabel: "Open BotFather"
+      },
+      {
+        n: "2", title: "Send it /newbot, then a name and a username",
+        hasBody: true,
+        body: "The username has to end in \u201Cbot\u201D \u2014 try " + business + "_bot. If it's taken, add your district: " + business + "_chilonzor_bot.",
+        hasCommand: true, command: "/newbot",
+        hasButton: false
+      },
+      {
+        n: "3", title: "BotFather sends you a long code \u2014 paste it below",
+        hasBody: true,
+        body: "It looks like a long number, then a colon, then letters. Copy the whole thing.",
+        hasCommand: true, command: "8123456789:AAF\u2026",
+        hasButton: false
+      }
+    ];
+
+    const existingSteps = [
+      {
+        n: "1", title: "Open @BotFather in Telegram",
+        hasBody: false, hasCommand: false,
+        hasButton: true, buttonLabel: "Open BotFather"
+      },
+      {
+        n: "2", title: "Send /mybots and pick your bot",
+        hasBody: true,
+        body: "If you see more than one, pick the one your customers already write to.",
+        hasCommand: true, command: "/mybots",
+        hasButton: false
+      },
+      {
+        n: "3", title: "Tap API Token and copy it",
+        hasBody: true,
+        body: "If another service is using this bot, connecting it here will take over its messages.",
+        hasCommand: false,
+        hasButton: false
+      }
+    ];
+
+    let tokenErrorText = "";
+    if (badToken) tokenErrorText = "That code doesn't look right. It should be a long number, then a colon, then letters \u2014 like 8123456789:AAF\u2026 Nothing has been changed.";
+    if (inUse) tokenErrorText = "That bot is already connected to another Talkwisp account. Sign in to that account to move it, or create a new bot with BotFather \u2014 it takes two minutes.";
+
+    return {
+      headline: stage === "connected" ? "Telegram is connected." : "Connect Telegram",
+      lede: stage === "connected"
+        ? "One check before we take you live."
+        : "Your agent already knows your business \u2014 this is the last step before customers can reach it.",
+      showInstagramNote: stage !== "connected",
+      isSetup: stage === "setup",
+      isConnected: stage === "connected",
+      returned: view === "returned from telegram",
+      paths,
+      instructions: chosen === "existing" ? existingSteps : newSteps,
+      tokenValue: badToken ? "8123456789" : inUse ? "8123456789:AAFmR7-example" : "",
+      tokenBorder: (badToken || inUse) ? "#e0d0b0" : "#dfe4ec",
+      tokenError: badToken || inUse,
+      tokenErrorText,
+      connect: () => {
+        if (this.state.checking) return;
+        this.setState({ checking: true });
+        setTimeout(() => this.setState({ checking: false, stage: "connected" }), 1400);
+      },
+      connectLabel: checking ? "Checking\u2026" : "Connect",
+      connectStyle: "display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9); opacity: " + (checking ? "0.75" : "1") + ";",
+      connectedSub: failed
+        ? "The code works and the bot is ours to use. But it didn't answer our test message."
+        : "Your code works. We checked that the bot actually answers, rather than just accepting the code.",
+      selfTestTitle: failed ? "Our test message got no reply" : "We sent it a test message and it answered",
+      selfTestPassed: !failed,
+      selfTestFailed: failed,
+      retryTest: () => {},
+      offline,
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f4f6f9; color: #14181f; font-family: Manrope, system-ui, sans-serif; }
+  a { color: #1657c0; text-decoration: none; }
+  a:hover { color: #14181f; text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f6f9; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 14px 14px 40px;">
+
+  <div style="width: 100%; max-width: 700px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 4px 22px;">
+    <span style="font-size: 18px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">Talkwisp</span>
+    <div style="display: flex; align-items: center; gap: 2px; background: #e9edf3; border-radius: 999px; padding: 3px;">
+      <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+      <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+      <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+    </div>
+  </div>
+
+  <div style="width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 4px;">
+      <span style="font-size: 14px; font-weight: 600; color: #646c78;">Step 4 of 5</span>
+      <a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675;">Save and finish later</a>
+    </div>
+
+    <div style="background: #fff; border-radius: 16px; padding: 28px 24px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 22px;">
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <h1 style="margin: 0; font-size: clamp(27px, 7.5vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">Talk to your agent</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">Only you can reach it right now. Ask it something a customer would ask — if it gets something wrong, you'll see why and can fix it here.</p>
+      </div>
+
+      <sc-if value="{{ starved }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="background: #fdf0dc; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 16px; font-weight: 700; line-height: 1.4; color: #8a5a12; text-wrap: pretty;">There's nothing for it to answer from yet.</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #8a5a12; text-wrap: pretty;">You skipped adding knowledge, so anything you ask will come back as "I don't know that yet". Add one or two things first and this becomes worth doing.</span>
+          </div>
+          <button type="button" style="flex: 0 0 auto; align-self: flex-start; min-height: 44px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;">Add something first</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 13px; font-weight: 600; color: #646c78;">Try one of these — all three have answers in what you added</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <sc-for list="{{ chips }}" as="chip" hint-placeholder-count="3">
+              <button type="button" onClick="{{ chip.ask }}" style="flex: 0 0 auto; min-height: 44px; text-align: left; background: #fff; border: 1px solid #dfe4ec; border-radius: 999px; padding: 0 16px; font-family: inherit; font-size: 15px; font-weight: 600; color: #14181f; cursor: pointer; box-shadow: 0 1px 2px rgba(20,24,31,0.05);">{{ chip.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <sc-for list="{{ turns }}" as="turn" hint-placeholder-count="2">
+          <div style="display: flex; flex-direction: column; gap: 8px; align-items: {{ turn.align }};">
+            <div style="{{ turn.bubbleStyle }}">{{ turn.text }}</div>
+            <sc-if value="{{ turn.hasWhy }}" hint-placeholder-val="{{ false }}">
+              <div style="max-width: 85%; display: flex; flex-direction: column; gap: 8px;">
+                <a href="#" onClick="{{ turn.toggleWhy }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #5c6675; text-wrap: pretty;">{{ turn.whyLine }}</a>
+                <sc-if value="{{ turn.whyOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="background: #f7f9fc; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;">
+                    <sc-if value="{{ turn.translated }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 13px; font-weight: 700; color: #8a5a12;">{{ turn.originalLabel }}</span>
+                        <span style="font-size: 14px; line-height: 1.5; color: #3a4250; text-wrap: pretty;">{{ turn.original }}</span>
+                      </div>
+                    </sc-if>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                      <span style="font-size: 13px; font-weight: 700; color: #1657c0;">{{ turn.quoteLabel }}</span>
+                      <span style="font-size: 14px; line-height: 1.5; color: #3a4250; text-wrap: pretty;">{{ turn.quote }}</span>
+                    </div>
+                    <span style="font-size: 13px; color: #646c78;">{{ turn.locator }}</span>
+
+                    <sc-if value="{{ turn.detectionAvailable }}" hint-placeholder-val="{{ true }}">
+                      <div style="border-top: 1px solid #e4e8ee; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                        <span style="font-size: 13px; font-weight: 700; color: #1657c0;">Appears in the answer</span>
+                        <sc-for list="{{ turn.appearing }}" as="hit" hint-placeholder-count="1">
+                          <div style="background: #fff; border: 1px solid #d5e2f7; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px;">
+                            <span style="font-size: 14px; line-height: 1.45; color: #14181f; text-wrap: pretty;">{{ hit.text }}</span>
+                            <span style="font-size: 12px; color: #646c78;">{{ hit.source }}</span>
+                          </div>
+                        </sc-for>
+                        <span style="font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">{{ turn.appearingNote }}</span>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ turn.detectionUnavailable }}" hint-placeholder-val="{{ false }}">
+                      <div style="border-top: 1px solid #e4e8ee; padding-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                        <span style="font-size: 13px; font-weight: 700; color: #8a5a12;">We can't mark what ended up in the answer</span>
+                        <span style="font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">{{ turn.unavailableNote }}</span>
+                      </div>
+                    </sc-if>
+
+                    <div style="border-top: 1px solid #e4e8ee; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                        <span style="font-size: 13px; font-weight: 700; color: #3a4250;">{{ turn.contextLabel }}</span>
+                        <a href="#" onClick="{{ turn.toggleAll }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; color: #5c6675;">{{ turn.toggleLabel }}</a>
+                      </div>
+                      <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <sc-for list="{{ turn.contextRows }}" as="ctx" hint-placeholder-count="3">
+                          <span style="font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">{{ ctx.text }}</span>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+            <sc-if value="{{ turn.hasVerdict }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <sc-if value="{{ turn.unrated }}" hint-placeholder-val="{{ true }}">
+                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" onClick="{{ turn.markRight }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 12px; padding: 0 16px; font-family: inherit; font-size: 14px; font-weight: 700; color: #14181f; cursor: pointer;">Right</button>
+                    <button type="button" onClick="{{ turn.markWrong }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: transparent; border: 1px solid #e0e5ed; border-radius: 12px; padding: 0 16px; font-family: inherit; font-size: 14px; font-weight: 600; color: #5c6675; cursor: pointer;">Wrong</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ turn.rated }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 13px; color: #646c78;">{{ turn.verdictNote }}</span>
+                </sc-if>
+              </div>
+            </sc-if>
+            <sc-if value="{{ turn.hasComposer }}" hint-placeholder-val="{{ false }}">
+              <div style="width: 100%; background: #f5f9ff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                <label style="font-size: 14px; font-weight: 700; color: #1657c0;">{{ turn.composerLabel }}</label>
+                <textarea rows="2" placeholder="Consultation is roughly 200 000–300 000 UZS, walk-in until 13:00." style="width: 100%; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 13px 14px; font-family: inherit; font-size: 16px; line-height: 1.5; color: #14181f; resize: vertical;"></textarea>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                  <button type="button" onClick="{{ turn.saveAnswer }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: #1f6feb; border: none; border-radius: 12px; padding: 0 18px; font-family: inherit; font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;">Save and ask again</button>
+                  <button type="button" onClick="{{ turn.cancelComposer }}" style="flex: 0 0 auto; min-height: 44px; white-space: nowrap; background: transparent; border: none; padding: 0 8px; font-family: inherit; font-size: 15px; font-weight: 600; color: #5c6675; cursor: pointer;">Cancel</button>
+                  <span style="font-size: 13px; color: #646c78;">Confirmed straight away — you wrote it.</span>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ celebrated }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #f5f9ff; border: 1px solid #d5e2f7; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 17px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.3; color: #14181f; text-wrap: pretty;">That's your agent working.</span>
+          <span style="font-size: 14px; line-height: 1.5; color: #3a4250; text-wrap: pretty;">It answered from your own price list. Connect Telegram and your customers can ask the same thing.</span>
+        </div>
+      </sc-if>
+
+      <div style="border-top: 1px solid #eef1f5; padding-top: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;">
+          <textarea rows="1" placeholder="Ask something a customer would ask…" style="flex: 1 1 240px; min-width: 0; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 14px 15px; font-family: inherit; font-size: 16px; line-height: 1.4; color: #14181f; resize: none;"></textarea>
+          <button type="button" onClick="{{ send }}" style="flex: 0 0 auto; min-height: 50px; white-space: nowrap; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 12px; padding: 0 22px; font-family: inherit; font-size: 16px; font-weight: 700; color: #14181f; cursor: pointer;">{{ sendLabel }}</button>
+        </div>
+        <sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #8a5a12; background: #fdf0dc; border-radius: 10px; padding: 10px 12px; text-wrap: pretty;">Not sent — waiting for connection. Your question is still here and we'll send it when you're back.</p>
+        </sc-if>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" style="{{ primaryStyle }}">{{ primaryLabel }}</button>
+        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #646c78; text-wrap: pretty;">{{ primaryNote }}</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;answered&quot;,&quot;from a file&quot;,&quot;translated&quot;,&quot;doesn't know&quot;,&quot;thinking&quot;,&quot;offline&quot;,&quot;nothing to answer from&quot;],&quot;default&quot;:&quot;answered&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;},&quot;businessType&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Clinic&quot;,&quot;Salon&quot;,&quot;Tutoring centre&quot;,&quot;Service business&quot;],&quot;default&quot;:&quot;Clinic&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;From step 1&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", verdicts: {}, why: {}, composer: {}, showAll: {}, celebrated: false };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; cursor: pointer; background: " +
+      (on ? "#fff" : "transparent") + "; color: " + (on ? "#14181f" : "#5c6675") +
+      "; box-shadow: " + (on ? "0 1px 2px rgba(20,24,31,0.12)" : "none") + ";";
+  }
+
+  bubble(mine) {
+    return "max-width: 85%; padding: 13px 15px; border-radius: 16px; font-size: 16px; line-height: 1.5; text-wrap: pretty; background: " +
+      (mine ? "#1f6feb" : "#f4f6f9") + "; color: " + (mine ? "#fff" : "#14181f") +
+      "; border-bottom-" + (mine ? "right" : "left") + "-radius: 6px;";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "answered";
+    const trade = this.props.businessType ?? "Clinic";
+    const starved = view === "nothing to answer from";
+    const thinking = view === "thinking";
+    const offline = view === "offline";
+
+    const chipSets = {
+      Clinic: ["\u00ab\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0442\u043e\u0438\u0442 \u043a\u043e\u043d\u0441\u0443\u043b\u044c\u0442\u0430\u0446\u0438\u044f?\u00bb", "\u201CShanba kuni ishlaysizmi?\u201D", "\u201CWhich doctors work on Mondays?\u201D"],
+      Salon: ["\u00ab\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0442\u043e\u0438\u0442 \u043e\u043a\u0440\u0430\u0448\u0438\u0432\u0430\u043d\u0438\u0435?\u00bb", "\u201CYakshanba kuni ishlaysizmi?\u201D", "\u201CWho does balayage?\u201D"],
+      "Tutoring centre": ["\u00ab\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0442\u043e\u0438\u0442 \u043a\u0443\u0440\u0441 IELTS?\u00bb", "\u201CDarslar qachon boshlanadi?\u201D", "\u201CDo you teach maths?\u201D"],
+      "Service business": ["\u00ab\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0442\u043e\u0438\u0442 \u0432\u044b\u0435\u0437\u0434 \u043c\u0430\u0441\u0442\u0435\u0440\u0430?\u00bb", "\u201CChilonzorga kelasizmi?\u201D", "\u201CCan you come today?\u201D"]
+    };
+    const chips = (chipSets[trade] || chipSets.Clinic).map(label => ({ label, ask: () => {} }));
+
+    const retrieved = [
+      "\u00ab\u041f\u0440\u0438\u0451\u043c \u2014 \u043f\u0440\u0438\u043c\u0435\u0440\u043d\u043e 200 000\u2013300 000 \u0441\u0443\u043c\u00bb \u00b7 you typed this",
+      "\u00ab\u0423\u0417\u0418 \u0431\u0440\u044e\u0448\u043d\u043e\u0439 \u043f\u043e\u043b\u043e\u0441\u0442\u0438 \u2014 \u043e\u043a\u043e\u043b\u043e 180 000 \u0441\u0443\u043c\u00bb \u00b7 you typed this",
+      "\u00abRasulova Nigora \u2014 kardiolog, dushanbadan jumagacha 09:00\u201314:00\u00bb \u00b7 you typed this",
+      "\u00abIsh vaqti: dushanbadan shanbagacha, 09:00\u201318:00\u00bb \u00b7 you typed this",
+      "\u00abYakshanba \u2014 dam olish kuni\u00bb \u00b7 you typed this",
+      "\u00abTahlillar \u2014 60 000 dan 400 000 so'mgacha\u00bb \u00b7 you typed this",
+      "\u00abYusupova Kamola \u2014 pediatr, du/cho/ju\u00bb \u00b7 you typed this",
+      "\u00ab\u0414\u0435\u0442\u0441\u043a\u0438\u0439 \u043d\u0435\u0432\u0440\u043e\u043b\u043e\u0433 \u2014 \u043d\u0435\u0442 \u0432 \u043a\u043b\u0438\u043d\u0438\u043a\u0435\u00bb \u00b7 you typed this",
+      "\u00abTo'lov: naqd pul, karta, Payme yoki Click\u00bb \u00b7 Siyosat_va_qoidalar.docx",
+      "\u00abBemorlar navbatsiz qabul qilinadi soat 13:00 gacha\u00bb \u00b7 Siyosat_va_qoidalar.docx"
+    ];
+
+    const mk = (id, o) => {
+      const verdict = this.state.verdicts[id];
+      const allShown = !!this.state.showAll[id];
+      const composerOpen = !!this.state.composer[id] || (o.forceComposer && verdict !== "right");
+      return {
+        align: o.mine ? "flex-end" : "flex-start",
+        bubbleStyle: this.bubble(o.mine),
+        text: o.text,
+        hasWhy: !!o.quote,
+        whyLine: o.whyLine,
+        whyOpen: !!this.state.why[id],
+        toggleWhy: () => this.setState(s => ({ why: Object.assign({}, s.why, { [id]: !s.why[id] }) })),
+        translated: !!o.original,
+        original: o.original,
+        originalLabel: o.originalLabel,
+        quoteLabel: o.quoteLabel,
+        detectionAvailable: o.detection === "available",
+        detectionUnavailable: o.detection === "unavailable_cross_script",
+        appearing: o.appearing || [],
+        appearingNote: (o.appearing || []).length === 1
+          ? "Its value appears word for word in the reply. That is what we can check \u2014 not whether the agent leaned on it."
+          : "Their values appear word for word in the reply. That is what we can check \u2014 not whether the agent leaned on them.",
+        unavailableNote: "You wrote in Russian and the passage is in Uzbek, so there is no matching text to find. Everything the agent read is listed below, unmarked \u2014 and the reply is a faithful translation of the passage, not a quote from it.",
+        contextLabel: (o.detection === "available" ? "Also read while answering \u00b7 " : "Everything it read while answering \u00b7 ") + (o.context || []).length + " facts",
+        contextRows: (allShown ? (o.context || []) : (o.context || []).slice(0, 3)).map(text => ({ text })),
+        toggleLabel: allShown
+          ? "Show fewer"
+          : (o.context || []).length > 3 ? "Show all " + (o.context || []).length : "",
+        toggleAll: () => this.setState(s => ({ showAll: Object.assign({}, s.showAll, { [id]: !s.showAll[id] }) })),
+        quote: o.quote,
+        locator: o.locator,
+        hasVerdict: !!o.rateable,
+        unrated: o.rateable && !verdict,
+        rated: o.rateable && !!verdict,
+        verdictNote: verdict === "right" ? "You marked this right." : "You marked this wrong — add the answer below.",
+        markRight: () => this.setState(s => ({
+          verdicts: Object.assign({}, s.verdicts, { [id]: "right" }),
+          celebrated: true
+        })),
+        markWrong: () => this.setState(s => ({
+          verdicts: Object.assign({}, s.verdicts, { [id]: "wrong" }),
+          composer: Object.assign({}, s.composer, { [id]: true })
+        })),
+        hasComposer: composerOpen,
+        composerLabel: o.composerLabel || "Answer it in your own words",
+        saveAnswer: () => this.setState(s => ({ composer: Object.assign({}, s.composer, { [id]: false }) })),
+        cancelComposer: () => this.setState(s => ({ composer: Object.assign({}, s.composer, { [id]: false }) }))
+      };
+    };
+
+    let turns = [];
+    if (starved) {
+      turns = [];
+    } else if (thinking) {
+      turns = [
+        mk("q1", { mine: true, text: "\u00ab\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0442\u043e\u0438\u0442 \u043a\u043e\u043d\u0441\u0443\u043b\u044c\u0442\u0430\u0446\u0438\u044f?\u00bb" }),
+        mk("a1", { mine: false, text: "Reading your knowledge base\u2026" })
+      ];
+    } else if (view === "doesn't know") {
+      turns = [
+        mk("q1", { mine: true, text: "\u201CIs there a paediatric neurologist?\u201D" }),
+        mk("a1", {
+          mine: false,
+          text: "I don't know that yet \u2014 I'll pass it to the clinic.",
+          forceComposer: true,
+          composerLabel: "Answer it and it'll know next time"
+        })
+      ];
+    } else if (view === "from a file") {
+      turns = [
+        mk("q1", { mine: true, text: "\u201CTahlil natijalari qancha vaqtda tayyor?\u201D" }),
+        mk("a1", {
+          mine: false,
+          text: "Oddiy tahlillar 1\u20132 ish kunida tayyor bo'ladi. Murakkab tahlillar 5 ish kunigacha vaqt olishi mumkin.",
+          whyLine: "Read from a file you added \u00b7 Siyosat_va_qoidalar.docx \u2192",
+          detection: "available",
+          appearing: [{
+            text: "\u00abOddiy qon va siydik tahlillari 1\u20132 ish kunida tayyor bo'ladi\u00bb",
+            source: "Siyosat_va_qoidalar.docx"
+          }],
+          context: retrieved,
+          quoteLabel: "What it read, word for word",
+          quote: "\u00abOddiy qon va siydik tahlillari 1\u20132 ish kunida tayyor bo'ladi. Murakkab tahlillar, masalan gormonlar yoki biopsiya, 5 ish kunigacha vaqt olishi mumkin.\u00bb",
+          locator: "Siyosat_va_qoidalar.docx \u00b7 we can't yet point to a place inside a file",
+          rateable: true
+        })
+      ];
+    } else if (view === "translated") {
+      turns = [
+        mk("q1", { mine: true, text: "\u00ab\u041c\u043e\u0436\u043d\u043e \u0443\u0437\u043d\u0430\u0442\u044c \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0430\u043d\u0430\u043b\u0438\u0437\u043e\u0432 \u043f\u043e \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0443?\u00bb" }),
+        mk("a1", {
+          mine: false,
+          text: "\u041d\u0435\u0442, \u043f\u043e \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0443 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043d\u0435 \u0441\u043e\u043e\u0431\u0449\u0430\u044e\u0442\u0441\u044f \u2014 \u044d\u0442\u043e \u043b\u0438\u0447\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435. \u0418\u0445 \u043c\u043e\u0436\u043d\u043e \u0437\u0430\u0431\u0440\u0430\u0442\u044c \u0432 \u043a\u043b\u0438\u043d\u0438\u043a\u0435 \u0438\u043b\u0438 \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0432 Telegram.",
+          whyLine: "Translated from a passage you added \u00b7 Siyosat_va_qoidalar.docx \u2192",
+          originalLabel: "The passage it used, in Uzbek",
+          original: "\u00abTelefon orqali natija aytilmaydi, chunki bu bemorning shaxsiy ma'lumotlariga tegishli va biz uni faqat bemorning o'ziga \u2026 beramiz.\u00bb",
+          detection: "unavailable_cross_script",
+          context: retrieved,
+          quoteLabel: "Why this isn't a quote",
+          quote: "You wrote in Russian, so the agent answered in Russian \u2014 a faithful translation of the passage above, not its words.",
+          locator: "Siyosat_va_qoidalar.docx \u00b7 we can't yet point to a place inside a file",
+          rateable: true
+        })
+      ];
+    } else {
+      turns = [
+        mk("q1", { mine: true, text: "\u00ab\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0442\u043e\u0438\u0442 \u043a\u043e\u043d\u0441\u0443\u043b\u044c\u0442\u0430\u0446\u0438\u044f?\u00bb" }),
+        mk("a1", {
+          mine: false,
+          text: "\u041a\u043e\u043d\u0441\u0443\u043b\u044c\u0442\u0430\u0446\u0438\u044f \u043a\u0430\u0440\u0434\u0438\u043e\u043b\u043e\u0433\u0430 \u0441\u0442\u043e\u0438\u0442 \u043f\u0440\u0438\u043c\u0435\u0440\u043d\u043e 250 000 \u0441\u0443\u043c. \u0422\u043e\u0447\u043d\u0430\u044f \u0446\u0435\u043d\u0430 \u0437\u0430\u0432\u0438\u0441\u0438\u0442 \u043e\u0442 \u0432\u0440\u0430\u0447\u0430 \u0438 \u0442\u0438\u043f\u0430 \u043f\u0440\u0438\u0451\u043c\u0430.",
+          whyLine: "You typed this \u2192",
+          quoteLabel: "Your own words",
+          quote: "\u00ab\u041a\u043e\u043d\u0441\u0443\u043b\u044c\u0442\u0430\u0446\u0438\u044f \u043a\u0430\u0440\u0434\u0438\u043e\u043b\u043e\u0433\u0430 \u2014 \u043f\u0440\u0438\u043c\u0435\u0440\u043d\u043e 250 000 \u0441\u0443\u043c\u00bb",
+          locator: "Typed by you \u00b7 2 September \u00b7 confirmed when you wrote it",
+          detection: "available",
+          appearing: [{
+            text: "\u00ab\u041a\u043e\u043d\u0441\u0443\u043b\u044c\u0442\u0430\u0446\u0438\u044f \u043a\u0430\u0440\u0434\u0438\u043e\u043b\u043e\u0433\u0430 \u2014 \u043f\u0440\u0438\u043c\u0435\u0440\u043d\u043e 250 000 \u0441\u0443\u043c\u00bb",
+            source: "You typed this \u00b7 2 September"
+          }],
+          context: retrieved,
+          rateable: true
+        })
+      ];
+    }
+
+    const celebrated = this.state.celebrated;
+
+    return {
+      starved,
+      hasChips: !starved,
+      chips,
+      turns,
+      celebrated,
+      offline,
+      send: () => {},
+      sendLabel: offline ? "Not sent" : "Send",
+      primaryStyle: celebrated
+        ? "display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);"
+        : "display: block; width: 100%; background: transparent; border: 1px solid #e0e5ed; border-radius: 12px; padding: 14px 18px; font-family: inherit; font-size: 15px; font-weight: 600; color: #5c6675; cursor: pointer;",
+      primaryLabel: celebrated ? "Connect Telegram \u2192" : "Skip testing and connect Telegram",
+      primaryNote: celebrated
+        ? "Next: connect Telegram so customers can reach it."
+        : "Testing is worth two minutes, but you can come back to it any time.",
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>

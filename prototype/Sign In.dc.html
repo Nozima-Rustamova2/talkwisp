@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f4f6f9; color: #14181f; font-family: Manrope, system-ui, sans-serif; }
+  a { color: #1657c0; text-decoration: none; }
+  a:hover { color: #14181f; text-decoration: underline; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f4f6f9; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 14px 14px 40px;">
+
+  <div style="width: 100%; max-width: 468px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 4px 22px;">
+    <span style="font-family: Manrope, system-ui, sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; color: #14181f;">Talkwisp</span>
+    <div style="display: flex; align-items: center; gap: 2px; background: #e9edf3; border-radius: 999px; padding: 3px;">
+      <button type="button" onClick="{{ setUz }}" style="{{ langUzStyle }}">UZ</button>
+      <button type="button" onClick="{{ setRu }}" style="{{ langRuStyle }}">RU</button>
+      <button type="button" onClick="{{ setEn }}" style="{{ langEnStyle }}">EN</button>
+    </div>
+  </div>
+
+  <div style="width: 100%; max-width: 468px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="background: #fff; border-radius: 16px; padding: 30px 24px; box-shadow: 0 1px 2px rgba(20,24,31,0.06), 0 12px 28px -18px rgba(20,24,31,0.24); display: flex; flex-direction: column; gap: 26px;">
+
+      <sc-if value="{{ isChoice }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 26px;">
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <h1 style="margin: 0; font-family: Manrope, system-ui, sans-serif; font-size: clamp(27px, 7.5vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">{{ headline }}</h1>
+            <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">{{ subline }}</p>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 9px;">
+            <button type="button" onClick="{{ tryTelegram }}" style="display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">Continue with Telegram</button>
+            <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #5c6675; text-wrap: pretty;">The account you already have — no new password to remember.</p>
+            <sc-if value="{{ telegramFailed }}" hint-placeholder-val="{{ false }}">
+              <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #8a5a12; background: #fdf0dc; border-radius: 10px; padding: 10px 12px; text-wrap: pretty;">Telegram didn't open. Try again, or use your email below.</p>
+            </sc-if>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="flex: 1 1 0; height: 1px; background: #e4e8ee;"></span>
+            <span style="font-size: 13px; color: #646c78;">or</span>
+            <span style="flex: 1 1 0; height: 1px; background: #e4e8ee;"></span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label style="font-size: 14px; font-weight: 600; color: #3a4250;">Email</label>
+              <input type="email" placeholder="nigora@shifomed.uz" style="width: 100%; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 14px 15px; font-family: inherit; font-size: 16px; color: #14181f;">
+              <sc-if value="{{ emailInvalid }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size: 14px; line-height: 1.45; color: #8a5a12;">That doesn't look like an email address.</span>
+              </sc-if>
+            </div>
+            <button type="button" onClick="{{ sendLink }}" style="display: block; width: 100%; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 12px; padding: 14px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #14181f; cursor: pointer;">{{ emailButtonLabel }}</button>
+            <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #5c6675; text-wrap: pretty;">No password. We'll email you a link that signs you in.</p>
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" style="flex: 1 1 150px; background: #fff; border: 1px solid #e4e8ee; border-radius: 12px; padding: 12px; font-family: inherit; font-size: 14px; font-weight: 600; color: #3a4250; white-space: nowrap; cursor: pointer;">Google</button>
+            <button type="button" style="flex: 1 1 150px; background: #fff; border: 1px solid #e4e8ee; border-radius: 12px; padding: 12px; font-family: inherit; font-size: 14px; font-weight: 600; color: #3a4250; white-space: nowrap; cursor: pointer;">Apple</button>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isSent }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 26px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <h1 style="margin: 0; font-family: Manrope, system-ui, sans-serif; font-size: clamp(27px, 7.5vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">Check your email.</h1>
+            <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">We sent a link to <strong style="font-weight: 700; color: #14181f;">nigora@shifomed.uz</strong>. It works for 15 minutes.</p>
+          </div>
+          <button type="button" style="display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">Open your email app</button>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-size: 14px; line-height: 1.5; color: #5c6675; text-wrap: pretty;">Didn't arrive? You can send it again in 30 seconds.</span>
+            <a href="#" onClick="{{ backToChoice }}" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 15px; font-weight: 600;">Use a different email</a>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isExpired }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 26px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <h1 style="margin: 0; font-family: Manrope, system-ui, sans-serif; font-size: clamp(27px, 7.5vw, 31px); font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; color: #14181f; text-wrap: pretty;">That link has expired.</h1>
+            <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5c6675; text-wrap: pretty;">Links last 15 minutes. Tell us where to send a fresh one and you're back in.</p>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label style="font-size: 14px; font-weight: 600; color: #3a4250;">Email</label>
+              <input type="email" placeholder="nigora@shifomed.uz" style="width: 100%; background: #fff; border: 1px solid #dfe4ec; border-radius: 12px; padding: 14px 15px; font-family: inherit; font-size: 16px; color: #14181f;">
+            </div>
+            <button type="button" onClick="{{ sendLink }}" style="display: block; width: 100%; background: #1f6feb; border: none; border-radius: 12px; padding: 15px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(31,111,235,0.9);">Send a new link</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="flex: 1 1 0; height: 1px; background: #e4e8ee;"></span>
+            <span style="font-size: 13px; color: #646c78;">or</span>
+            <span style="flex: 1 1 0; height: 1px; background: #e4e8ee;"></span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 9px;">
+            <button type="button" onClick="{{ tryTelegram }}" style="display: block; width: 100%; background: #f2f5f9; border: 1px solid #e0e5ed; border-radius: 12px; padding: 14px 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #14181f; cursor: pointer;">Continue with Telegram</button>
+            <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #5c6675; text-wrap: pretty;">The account you already have — nothing to wait for in your inbox.</p>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <div style="padding: 0 4px; display: flex; flex-direction: column; gap: 14px;">
+      <sc-if value="{{ showModeSwitch }}" hint-placeholder-val="{{ true }}">
+        <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #5c6675; text-wrap: pretty;">{{ modePrompt }} <a href="#" onClick="{{ toggleMode }}" style="font-weight: 600;">{{ modeLink }}</a></p>
+      </sc-if>
+      <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #646c78; text-wrap: pretty;">By continuing you agree to our <a href="#" style="color: #5c6675; font-weight: 600;">Terms</a> and <a href="#" style="color: #5c6675; font-weight: 600;">Privacy Policy</a>.</p>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;sign up&quot;,&quot;sign in&quot;,&quot;link sent&quot;,&quot;sending&quot;,&quot;invalid email&quot;,&quot;telegram failed&quot;,&quot;expired link&quot;],&quot;default&quot;:&quot;sign up&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Screen state&quot;}}">
+class Component extends DCLogic {
+  state = { lang: "EN", mode: null, stage: null, sending: false, invalid: false, tgFail: false };
+
+  langStyle(code) {
+    const on = this.state.lang === code;
+    return "font-family: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; cursor: pointer; background: " +
+      (on ? "#fff" : "transparent") + "; color: " + (on ? "#14181f" : "#5c6675") +
+      "; box-shadow: " + (on ? "0 1px 2px rgba(20,24,31,0.12)" : "none") + ";";
+  }
+
+  renderVals() {
+    const view = this.props.view ?? "sign up";
+    const stage = this.state.stage ?? (view === "link sent" ? "sent" : view === "expired link" ? "expired" : "choice");
+    const mode = this.state.mode ?? (view === "sign in" ? "in" : "up");
+    const sending = this.state.sending || view === "sending";
+    const invalid = this.state.invalid || view === "invalid email";
+    const tgFail = this.state.tgFail || view === "telegram failed";
+
+    return {
+      isChoice: stage === "choice",
+      isSent: stage === "sent",
+      isExpired: stage === "expired",
+      headline: mode === "in" ? "Welcome back." : "Set up your agent",
+      subline: mode === "in"
+        ? "Sign in and pick up where you left off."
+        : "A few minutes now, and it starts answering the questions you get every day.",
+      emailButtonLabel: sending ? "Sending…" : "Send me a link",
+      emailInvalid: invalid,
+      telegramFailed: tgFail,
+      sendLink: () => this.setState({ sending: false, stage: "sent" }),
+      backToChoice: () => this.setState({ stage: "choice", sending: false }),
+      tryTelegram: () => this.setState({ tgFail: true }),
+      showModeSwitch: stage === "choice",
+      modePrompt: mode === "in" ? "New here?" : "Already have an account?",
+      modeLink: mode === "in" ? "Create an account." : "Sign in.",
+      toggleMode: () => this.setState({ mode: mode === "in" ? "up" : "in" }),
+      setUz: () => this.setState({ lang: "UZ" }),
+      setRu: () => this.setState({ lang: "RU" }),
+      setEn: () => this.setState({ lang: "EN" }),
+      langUzStyle: this.langStyle("UZ"),
+      langRuStyle: this.langStyle("RU"),
+      langEnStyle: this.langStyle("EN")
+    };
+  }
+}
+</script>
+</body>
+</html>
