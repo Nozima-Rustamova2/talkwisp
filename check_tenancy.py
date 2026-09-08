@@ -19,10 +19,13 @@ showing the two answers.
 
 The endpoint checks call the real FastAPI app through TestClient, so they go
 through the real dependency, the real connection helper and the real policies.
-The one thing overridden is which business the request is for -- which is the
-thing auth will supply later, and does not exist yet.
+Since auth landed they also go through a real session: section 3 signs in as
+each business with a genuine cookie rather than overriding the dependency, so
+the join between "who is this" and "which rows may they see" is itself tested.
+That join is the part most worth testing, and an override would skip it.
 """
 
+import ast
 import os
 import pathlib
 import sys
@@ -33,6 +36,7 @@ from fastapi.testclient import TestClient
 from psycopg_pool import ConnectionPool
 
 import app.main as api
+from app import auth
 from app.db import assert_app_role, connection, pool, sole_business
 
 load_dotenv()
@@ -196,7 +200,16 @@ try:
     client = TestClient(api.app)
     if True:
         def as_business(bid):
-            api.app.dependency_overrides[api.current_business] = lambda: bid
+            """Sign in as this business, for real.
+
+            This used to override the current_business dependency, which was the
+            honest thing to do while there was no auth to exercise. There is now,
+            so the check goes through it: a real session row, a real cookie, and
+            the tenant reaching SET LOCAL by the same route a browser takes.
+            Overriding the dependency today would skip the join between auth and
+            tenancy, which is the part most worth testing.
+            """
+            client.cookies.set(auth.COOKIE, auth.create_session(bid))
 
         as_business(BUSINESS_A)
         stats_a = client.get("/stats").json()
@@ -243,7 +256,7 @@ try:
         check("and A cannot see it", client.get(f"/source/{created_source}"
                                                 ).status_code, 404)
 
-        api.app.dependency_overrides.clear()
+        client.cookies.clear()
 
     # -----------------------------------------------------------------------
     print("\n4. Unique constraints are per business, not global")
@@ -339,12 +352,24 @@ print("\n5. Nothing checks a connection out without a tenant, except twice")
 # on the first tenant table, but the raise happens at the far end of whatever
 # was written in between. This makes the rule findable instead of remembered.
 #
-# TWO are allowed, both asking about the SERVER rather than about anyone's data,
-# and both named here so a THIRD fails this check on the day it is written:
-#   app/main.py   /health/db      -- current_database() and the pgvector version
-#   bot.py        check_database  -- select 1, before the bot announces it is up
+# THREE files are allowed, each for a stated reason, and the counts are exact so
+# a new call fails this check on the day it is written:
+#
+#   app/main.py   1  /health/db -- current_database() and the pgvector version.
+#                    Asks about the server, not about anyone's data.
+#   bot.py        1  check_database -- select 1, before the bot announces it is
+#                    up. Same: about the server.
+#   app/auth.py   6  the chicken-and-egg. "Who is this" has to be answerable
+#                    BEFORE a tenant is known, which is exactly what the tenancy
+#                    policies forbid, so these cannot run on a tenanted
+#                    connection. The exemption is made safe by the assertion
+#                    below rather than by trusting the count: every one of them
+#                    calls an app_* SECURITY DEFINER function and none of them
+#                    names a tenant table.
 
-ALLOWED = {str(pathlib.Path("app/main.py")): 1, "bot.py": 1}
+ALLOWED = {str(pathlib.Path("app/main.py")): 1,
+           str(pathlib.Path("app/auth.py")): 6,
+           "bot.py": 1}
 
 found: dict[str, int] = {}
 for path in sorted(pathlib.Path("app").glob("*.py")) + [pathlib.Path("bot.py")]:
@@ -353,8 +378,45 @@ for path in sorted(pathlib.Path("app").glob("*.py")) + [pathlib.Path("bot.py")]:
     for line in path.read_text(encoding="utf-8").splitlines():
         if "pool.connection(" in line.split("#", 1)[0]:
             found[str(path)] = found.get(str(path), 0) + 1
-check("exactly the two un-tenanted checkouts, in the two files named above",
+check("exactly the un-tenanted checkouts named above, and no others",
       found, ALLOWED)
+
+# What makes auth.py's six safe is not the count but what they may touch. An
+# untenanted connection that queried `fact` directly would return nothing (the
+# policy raises), but one that queried `business` or `session` would be reading
+# platform data with no tenant -- which is the whole point of the resolvers.
+#
+# Read with ast rather than by scanning lines. The first version of this took
+# the string on the same line as `conn.execute(`, which silently skipped every
+# call whose SQL wrapped -- and then compared that subset against itself, so it
+# reported "every query is a resolver" while looking at three of seven. It only
+# surfaced because the LAST assertion named the seven explicitly and did not
+# match. A count compared against a count drawn from the same faulty extraction
+# can never disagree with itself.
+TENANT_TABLES = ("fact", "source", "alias", "chunk", "purchase",
+                 "session", "login_token", "business", "retrievable_fact")
+
+tree = ast.parse(pathlib.Path("app/auth.py").read_text(encoding="utf-8"))
+auth_queries = [
+    node.args[0].value
+    for node in ast.walk(tree)
+    if isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
+    and node.args and isinstance(node.args[0], ast.Constant)
+    and isinstance(node.args[0].value, str)
+]
+check("all seven of auth.py's queries were found, not just the one-liners",
+      len(auth_queries), 7)
+check("every one of them calls an app_* resolver",
+      sum("app_" in q for q in auth_queries), len(auth_queries))
+check("and none names a table directly",
+      [q for q in auth_queries
+       if any(f" {t} " in f" {q} " for t in TENANT_TABLES)], [])
+check("the resolvers it uses are the ones granted in 0008",
+      sorted({q.split("app_")[1].split("(")[0] for q in auth_queries}),
+      sorted(["business_for_email", "business_for_telegram",
+              "login_token_create", "login_token_claim", "session_create",
+              "session_business", "session_delete"]))
 
 admin.close()
 pool.close()

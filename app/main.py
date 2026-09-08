@@ -2,13 +2,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
-from app import console, extract, review, sources, vision
-from app.db import assert_app_role, connection, pool, sole_business
+from app import auth, console, extract, review, sources, vision
+from app.db import IN_HTTP_REQUEST, assert_app_role, connection, pool
 from app.llm import check_configured, check_reachable
 from app.retrieval import find
 from app.typed import parse as parse_fact, store as store_fact
@@ -30,22 +30,89 @@ async def lifespan(app: FastAPI):
     pool.close()
 
 
-app = FastAPI(title="Talkwisp", lifespan=lifespan)
+# Everything except these needs a session. DEFAULT DENY, and it is structural:
+# app-level dependencies apply to every route registered on the app, including
+# ones added after this line and after the static mount. Measured, not assumed;
+# check_auth.py enumerates app.routes and asserts the reachable-without-a-session
+# set equals this literal, so a new public path fails the check the day it is
+# written rather than the day someone reads the list.
+#
+# The three things that escape a route dependency, all named because pretending
+# otherwise is worse than the gap:
+#
+#   /openapi.json, /docs, /redoc -- FastAPI registers these itself, so app-level
+#       dependencies never see them (measured: 200 while every route was 401).
+#       On a public URL they publish the entire write surface to anyone. Closed
+#       by openapi_url=None below, which removes all three.
+#   the /app mount -- a Mount is not a route and cannot carry dependencies. It
+#       has to stay reachable anyway or the login screen cannot load. It serves
+#       built frontend assets only; no business data passes through it.
+PUBLIC_PATHS = {
+    "/",                 # redirect to the screens
+    "/health",           # liveness, for a load balancer that says nothing else
+    "/auth/me",          # answers "are you logged in", so it must work logged out
+    "/auth/request",     # ask for a magic link
+    "/auth/callback",    # click a magic link
+    "/auth/logout",      # idempotent, and pointless to require a session for
+    "/auth/telegram",    # Telegram Login, gated off until a domain exists
+}
 
 
-def current_business() -> str:
-    """Which business this request is for.
+def gate(request: Request) -> None:
+    """The outer half of default-deny: no session, no route.
 
-    THE STAND-IN FOR AUTH, and the only thing in the codebase that answers this
-    question. There is no login yet, so the only honest answer is "the only
-    business there is" -- and app_sole_business() raises rather than choosing
-    once that stops being true.
-
-    When auth lands, this function's body becomes cookie -> session -> user ->
-    business_id and nothing else in the file changes. That is why it is a
-    dependency and not a module constant.
+    Paired with current_business() below, which is the inner half. They overlap
+    on purpose and each works with the other deleted -- that is what makes them
+    two mechanisms rather than one guard called twice. This one covers endpoints
+    that touch no tenant data; that one makes tenant data unreachable.
     """
-    return sole_business()
+    if request.url.path in PUBLIC_PATHS:
+        return
+    if auth.resolve(request) is None:
+        raise HTTPException(status_code=401, detail="Sign in first.")
+
+
+# openapi_url=None: see PUBLIC_PATHS above. There is no auth on the generated
+# docs because FastAPI adds those routes itself, so the only safe thing is for
+# them not to exist.
+app = FastAPI(title="Talkwisp", lifespan=lifespan, openapi_url=None,
+              dependencies=[Depends(gate)])
+
+
+@app.middleware("http")
+async def _mark_request(request: Request, call_next):
+    """Tell app/db.py that this is a request, for the length of the request.
+
+    Its only purpose is the guard inside sole_business(): that function is the
+    pre-auth "the only business there is" fallback, correct for the check
+    scripts and the bot and catastrophic on an HTTP path, where it would serve a
+    logged-out visitor somebody else's data and look like it was working. A rule
+    saying "don't call it from a request" has no failure signal. This does.
+    """
+    token = IN_HTTP_REQUEST.set(True)
+    try:
+        return await call_next(request)
+    finally:
+        IN_HTTP_REQUEST.reset(token)
+
+
+def current_business(request: Request) -> str:
+    """Which business this request is for. THE INNER HALF OF DEFAULT DENY.
+
+    Every endpoint that touches tenant data takes this and hands it to
+    connection(). So an endpoint cannot reach tenant data without a session --
+    not because a decorator was remembered, but because there is no business_id
+    to be had. Same shape as the payment view in 0005: the safe thing is the only
+    thing, rather than the thing you have to remember.
+
+    It notably does NOT fall back to sole_business() any more. That fallback is
+    how a logged-out request reads someone's data, and it reads as correct for
+    exactly as long as there is one business.
+    """
+    business_id = auth.resolve(request)
+    if business_id is None:
+        raise HTTPException(status_code=401, detail="Sign in first.")
+    return business_id
 
 
 Business = Annotated[str, Depends(current_business)]
@@ -322,6 +389,142 @@ def console_feedback(business: Business, q: str, verdict: str,
             return console.record(conn, q, verdict, reason)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# --- signing in -------------------------------------------------------------
+# Every path here is in PUBLIC_PATHS, necessarily: you cannot require a session
+# to get one.
+
+
+@app.get("/auth/me")
+def auth_me(request: Request) -> dict:
+    """Are you signed in, and as whom. 200 either way.
+
+    Not a 401 when logged out, deliberately: the screens call this on load to
+    decide whether to show the app or the sign-in form, and "not signed in" is
+    an answer rather than a failure. Returning an error status for the ordinary
+    case makes every console in the browser look broken.
+    """
+    business_id = auth.resolve(request)
+    if business_id is None:
+        return {"business": None, "email": None}
+    with connection(business_id) as conn:
+        row = conn.execute("select name, owner_email from business").fetchone()
+    return {"business": row[0] if row else None,
+            "email": row[1] if row else None}
+
+
+@app.post("/auth/request")
+def auth_request(email: str = Form(...)) -> dict:
+    """Send a sign-in link. Says the same thing whether or not the address is known.
+
+    An honest "no such account" here turns this endpoint into an address
+    checker for anyone who wants to know which clinics use Talkwisp. The link
+    is only sent if there is somewhere to send it; the reply does not say which
+    happened.
+    """
+    link = auth.issue_link(email)
+    if link:
+        auth.deliver(email, link)
+    return {"sent": True,
+            "message": "If that address has an account, a sign-in link is on "
+                       "its way. It expires in 15 minutes."}
+
+
+def _auth_page(title: str, body: str, status: int = 200) -> HTMLResponse:
+    """A plain page for the states the SPA never gets to render.
+
+    A magic link is opened by a mail client as a fresh navigation, so there is
+    no app running yet to show a message in. These are deliberately unstyled and
+    tiny -- they exist so a failure says what happened instead of showing a
+    blank screen or a JSON blob.
+    """
+    return HTMLResponse(status_code=status, content=(
+        f"<!doctype html><meta charset=utf-8><title>{title}</title>"
+        "<body style='font:16px/1.6 system-ui;max-width:34rem;margin:18vh auto;"
+        "padding:0 1.5rem;color:#1c2430'>"
+        f"<h1 style='font-size:1.3rem;margin:0 0 .6rem'>{title}</h1>"
+        f"<p style='margin:0 0 1.4rem;color:#4a5462'>{body}</p>"
+        f"<a href='{auth.PUBLIC_BASE_URL}/app/' style='color:#2f6f4f'>"
+        "Back to sign in</a></body>"))
+
+
+@app.get("/auth/callback")
+def auth_callback(token: str):
+    """Claim a link, once, and start a session.
+
+    Each failure says which failure it is. "Already used" and "expired" send a
+    person to different next actions -- one means check for a newer email, the
+    other means ask for a fresh link -- and collapsing them into one error makes
+    a working system look broken.
+    """
+    business_id, outcome = auth.claim_link(token)
+    if outcome != "ok" or business_id is None:
+        title, body = {
+            "used": ("This link has already been used",
+                     "Sign-in links work once. Ask for a new one."),
+            "expired": ("This link has expired",
+                        "Links last 15 minutes. Ask for a new one."),
+            "unknown": ("This link is not valid",
+                        "It may have been mistyped or truncated by a mail "
+                        "client. Ask for a new one."),
+        }[outcome]
+        return _auth_page(title, body, status=400)
+
+    response = RedirectResponse(f"{auth.PUBLIC_BASE_URL}/app/", status_code=303)
+    auth.set_cookie(response, auth.create_session(business_id))
+    return response
+
+
+@app.post("/auth/logout")
+def auth_logout(request: Request) -> JSONResponse:
+    """Ends the session for real: the row is deleted, not just the cookie.
+
+    Clearing the cookie alone would leave a working session behind for anyone
+    who had already copied the value. This is the reason the sessions are a
+    table rather than a signed cookie.
+    """
+    auth.end_session(request.cookies.get(auth.COOKIE))
+    response = JSONResponse({"signed_out": True})
+    auth.clear_cookie(response)
+    return response
+
+
+@app.get("/auth/telegram")
+def auth_telegram(request: Request):
+    """Telegram Login. OFF until a domain is linked in BotFather.
+
+    Cannot be tested before then: Telegram refuses to send a login payload to a
+    host that is not registered with /setdomain, so there is no way to obtain a
+    genuine signed payload locally. Written now and gated so that the domain
+    landing is a config change rather than a build.
+
+    The token this verifies against is the PLATFORM bot's -- the one that signs
+    web logins. Not business.bot_token, which is a customer's agent bot and has
+    nothing to do with login.
+    """
+    if not auth.TELEGRAM_LOGIN_ENABLED:
+        raise HTTPException(
+            status_code=404,
+            detail="Telegram Login is off. It needs TELEGRAM_LOGIN_ENABLED, a "
+                   "platform bot token, and /setdomain in BotFather against "
+                   "the real hostname.")
+
+    fields = dict(request.query_params)
+    ok, why = auth.verify_telegram(fields)
+    if not ok:
+        return _auth_page("That sign-in could not be verified", why, status=400)
+
+    business_id = auth.business_for_telegram(int(fields.get("id", "0")))
+    if business_id is None:
+        return _auth_page(
+            "No account for that Telegram user",
+            "This Telegram account is not the registered owner of any business.",
+            status=403)
+
+    response = RedirectResponse(f"{auth.PUBLIC_BASE_URL}/app/", status_code=303)
+    auth.set_cookie(response, auth.create_session(business_id))
+    return response
 
 
 # --- the owner's screens ----------------------------------------------------

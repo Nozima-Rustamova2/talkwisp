@@ -220,3 +220,37 @@ export const extractSource = (id: string) =>
     `/source/${id}/extract`,
     { method: "POST" },
   );
+
+/* --- signing in ----------------------------------------------------------
+ *
+ * No credentials option on any of these: the cookie is same-origin, and fetch
+ * sends same-origin cookies by default. `credentials: "include"` would only be
+ * needed if the API lived on another host, which is exactly the arrangement
+ * one-process deployment exists to avoid.
+ *
+ * The session cookie is httpOnly, so nothing here can read it. That is the
+ * point -- the only way to ask "am I signed in" is to ask the server. */
+
+export type Me = { business: string | null; email: string | null };
+
+/* Answers 200 whether or not you are signed in. A 401 here would be the
+ * ordinary logged-out case reported as a failure, which makes every browser
+ * console look like something is broken and makes this call impossible to
+ * distinguish from a real error. */
+export function getMe(): Promise<Me> {
+  return request<Me>("/auth/me");
+}
+
+/* Form-encoded, not JSON: the endpoint takes Form(...) so the browser's own
+ * encoding is what it expects. */
+export function requestLink(email: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ email }).toString(),
+  });
+}
+
+export function logout(): Promise<{ signed_out: boolean }> {
+  return request<{ signed_out: boolean }>("/auth/logout", { method: "POST" });
+}

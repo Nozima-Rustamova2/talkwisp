@@ -84,13 +84,37 @@ def assert_app_role() -> None:
                 "at the talkwisp_app role. Refusing to start.")
 
 
-def sole_business() -> str:
-    """The only business there is -- the stand-in until auth exists.
+# True for the duration of an HTTP request, set by the middleware in app/main.py.
+# Its only job is the guard in sole_business() below.
+IN_HTTP_REQUEST: ContextVar[bool] = ContextVar("in_http_request", default=False)
 
-    Raises when there is more than one, which is deliberate: it is what makes
-    deploying auth before tenancy fail loudly instead of merging two businesses
-    into one table with nothing to separate them by afterwards.
+
+def sole_business() -> str:
+    """The only business there is. FOR SCRIPTS AND THE BOT, NEVER FOR A REQUEST.
+
+    The check scripts and seed.py have no session and never will; the bot
+    resolves its tenant from the token that received the update. Both legitimately
+    need to name a business without anyone being logged in.
+
+    An HTTP request must not, and this raises rather than trusting that nobody
+    calls it. Reachable from a request, this is the fallback that serves a
+    logged-out visitor somebody else's data -- silently, because falling back to
+    "the only business" looks exactly like working correctly while there is only
+    one. It would start leaking on the day a second business signs up, which is
+    the day nobody is looking at this function.
+
+    The guard is a ContextVar rather than a rule, because a rule about which
+    functions may call which other functions has no failure signal. check_auth.py
+    proves it fires, and proves it does NOT fire outside a request -- otherwise
+    every script breaks and the guard is worse than the problem.
     """
+    if IN_HTTP_REQUEST.get():
+        raise RuntimeError(
+            "sole_business() was reached from an HTTP request. It is the "
+            "pre-auth fallback and a request must get its business from the "
+            "session instead -- falling back here serves a logged-out visitor "
+            "the only business there is, which reads as working right up until "
+            "there are two. Use app.main.current_business().")
     with pool.connection() as conn:
         return str(conn.execute("select app_sole_business()").fetchone()[0])
 

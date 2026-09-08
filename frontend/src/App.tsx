@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
 import Review from "./Review";
+import SignIn from "./SignIn";
+import { getMe, logout, type Me } from "./api";
 
 /* The shell: header, the two screens that exist, and the route between them.
  *
@@ -22,6 +24,26 @@ function routeFromHash(): Route {
 
 export default function App() {
   const [route, setRoute] = useState<Route>(routeFromHash);
+
+  /* THREE states, not two. "Not signed in" and "we have not asked yet" are
+   * different, and collapsing them flashes the sign-in form for a moment on
+   * every load for someone who is already signed in. */
+  const [me, setMe] = useState<Me | "asking">("asking");
+
+  useEffect(() => {
+    /* The screens are served by StaticFiles, which has no session check on it
+     * -- a mount cannot carry a dependency, and the sign-in page has to load
+     * for a logged-out visitor anyway. So the HTML always arrives and this is
+     * what decides what to draw. Nothing sensitive is in the bundle; every
+     * piece of business data comes from an endpoint that refuses without a
+     * session. */
+    getMe()
+      .then(setMe)
+      .catch(() => setMe({ business: null, email: null }));
+  }, []);
+
+  if (me === "asking") return null;
+  if (!me.business) return <SignIn />;
 
   useEffect(() => {
     const onChange = () => setRoute(routeFromHash());
@@ -84,6 +106,35 @@ export default function App() {
         <nav style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           {tab("add", "Add knowledge")}
           {tab("review", "Review")}
+          {/* The signed-in address, and a way out. Shown because a session that
+              cannot be seen or ended is the one part of auth a person cannot
+              verify for themselves -- and on a shared machine that matters more
+              than the space it costs. */}
+          <span
+            style={{
+              fontSize: 13,
+              color: "var(--text-faint)",
+              marginLeft: 8,
+              maxWidth: 200,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {me.email}
+          </span>
+          <button
+            className="control control-quiet"
+            onClick={async () => {
+              await logout().catch(() => undefined);
+              /* A full reload rather than setting state: it throws away every
+                 screen's in-memory copy of the previous session's data, which
+                 setting a flag would leave sitting in a closure. */
+              window.location.reload();
+            }}
+          >
+            Sign out
+          </button>
         </nav>
       </header>
 
