@@ -20,9 +20,13 @@ User=talkwisp
 Group=talkwisp
 WorkingDirectory=/home/talkwisp/talkwisp
 
-# Secrets live in one root-owned file at 0600, never in .bashrc and never in
-# this unit -- unit files are world-readable under /etc/systemd/system.
-EnvironmentFile=/etc/talkwisp/env
+# ONE secrets file, the repo's .env, and never a second copy. migrate.py,
+# seed.py and every check script read it through load_dotenv(), so a separate
+# /etc/talkwisp/env would be two files holding the same values -- and they
+# drift, failing at runtime rather than at edit time. It is 0600 talkwisp:talkwisp.
+# Not in this unit and not in .bashrc: unit files are world-readable under
+# /etc/systemd/system.
+EnvironmentFile=/home/talkwisp/talkwisp/.env
 
 # --host 127.0.0.1 is load-bearing. Binding 0.0.0.0 exposes the origin on 8200
 # with no TLS and no proxy, which undoes Caddy and Cloudflare together.

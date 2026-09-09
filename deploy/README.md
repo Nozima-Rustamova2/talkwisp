@@ -4,8 +4,9 @@ Everything else in the deployment runs as `talkwisp` and needs no privilege.
 These three do. Run them from your own sudo session; paste the output of the
 `ufw status` line back, because that is the one whose answer nobody knows yet.
 
-Order matters only in one place: **Caddy cannot obtain a certificate until 80
-and 443 are open**, so the firewall goes first.
+Order matters in one place: **the origin certificate must exist before Caddy
+starts**, so section 2b comes before section 3. Caddy does not use Let's
+Encrypt here, so nothing waits on the firewall for a challenge.
 
 ---
 
@@ -24,7 +25,7 @@ Then, if it is not already this:
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow 22/tcp     comment 'ssh'
-sudo ufw allow 80/tcp     comment 'http, ACME challenge'
+sudo ufw allow 80/tcp     comment 'http -> https redirect only, no ACME'
 sudo ufw allow 443/tcp    comment 'https'
 sudo ufw enable
 sudo ufw status numbered
@@ -48,42 +49,60 @@ Anything allowing 3389, 5432, 8200 or `0.0.0.0/0` on a wide port range should go
 
 ## 2. The secrets file
 
-Root-owned, `0600`. Not `.bashrc`, not the unit files — those are world-readable
-under `/etc/systemd/system`.
+**There is only one, and it is the repo's `.env`.** An earlier draft of this
+file had you create a second at `/etc/talkwisp/env` for systemd. That was a
+mistake: `migrate.py`, `seed.py` and every check script read the repo `.env`
+through `load_dotenv()`, so a second copy means two files holding the same
+secrets, and they drift. A drifted secret fails at runtime, not at edit time.
+
+The security difference is close to nil. systemd injects the values into the
+process environment either way, the process runs as `talkwisp`, and `talkwisp`
+can read them from `/proc/<pid>/environ` whoever owns the file. What protects it
+is the mode, which it already has:
 
 ```bash
-sudo install -d -m 0755 /etc/talkwisp
-sudo touch /etc/talkwisp/env
-sudo chmod 0600 /etc/talkwisp/env
-sudo chown root:root /etc/talkwisp/env
-sudo nano /etc/talkwisp/env
+ls -l /home/talkwisp/talkwisp/.env      # -rw------- talkwisp talkwisp
 ```
 
-Contents — one `KEY=value` per line, no `export`, no quotes:
+It is already populated. What is still missing:
 
 ```
-DATABASE_URL=postgresql://talkwisp_app:<app password>@localhost:5432/talkwisp
-ADMIN_DATABASE_URL=postgresql://postgres:<superuser password>@localhost:5432/talkwisp
-PUBLIC_BASE_URL=https://talkwisp.uz
-GEMINI_API_KEYS=<key>[,<key2>]
-GEMINI_MODEL=gemini-3.1-flash-lite
-LLM_PROVIDER=gemini
-TELEGRAM_BOT_TOKEN=<@avisenamed_bot token>
-TELEGRAM_PLATFORM_BOT_TOKEN=<@talkwisp_bot token>
+TELEGRAM_PLATFORM_BOT_TOKEN=<@talkwisp_bot token>   # the LOGIN signer
 TELEGRAM_LOGIN_ENABLED=true
-TELEGRAM_OWNER_ID=<your numeric telegram id>
-RESEND_API_KEY=<from resend>
-RESEND_FROM=info@talkwisp.uz
 ```
 
-Note the port is **5432** here, not the laptop's 5433 — the box runs Postgres
-natively rather than in a container.
+`TELEGRAM_BOT_TOKEN` is the AGENT bot (`@avisenamed_bot`) and
+`TELEGRAM_PLATFORM_BOT_TOKEN` is the one that signs web logins. Different bots
+on purpose; conflating them is the mistake the split exists to prevent.
 
-`TELEGRAM_BOT_TOKEN` is the AGENT bot and `TELEGRAM_PLATFORM_BOT_TOKEN` is the
-one that signs web logins. They are different bots on purpose and conflating
-them is the mistake this split exists to prevent.
+And the row that still says `CHANGEME`:
+
+```bash
+cd /home/talkwisp/talkwisp
+psql "$(grep '^ADMIN_DATABASE_URL=' .env | cut -d= -f2-)"   -c "update business set bot_token = '<@avisenamed_bot token>' where name = 'Default business';"
+```
 
 ---
+
+## 2b. The Cloudflare Origin Certificate
+
+Caddy does **not** use Let's Encrypt here, and the Caddyfile explains at length
+why. Create the certificate first or Caddy will not start.
+
+Cloudflare -> **SSL/TLS -> Origin Server -> Create Certificate**. Accept the
+defaults (RSA, 15 years), covering `talkwisp.uz` and `*.talkwisp.uz`. Copy both
+blocks out -- the private key is shown **once**.
+
+```bash
+sudo install -d -m 0755 /etc/caddy
+sudo nano /etc/caddy/origin.pem      # paste the certificate
+sudo nano /etc/caddy/origin.key      # paste the private key
+sudo chown root:caddy /etc/caddy/origin.pem /etc/caddy/origin.key
+sudo chmod 0640 /etc/caddy/origin.pem /etc/caddy/origin.key
+```
+
+Confirm Cloudflare's SSL/TLS mode is **Full (strict)**. That is what makes the
+origin certificate load-bearing rather than decorative.
 
 ## 3. Caddy and the two units
 
@@ -125,15 +144,29 @@ that is the guard working, not a bug. `DATABASE_URL` must be `talkwisp_app`.
 
 ---
 
-## Also needed, and only you can do it
+## Already done — do not redo these
 
-```bash
-sudo -u postgres psql -c "\du"
-sudo -u postgres psql -c "alter role postgres with password '<pick one>';"
-sudo -u postgres psql -d talkwisp -c "select version from schema_migrations order by version;"
+The database is set up and verified. Recorded so nobody repeats it:
+
+- 8 migrations applied; `talkwisp_app` created, non-superuser, no BYPASSRLS
+- RLS enabled **and forced** on all 6 tenant tables, `retrievable_fact` is
+  `security_invoker`, and an untenanted read raises rather than returning rows
+- Seeded: 138 confirmed facts, 2 waiting, 2 sources, 8 chunks, 106 aliases
+- Resend verified with a real send through the real app
+
+## After it is up — verify from a different network
+
+Not from the box and not from the machine that deployed it: a proxy
+misconfiguration is invisible from inside.
+
+```
+https://talkwisp.uz/app/            loads the sign-in screen
+https://talkwisp.uz/review          401, not data
+https://talkwisp.uz/openapi.json    404 — the docs routes do not exist
+curl -sI https://talkwisp.uz/auth/callback?token=x | grep -i set-cookie
 ```
 
-Both credentials currently in the repo's `.env` fail authentication, and
-Postgres returns the same error whether a role exists or not — so until this
-runs, nobody can say whether `talkwisp_app` exists or whether the tenancy
-migration was ever applied here.
+The last one is the point: the `Secure` flag is derived from
+`PUBLIC_BASE_URL`'s scheme, so it should have flipped on by itself. Confirm it
+did rather than assuming — a cookie without `Secure` on an HTTPS site is a
+cookie that will travel over plain HTTP the first time something downgrades.

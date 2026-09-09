@@ -4,13 +4,41 @@
 # talkwisp.uz, which is why there is no CORS anywhere in this codebase and no
 # cross-domain cookie problem. An api. subdomain would have created both.
 #
-# Caddy gets its own certificate from Let's Encrypt automatically. That is what
-# satisfies Cloudflare's Full (strict) mode: strict means Cloudflare verifies
-# the ORIGIN's certificate, so a self-signed one or plain HTTP here would fail.
-# Nothing to configure -- the `talkwisp.uz` site block is enough, provided port
-# 80 is reachable for the ACME challenge.
+# Cloudflare is in front on Full (strict), so the origin must present a
+# certificate Cloudflare trusts. It presents a Cloudflare ORIGIN CERTIFICATE --
+# see the tls line below, and read the comment there before touching it.
 
 talkwisp.uz {
+	# ------------------------------------------------------------------
+	# DO NOT DELETE THIS LINE TO "LET CADDY HANDLE CERTIFICATES
+	# AUTOMATICALLY". It is not redundant. Removing it re-enables ACME and
+	# deadlocks the site.
+	#
+	# Why: Let's Encrypt's HTTP-01 challenge fetches
+	# http://talkwisp.uz/.well-known/acme-challenge/... DNS points at
+	# Cloudflare, so Cloudflare answers, not this box. With Always Use HTTPS
+	# on, Cloudflare 301s to https:// before the origin sees anything; Let's
+	# Encrypt follows; Cloudflare then dials the origin on 443 under Full
+	# (strict), where Caddy has no certificate yet -- because obtaining one
+	# is what it was doing. Origin handshake fails, 526, challenge fails.
+	# A deadlock that reads as "Caddy is broken" and is not.
+	#
+	# The alternative was grey-clouding during issuance. It works ONCE.
+	# Renewal sixty days later runs the same challenge against the same
+	# proxied domain, fails unattended, and the certificate expires at
+	# whatever hour it happens to be -- an outage scheduled for a date
+	# nobody wrote down.
+	#
+	# A Cloudflare Origin Certificate is valid fifteen years, is exactly what
+	# Full (strict) checks for, and needs no ACME at all. It is trusted ONLY
+	# by Cloudflare: hitting 35.204.36.184 directly gives a certificate
+	# warning. That is intended. Nothing should reach the origin directly.
+	#
+	# Regenerate from: Cloudflare -> SSL/TLS -> Origin Server -> Create
+	# Certificate. Files are root-owned 0600.
+	# ------------------------------------------------------------------
+	tls /etc/caddy/origin.pem /etc/caddy/origin.key
+
 	encode zstd gzip
 
 	header {
@@ -57,6 +85,13 @@ talkwisp.uz {
 		rewrite * /index.html
 		file_server
 	}
+
+	# Port 80 stays open and Caddy keeps redirecting it to 443, even though
+	# validation no longer needs it. Someone typing `talkwisp.uz` with no
+	# scheme should land on HTTPS rather than on nothing, and Cloudflare
+	# handles that better when the origin cooperates than when it refuses.
+	# The explicit tls line above disables automatic CERTIFICATE MANAGEMENT
+	# only; the http->https redirect is separate and still applies.
 
 	# --- everything else is the API ----------------------------------------
 	# uvicorn binds 127.0.0.1:8200 and must never bind 0.0.0.0: on a public VM
