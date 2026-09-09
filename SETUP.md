@@ -64,6 +64,7 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 LLM_PROVIDER=gemini
 TELEGRAM_BOT_TOKEN=<your own bot's token>
 TELEGRAM_OWNER_ID=<your numeric Telegram user id>
+PUBLIC_BASE_URL=http://localhost:8200
 ```
 
 Notes that are not cosmetic:
@@ -76,6 +77,9 @@ Notes that are not cosmetic:
 - **`ADMIN_DATABASE_URL`** is used by `migrate.py` alone — migrations alter
   tables and manage roles, which the app role deliberately cannot do.
 - `TELEGRAM_OWNER_ID` gates `/fact` in Telegram. Get it from @userinfobot.
+- **`PUBLIC_BASE_URL` is the only place a hostname is written down.** Sign-in
+  links are built from it and the session cookie's `Secure` flag is derived from
+  its scheme, so moving to a real domain is this one line.
 - **Type secrets into the file yourself. Do not paste them into a chat window**,
   including a Claude Code session. A `.env` and your own terminal are the right
   places for them; a transcript is not.
@@ -87,16 +91,16 @@ uv sync
 uv run python migrate.py
 ```
 
-`migrate.py` creates the `talkwisp_app` role, applies all 7 migrations, and
+`migrate.py` creates the `talkwisp_app` role, applies all 8 migrations, and
 copies `TELEGRAM_BOT_TOKEN` / `TELEGRAM_OWNER_ID` onto the single `business`
 row. Expect:
 
 ```
   created role talkwisp_app
-7 migration file(s), 7 pending.
+8 migration file(s), 8 pending.
   applied 0001_initial.sql
   ... through ...
-  applied 0007_multitenancy.sql
+  applied 0008_auth.sql
   linked TELEGRAM_BOT_TOKEN to the single business row
 ```
 
@@ -131,6 +135,13 @@ npm --prefix frontend install
 npm --prefix frontend run build
 ```
 
+`build` runs `oxlint` first and **fails the build on a lint error**, which is
+deliberate. `tsc` cannot see a conditionally-called React hook -- it is not a
+type error -- and a green `tsc` on `App.tsx` once shipped a crash that fired the
+instant a user signed in successfully, while the signed-out path rendered
+perfectly. The linter named both lines exactly and was simply never run. It is
+part of the build now so it cannot be the step someone skips.
+
 One process serves both: FastAPI mounts the built files at `/app`. There is no
 separate frontend server in normal use. **After any rebuild, reload the page** —
 the screens use hash routing, and a hash change does not refetch.
@@ -158,18 +169,47 @@ serving Default business.
 `-u` on the bot is worth keeping: its startup prints are not flushed, so
 without it a working bot looks like a hung one for the first 30 seconds.
 
-## 8. Verify
+## 8. Sign in
+
+There is no signup. An account is a `business` row with an email on it, so on a
+fresh install you have to put yours there once:
+
+```sql
+update business set owner_email = 'you@example.com' where name = 'Default business';
+```
+
+Then open the screens, enter that address, and press **Send sign-in link**.
+
+**The email is not sent.** Delivery is the console backend on purpose --
+`app/auth.py`'s `deliver()` prints the link to the server log instead, because
+choosing a sender needs an account, a payment method and DNS for a domain that
+is still being bought. So the link appears in the terminal running uvicorn:
+
+```
+  MAGIC LINK for you@example.com
+  http://localhost:8200/auth/callback?token=...
+```
+
+Paste it into the browser. It works once and expires after 15 minutes. The
+sign-in screen says all of this too, so nobody sits waiting on an inbox.
+
+**Anything deploying this to a public URL must replace `deliver()` first**, or
+only whoever can read the server log can sign in at all.
+
+## 9. Verify
 
 Cheap, no model calls, run these first:
 
 ```bash
-uv run python check_encoding.py    # 91 clean, 0 failed
-uv run python check_tenancy.py     # 28 passed, 0 failed
+uv run python check_encoding.py    # 97 clean, 0 failed
+uv run python check_tenancy.py     # 32 passed, 0 failed
+uv run python check_auth.py        # 42 passed, 0 failed
 uv run python check_llm.py         # 13 passed, 0 failed
 uv run python check_orders.py      # 55 passed, 0 failed
 uv run python check_payment.py     # 16 passed, 0 failed
 uv run python check_bot.py         # 17 passed, 0 failed
 uv run python check_normalize.py
+npm --prefix frontend run lint    # no errors; two pre-existing warnings are fine
 uv run python check_language.py    # TOTAL 53/53
 uv run python check_time.py
 ```

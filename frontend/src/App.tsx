@@ -42,9 +42,6 @@ export default function App() {
       .catch(() => setMe({ business: null, email: null }));
   }, []);
 
-  if (me === "asking") return null;
-  if (!me.business) return <SignIn />;
-
   useEffect(() => {
     const onChange = () => setRoute(routeFromHash());
     window.addEventListener("hashchange", onChange);
@@ -54,10 +51,38 @@ export default function App() {
   // The title is the only part of the page a hash route does not update by
   // itself. Left alone it says "Add knowledge" while the Review screen is on
   // screen, which is wrong in the browser tab, in history and in a bookmark.
+  //
+  // It has to know about the signed-out state too, now that this runs before
+  // the returns below: without that arm, the sign-in page is titled "Add
+  // knowledge" in the tab, in history and in a bookmark.
   useEffect(() => {
     document.title =
-      route === "review" ? "Review — Talkwisp" : "Add knowledge — Talkwisp";
-  }, [route]);
+      me === "asking" || !me.business
+        ? "Sign in — Talkwisp"
+        : route === "review"
+          ? "Review — Talkwisp"
+          : "Add knowledge — Talkwisp";
+  }, [route, me]);
+
+  /* EVERY HOOK ABOVE THIS LINE, EVERY RETURN BELOW IT.
+   *
+   * These two returns were above the two effects until 2026-09-09, which made
+   * those effects conditional, and React counts hooks by position: render one
+   * returned null after three hooks, render two ran past both guards and asked
+   * for a fourth, and React threw "Rendered more hooks than during the previous
+   * render" and unmounted the tree.
+   *
+   * It crashed ONLY for signed-in users. A logged-out visitor returns at the
+   * second guard, so the hook count stays three on both renders and the sign-in
+   * screen works perfectly -- the bug was invisible in every state except a
+   * successful login, which is to say the moment the feature starts working.
+   *
+   * `tsc -b` cannot see it (it is not a type error) and check_auth.py cannot
+   * either (42 checks, none of which render a component). `npm run lint` names
+   * both lines exactly, and is now part of `npm run build` so it cannot be the
+   * step someone skips. */
+  if (me === "asking") return null;
+  if (!me.business) return <SignIn />;
 
   const tab = (to: Route, label: string) => (
     <a
