@@ -44,6 +44,18 @@ COOKIE = "tw_session"
 SESSION_TTL = "30 days"
 LINK_TTL = "15 minutes"
 
+# Sending the sign-in link. With no key set, deliver() prints to the server log
+# instead -- that is what keeps a local checkout usable with no account, and it
+# is the reason this is a plain absence check rather than a config error.
+#
+# RESEND_FROM must be on a domain whose DKIM records are live in Resend, or
+# every send is refused. Note that Cloudflare Email Routing has already claimed
+# the single SPF TXT record on talkwisp.uz: Resend's include: has to be MERGED
+# into that one record, never added as a second. Two v=spf1 records on one name
+# is a permanent fail and breaks receiving as well as sending.
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+RESEND_FROM = os.getenv("RESEND_FROM", "info@talkwisp.uz")
+
 # Telegram Login, step 4. Off until a domain is linked in BotFather.
 TELEGRAM_LOGIN_ENABLED = os.getenv("TELEGRAM_LOGIN_ENABLED", "").lower() in (
     "1", "true", "yes")
@@ -184,19 +196,73 @@ def claim_link(raw: str) -> tuple[str | None, str]:
     return (str(row[0]) if row[0] else None), row[1]
 
 
-def deliver(email: str, link: str) -> None:
-    """Console backend: print the link, send nothing.
-
-    DELIBERATE, AND NOT READY TO SHIP. A real sender means an account, a payment
-    method and DNS records for a domain that is still being bought, and picking
-    one is a separate decision. Until then the link goes to the server log,
-    which is fully testable through a tunnel.
-
-    Anything that deploys this to a public URL must replace this function first
-    -- otherwise logging in requires reading the server's log, which means
-    nobody but the operator can log in at all.
-    """
+def _console(email: str, link: str) -> None:
     print(f"\n  MAGIC LINK for {email}\n  {link}\n", flush=True)
+
+
+def deliver(email: str, link: str) -> None:
+    """Send the sign-in link, or print it if there is no sender configured.
+
+    TWO BACKENDS, CHOSEN BY WHETHER RESEND_API_KEY IS SET. With no key this
+    prints to the server log, which is what makes a local checkout usable
+    without anyone creating an account -- see SETUP.md. With a key it sends for
+    real.
+
+    THE FALLBACK ON FAILURE IS THE PART WORTH READING. If Resend refuses, this
+    prints the link and returns normally rather than raising. Three reasons, in
+    order:
+
+      * The endpoint answers identically for a known and an unknown address, on
+        purpose, so that /auth/request is not an account checker. Raising here
+        would turn a send failure into a 500 for real addresses and a 200 for
+        made-up ones -- reintroducing exactly the enumeration channel the
+        endpoint was written to close.
+      * A broken sender would otherwise lock every owner out of their own
+        account, including the person who has to go and fix the sender.
+      * The failure is not swallowed: it is printed with the provider's own
+        error text, so `journalctl -u talkwisp-api` says what went wrong rather
+        than leaving a silence to interpret.
+
+    An unverified sending domain is the failure this will actually hit -- Resend
+    refuses any `from` on a domain whose DKIM records are not live yet, and that
+    is a DNS problem, not a code one.
+    """
+    if not RESEND_API_KEY:
+        _console(email, link)
+        return
+
+    try:
+        response = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+            json={
+                "from": RESEND_FROM,
+                "to": [email],
+                "subject": "Your Talkwisp sign-in link",
+                # Plain text, not HTML. A one-link email in HTML is more likely
+                # to be treated as marketing, and there is nothing to lay out.
+                "text": (
+                    "Here is your sign-in link. It works once and expires in "
+                    f"15 minutes.\n\n{link}\n\n"
+                    "If you did not ask for this, ignore it -- nothing happens "
+                    "until the link is opened."
+                ),
+            },
+            timeout=20,
+        )
+    except httpx.HTTPError as exc:
+        print(f"  RESEND FAILED for {email}: {exc!r}", flush=True)
+        _console(email, link)
+        return
+
+    if response.status_code >= 400:
+        print(f"  RESEND REFUSED for {email}: HTTP {response.status_code} "
+              f"{response.text[:300]}", flush=True)
+        _console(email, link)
+        return
+
+    print(f"  sign-in link sent to {email} "
+          f"(resend id {response.json().get('id')})", flush=True)
 
 
 # --- Telegram Login ---------------------------------------------------------
