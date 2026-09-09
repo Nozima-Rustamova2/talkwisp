@@ -75,7 +75,11 @@ talkwisp.uz {
 	# then these paths 404. If you want the interim behaviour instead -- root
 	# redirecting to /app/ -- comment out this whole block and uvicorn's own
 	# `/` route will answer, because it already returns RedirectResponse("/app/").
-	handle /privacy* /terms* /data-deletion* {
+	# A NAMED MATCHER, not three paths on the handle line. `handle` takes
+	# exactly one matcher token; `handle /privacy* /terms* /data-deletion*`
+	# is a parse error ("wrong argument count"), not a list. Caddy 2.11.4.
+	@legal path /privacy* /terms* /data-deletion*
+	handle @legal {
 		root * /home/talkwisp/talkwisp/site
 		try_files {path}.html {path}
 		file_server
