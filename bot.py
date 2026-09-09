@@ -19,12 +19,14 @@ Four operational rules, in order of how badly they bite in front of an audience:
 """
 
 import collections
+import contextlib
 import datetime
 import json
 import os
 import pathlib
 import secrets
 import sys
+import threading
 import time
 
 import httpx
@@ -148,6 +150,53 @@ def send(chat_id: int, text: str) -> bool:
     except (httpx.HTTPError, ValueError) as exc:
         print(f"send to {chat_id} failed: {exc!r}", flush=True)
         return False
+
+
+@contextlib.contextmanager
+def typing(chat_id: int):
+    """Show "typing…" for as long as the block runs.
+
+    The answer path is embedding then generation -- roughly one second plus
+    anywhere from two to fifteen, measured -- and in a chat that reads as broken
+    rather than busy. This does not make anything faster; it makes the wait
+    legible, which is the part that was actually wrong.
+
+    A CONTEXT MANAGER, AND THAT IS THE WHOLE DESIGN. The requirement is that it
+    stops on every exit path: the triage short-circuit, the purchase offer's
+    early return, an LLMError after retries, the database-unreachable branch,
+    the catch-all, and the ordinary reply. A list of stop() calls is a rule, and
+    a rule about six branches has no failure signal -- the seventh branch
+    someone adds next year inherits nothing while the bot sits showing "typing"
+    at a customer forever. You cannot return out of a `with` without `finally`
+    running, so exits that do not exist yet are covered too.
+
+    Telegram expires the action after about five seconds, so it has to repeat.
+    Event.wait(4) rather than sleep(4): the thread stops the moment the reply is
+    sent instead of lingering up to four seconds after it, which would leave
+    "typing" on screen next to a message that has already arrived.
+
+    Every send is swallowed. This is cosmetic, and a failed chat action must
+    never be the reason a customer gets no answer.
+    """
+    stop = threading.Event()
+
+    def keep_typing():
+        while not stop.is_set():
+            try:
+                httpx.post(f"{API}/sendChatAction",
+                           json={"chat_id": chat_id, "action": "typing"},
+                           timeout=10)
+            except Exception:  # noqa: BLE001 - cosmetic, never fatal
+                pass
+            stop.wait(4)
+
+    thread = threading.Thread(target=keep_typing, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join(timeout=2)
 
 
 def log(entry: dict) -> None:
@@ -301,7 +350,13 @@ def handle_fact_command(conn, chat_id, is_owner, line):
         send(chat_id, "Masalan: /fact Kardiolog qabuli 250 000 soʻm")
         return
 
-    result = parse_fact(conn, line)
+    # parse_fact() is a generation, so this waits as long as an ordinary answer
+    # does. Included because the silence is the same silence -- it is the owner
+    # staring at nothing rather than a customer, which makes it easier to
+    # dismiss and no less wrong. The two returns above are outside on purpose:
+    # both are instant and neither touches a model.
+    with typing(chat_id):
+        result = parse_fact(conn, line)
     if result["error"]:
         send(chat_id, f"Tushunmadim: {result['error']}")
         return
@@ -825,84 +880,96 @@ def handle(conn, message: dict, last_seen: dict) -> None:
         return
     last_seen[chat_id] = (tokens - 1.0, now)
 
-    # A purchase, maybe. TRIAGE OUTRANKS COMMERCE: someone describing chest
-    # pain who also says "to'lash" gets the emergency reply, never a payment
-    # offer. triage() is pure and costs nothing, so it is asked first.
+    # Everything from here to the reply is wrapped, and the placement is the
+    # decision. Not earlier: the social short-circuit and the throttle sit above
+    # this line and both answer instantly with no model call, so an indicator
+    # there would flash and vanish, or worse, promise an answer to someone who
+    # has just been rate-limited. Not later: most of the wait is over by the
+    # time retrieval finishes, so starting after it defeats the point.
     #
-    # preflight() is a COST filter -- see app/buy.py. Its block is logged, with
-    # the message, so the miss rate can be measured by replaying blocked
-    # messages through the classifier offline. An unmeasurable filter drifts
-    # silently, and nothing here can know what it threw away.
-    prefilter = buy.preflight(text) if triage(text) is None else None
-    if prefilter:
-        try:
-            offer = buy.offer(conn, text)
-        except LLMError:
-            offer = None  # fall through and answer the question normally
-        if offer is not None:
-            if offer.get("refusal"):
-                send(chat_id, _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, text))
-            else:
-                send_offer(chat_id, text, offer)
+    # triage() and buy.preflight() are inside, and they are free -- pure Python,
+    # measured at 0.00s. They cost nothing to include and including them means
+    # the indicator is up before the first call that can block.
+    with typing(chat_id):
+
+        # A purchase, maybe. TRIAGE OUTRANKS COMMERCE: someone describing chest
+        # pain who also says "to'lash" gets the emergency reply, never a payment
+        # offer. triage() is pure and costs nothing, so it is asked first.
+        #
+        # preflight() is a COST filter -- see app/buy.py. Its block is logged, with
+        # the message, so the miss rate can be measured by replaying blocked
+        # messages through the classifier offline. An unmeasurable filter drifts
+        # silently, and nothing here can know what it threw away.
+        prefilter = buy.preflight(text) if triage(text) is None else None
+        if prefilter:
+            try:
+                offer = buy.offer(conn, text)
+            except LLMError:
+                offer = None  # fall through and answer the question normally
+            if offer is not None:
+                if offer.get("refusal"):
+                    send(chat_id, _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, text))
+                else:
+                    send_offer(chat_id, text, offer)
+                log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                     "outcome": "offer", "prefilter": prefilter,
+                     "refusal": offer.get("refusal"),
+                     "subjects": offer.get("subjects")
+                                 or [offer.get("subject")]})
+                return
+        else:
             log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
-                 "outcome": "offer", "prefilter": prefilter,
-                 "refusal": offer.get("refusal"),
-                 "subjects": offer.get("subjects")
-                             or [offer.get("subject")]})
+                 "outcome": "buy_prefilter_blocked"})
+
+        # Resolve a follow-up into a standalone question. After the social
+        # short-circuit and after the throttle, so neither spends a model call.
+        # The output is a QUESTION -- everything downstream is untouched.
+        asked, was_rewritten = rewrite(history_for(chat_id), text)
+
+        try:
+            result = answer(conn, asked)
+        except LLMError as exc:
+            # Quota gone, or the provider is down. Say something honest -- a bot
+            # that goes quiet reads as broken software; this reads as software.
+            send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
+            log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                 "outcome": "llm_error", "error": str(exc)[:300]})
             return
-    else:
-        log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
-             "outcome": "buy_prefilter_blocked"})
+        except psycopg.OperationalError as exc:
+            # Say it where the operator will see it. A customer-facing apology is
+            # not enough: the person running the demo needs to know the database
+            # went away, not just that "something" failed.
+            print(f"DATABASE UNREACHABLE: {exc!r}", flush=True)
+            send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
+            log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                 "outcome": "database_error", "error": repr(exc)[:300]})
+            return
+        except Exception as exc:  # noqa: BLE001 - the bot must not die on one message
+            send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
+            log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                 "outcome": "error", "error": repr(exc)[:300]})
+            return
 
-    # Resolve a follow-up into a standalone question. After the social
-    # short-circuit and after the throttle, so neither spends a model call.
-    # The output is a QUESTION -- everything downstream is untouched.
-    asked, was_rewritten = rewrite(history_for(chat_id), text)
+        reply = result["answer"] or _say(DONT_KNOW, DONT_KNOW_DEFAULT, text)
+        send(chat_id, reply)
+        remember(chat_id, text, reply)
 
-    try:
-        result = answer(conn, asked)
-    except LLMError as exc:
-        # Quota gone, or the provider is down. Say something honest -- a bot
-        # that goes quiet reads as broken software; this reads as software.
-        send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
-        log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
-             "outcome": "llm_error", "error": str(exc)[:300]})
-        return
-    except psycopg.OperationalError as exc:
-        # Say it where the operator will see it. A customer-facing apology is
-        # not enough: the person running the demo needs to know the database
-        # went away, not just that "something" failed.
-        print(f"DATABASE UNREACHABLE: {exc!r}", flush=True)
-        send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
-        log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
-             "outcome": "database_error", "error": repr(exc)[:300]})
-        return
-    except Exception as exc:  # noqa: BLE001 - the bot must not die on one message
-        send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
-        log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
-             "outcome": "error", "error": repr(exc)[:300]})
-        return
-
-    reply = result["answer"] or _say(DONT_KNOW, DONT_KNOW_DEFAULT, text)
-    send(chat_id, reply)
-    remember(chat_id, text, reply)
-
-    # Same shape as results.json, so the real questions can be graded the same
-    # way the hand-written ones are. `asked` is logged separately from
-    # `question`: when a follow-up goes wrong, what reached retrieval is the
-    # thing worth seeing, not what the customer typed.
-    log({
-        "chat_id": chat_id, "user_id": user_id, "is_owner": is_owner,
-        "question": text,
-        "asked": asked if was_rewritten else None,
-        "rewritten": was_rewritten,
-        "status": result["status"],
-        "route": result["source"],
-        "matched_on": result.get("matched_on"),
-        "fact_scores": [f["similarity"] for f in result.get("near_facts", [])],
-        "chunk_scores": [c["similarity"] for c in result.get("chunks", [])],
-        "answer": reply,
-    })
+        # Same shape as results.json, so the real questions can be graded the same
+        # way the hand-written ones are. `asked` is logged separately from
+        # `question`: when a follow-up goes wrong, what reached retrieval is the
+        # thing worth seeing, not what the customer typed.
+        log({
+            "chat_id": chat_id, "user_id": user_id, "is_owner": is_owner,
+            "question": text,
+            "asked": asked if was_rewritten else None,
+            "rewritten": was_rewritten,
+            "status": result["status"],
+            "route": result["source"],
+            "matched_on": result.get("matched_on"),
+            "fact_scores": [f["similarity"] for f in result.get("near_facts", [])],
+            "chunk_scores": [c["similarity"] for c in result.get("chunks", [])],
+            "answer": reply,
+        })
 
 
 

@@ -121,5 +121,80 @@ check("no owner means no owner -- never everyone",
       if bot.OWNER_ID is None else True)
 check("a different id is not the owner", bot.is_owner_id("not-the-owner"), False)
 
+# ---------------------------------------------------------------------------
+print("\n  the typing indicator stops on every exit")
+# The one property the whole design rests on. A bot left showing "typing" at a
+# customer forever is worse than no indicator, and the failure is invisible from
+# the server side -- nothing errors, the reply was sent, and only the person
+# staring at the chat can see it.
+#
+# The network call is stubbed, so this asserts CONTROL FLOW and nothing else.
+# No Telegram, no waiting.
+
+import threading  # noqa: E402
+import time  # noqa: E402
+
+sent = []
+bot.httpx.post = lambda url, **kw: sent.append(url) or type(
+    "R", (), {"json": staticmethod(lambda: {"ok": True})})()
+
+
+def threads_left_by(fn) -> int:
+    """How many live threads the block leaves behind."""
+    before = threading.active_count()
+    try:
+        fn()
+    except Exception:  # noqa: BLE001 - the point is what happens on the way out
+        pass
+    # join(timeout=2) inside the context manager should already have reaped it;
+    # a short settle keeps this from racing on a slow machine.
+    for _ in range(20):
+        if threading.active_count() <= before:
+            break
+        time.sleep(0.05)
+    return threading.active_count() - before
+
+
+def normal_return():
+    with bot.typing(1):
+        pass
+
+
+def raises_inside():
+    with bot.typing(1):
+        raise RuntimeError("an LLMError, or anything else")
+
+
+def returns_early():
+    def inner():
+        with bot.typing(1):
+            return "the purchase-offer branch"
+    inner()
+
+
+for label, fn in (("a normal exit", normal_return),
+                  ("an exception inside", raises_inside),
+                  ("an early return", returns_early)):
+    check(f"no thread survives {label}", threads_left_by(fn), 0)
+
+check("it did send at least one chat action", bool(sent), True)
+check("to sendChatAction, never sendMessage",
+      all(u.endswith("/sendChatAction") for u in sent), True)
+
+# The control. Every assertion above is "a counter came back to zero", which is
+# also what a broken measurement returns. So: a deliberately leaky version whose
+# thread is never stopped, which MUST be seen to leave one behind. If this
+# reports zero, the three checks above are counting nothing.
+_leak = threading.Event()
+
+
+def leaky():
+    threading.Thread(target=_leak.wait, daemon=True).start()
+
+
+check("control: a thread that is never stopped IS counted",
+      threads_left_by(leaky), 1)
+_leak.set()
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
