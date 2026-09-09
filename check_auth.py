@@ -247,6 +247,75 @@ unknown = client.get("/auth/callback?token=never-existed", follow_redirects=Fals
 check("an unrecognised link says so", "not valid" in unknown.text, True)
 
 # ---------------------------------------------------------------------------
+print("\n5b. The Resend path, which the console path never touches")
+# deliver() has two backends and the tests only ever ran the console one, so a
+# NameError sat in the Resend branch and shipped: `httpx` was used and never
+# imported. It surfaced on the box, on the first real send, because no test had
+# ever entered that branch. Both branches get exercised now.
+
+sent_payloads = []
+
+
+class _FakeResponse:
+    def __init__(self, status=200, body=None):
+        self.status_code = status
+        self._body = body or {"id": "test-message-id"}
+        self.text = str(self._body)
+
+    def json(self):
+        return self._body
+
+
+def _with_resend(key, poster):
+    """Run deliver() as though a Resend key were configured."""
+    saved_key, saved_post = auth.RESEND_API_KEY, auth.httpx.post
+    auth.RESEND_API_KEY, auth.httpx.post = key, poster
+    try:
+        auth.deliver("owner@example.test", "https://talkwisp.uz/auth/callback?token=t")
+    finally:
+        auth.RESEND_API_KEY, auth.httpx.post = saved_key, saved_post
+
+
+def _ok_post(url, headers=None, json=None, timeout=None):
+    sent_payloads.append({"url": url, "json": json, "headers": headers})
+    return _FakeResponse()
+
+
+_with_resend("re_test", _ok_post)
+check("a configured key sends instead of printing", len(sent_payloads), 1)
+check("to the Resend endpoint", sent_payloads[0]["url"],
+      "https://api.resend.com/emails")
+check("with the key as a bearer token",
+      sent_payloads[0]["headers"]["Authorization"], "Bearer re_test")
+check("from RESEND_FROM, to the address that asked",
+      (sent_payloads[0]["json"]["from"], sent_payloads[0]["json"]["to"]),
+      (auth.RESEND_FROM, ["owner@example.test"]))
+check("and the link is in the body",
+      "auth/callback?token=t" in sent_payloads[0]["json"]["text"], True)
+
+
+# A refusal must not raise. /auth/request answers identically for known and
+# unknown addresses so it cannot be used as an account checker; an exception
+# here would make a send failure a 500 for real addresses and a 200 for
+# invented ones, reintroducing exactly that channel.
+def _refusing_post(url, headers=None, json=None, timeout=None):
+    return _FakeResponse(status=422, body={"message": "domain not verified"})
+
+
+def _throwing_post(url, headers=None, json=None, timeout=None):
+    raise auth.httpx.ConnectError("no route to host")
+
+
+for label, poster in (("a 4xx refusal", _refusing_post),
+                      ("a transport error", _throwing_post)):
+    try:
+        _with_resend("re_test", poster)
+        raised = False
+    except Exception:  # noqa: BLE001
+        raised = True
+    check(f"{label} does not raise -- it falls back to the log", raised, False)
+
+# ---------------------------------------------------------------------------
 print("\n6. The cookie's attributes are the decided ones")
 
 header = first.headers.get("set-cookie", "")
