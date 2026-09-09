@@ -32,10 +32,31 @@ WorkingDirectory=/home/talkwisp/talkwisp
 # /etc/systemd/system.
 EnvironmentFile=/home/talkwisp/talkwisp/.env
 
+# NOT `uv run`. Two reasons, and the second is why this is the fix rather
+# than a workaround.
+#
+# `uv run` re-resolves the environment on every start and needs a WRITABLE
+# CACHE at ~/.cache/uv. ProtectHome=read-only makes that fail:
+#
+#   Could not acquire lock -> Read-only file system (os error 30)
+#   at path "/home/talkwisp/.cache/uv/.tmpXXXXXX"
+#
+# The tempting fixes are ReadWritePaths=/home/talkwisp/.cache or a
+# UV_CACHE_DIR elsewhere. Both keep a resolver on the startup path of a
+# long-running service, doing work it does not need, and both widen the
+# sandbox to accommodate it. Calling the venv's entry point directly removes
+# the requirement instead: no resolver, no cache, no lock, nothing to write.
+#
+# Verified rather than assumed -- with HOME pointed at a nonexistent path,
+# `.venv/bin/python -c "import app.main"` still imports. The interpreter is a
+# symlink into ~/.local/share/uv, and ProtectHome=read-only permits reads.
+#
+# The venv must exist: `uv sync` once, by hand, at deploy time.
+#
 # -u matters here more than for the API. bot.py's startup prints are not
 # flushed, so without it a working bot looks like a hung one for the first
 # thirty seconds -- long enough to make someone restart a healthy process.
-ExecStart=/home/talkwisp/.local/bin/uv run python -u bot.py
+ExecStart=/home/talkwisp/talkwisp/.venv/bin/python -u bot.py
 
 Restart=always
 RestartSec=5
@@ -49,6 +70,10 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
 # messages.jsonl is appended to on every customer message.
+# The app writes exactly three files at runtime, all appended, all in the
+# repo root: gaps.jsonl, feedback.jsonl, messages.jsonl. Uploaded documents
+# are bytea in Postgres and never touch the filesystem. So this one carve-out
+# is the whole write surface -- checked by grep, not assumed.
 ReadWritePaths=/home/talkwisp/talkwisp
 
 [Install]
