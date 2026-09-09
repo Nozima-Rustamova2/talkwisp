@@ -1,0 +1,49 @@
+# /etc/systemd/system/talkwisp-bot.service
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now talkwisp-bot
+#   journalctl -u talkwisp-bot -f
+#
+# ONE UNIT PER BOT TOKEN. Telegram allows a single getUpdates consumer per
+# token, and a second one does not fail cleanly -- the two processes steal each
+# other's updates and messages vanish. So this unit serves exactly one business.
+#
+# The second business gets talkwisp-bot@.service (a template) or its own unit,
+# NOT a second copy of this one pointed at the same token. Ten businesses today
+# means ten poll loops at roughly 66 MB each; webhooks collapse that to zero
+# extra processes and are worth doing before the tenth customer, not after.
+
+[Unit]
+Description=Talkwisp Telegram agent bot
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=exec
+User=talkwisp
+Group=talkwisp
+WorkingDirectory=/home/talkwisp/talkwisp
+EnvironmentFile=/etc/talkwisp/env
+
+# -u matters here more than for the API. bot.py's startup prints are not
+# flushed, so without it a working bot looks like a hung one for the first
+# thirty seconds -- long enough to make someone restart a healthy process.
+ExecStart=/home/talkwisp/.local/bin/uv run python -u bot.py
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+Environment=PYTHONUNBUFFERED=1
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+# messages.jsonl is appended to on every customer message.
+ReadWritePaths=/home/talkwisp/talkwisp
+
+[Install]
+WantedBy=multi-user.target

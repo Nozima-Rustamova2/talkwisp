@@ -1,0 +1,55 @@
+# /etc/systemd/system/talkwisp-api.service
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now talkwisp-api
+#   systemctl status talkwisp-api
+#   journalctl -u talkwisp-api -f     <- the magic links print here
+
+[Unit]
+Description=Talkwisp API and owner screens
+# Postgres is a hard dependency, not a soft one: app/db.py opens the pool and
+# runs assert_app_role() during startup, so a boot before Postgres is a boot
+# that fails. Restart=always would then retry, but noisily and for no reason.
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=exec
+User=talkwisp
+Group=talkwisp
+WorkingDirectory=/home/talkwisp/talkwisp
+
+# Secrets live in one root-owned file at 0600, never in .bashrc and never in
+# this unit -- unit files are world-readable under /etc/systemd/system.
+EnvironmentFile=/etc/talkwisp/env
+
+# --host 127.0.0.1 is load-bearing. Binding 0.0.0.0 exposes the origin on 8200
+# with no TLS and no proxy, which undoes Caddy and Cloudflare together.
+ExecStart=/home/talkwisp/.local/bin/uv run uvicorn app.main:app --host 127.0.0.1 --port 8200
+
+# A crash that needs a human is a crash that lasts hours. Both processes have
+# been OOM-killed before, and an OOM kill is exactly the case this covers.
+Restart=always
+RestartSec=5
+# ... but do not spin forever on a configuration error. Five failures inside a
+# minute means the problem is not transient, and a tight restart loop hides the
+# real error in a wall of identical journal entries.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Unbuffered, so journalctl shows startup lines as they happen rather than in a
+# block once the buffer fills. The bot's startup prints are the known case.
+Environment=PYTHONUNBUFFERED=1
+
+# Modest hardening. Not a sandbox -- the app legitimately reads the repo and
+# appends to the three .jsonl logs in it -- but there is no reason for it to
+# see /home elsewhere, write to /usr, or gain privileges.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/talkwisp/talkwisp
+
+[Install]
+WantedBy=multi-user.target

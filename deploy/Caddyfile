@@ -1,0 +1,74 @@
+# /etc/caddy/Caddyfile
+#
+# One host, one origin. The landing page, the product and the API all live on
+# talkwisp.uz, which is why there is no CORS anywhere in this codebase and no
+# cross-domain cookie problem. An api. subdomain would have created both.
+#
+# Caddy gets its own certificate from Let's Encrypt automatically. That is what
+# satisfies Cloudflare's Full (strict) mode: strict means Cloudflare verifies
+# the ORIGIN's certificate, so a self-signed one or plain HTTP here would fail.
+# Nothing to configure -- the `talkwisp.uz` site block is enough, provided port
+# 80 is reachable for the ACME challenge.
+
+talkwisp.uz {
+	encode zstd gzip
+
+	header {
+		# Cloudflare terminates TLS in front of this, but the header has to
+		# originate here or it is a promise nobody made.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Do not advertise the server software.
+		-Server
+	}
+
+	# --- the product -------------------------------------------------------
+	# handle_path strips the /app prefix, so /app/assets/x.js resolves to
+	# assets/x.js inside dist. That has to match vite.config.ts's base: "/app/"
+	# -- if the two ever disagree, every asset 404s in production while `vite
+	# dev` works perfectly. Same trap the base setting was written to avoid.
+	redir /app /app/ 301
+	handle_path /app/* {
+		root * /home/talkwisp/talkwisp/frontend/dist
+		# The SPA uses HASH routing, so a deep link never reaches the server
+		# and this fallback only serves the mount root. It is here so a
+		# mistyped asset path returns the app rather than a bare 404 page.
+		try_files {path} /index.html
+		file_server
+	}
+
+	# --- landing page and the three legal pages ----------------------------
+	# Plain static files, rendered once from prototype/Landing Page.dc.html.
+	# Deliberately NOT part of the Vite build and never served through it.
+	#
+	# NOTE: site/ does not exist until the landing page has been rendered. Until
+	# then these paths 404. If you want the interim behaviour instead -- root
+	# redirecting to /app/ -- comment out this whole block and uvicorn's own
+	# `/` route will answer, because it already returns RedirectResponse("/app/").
+	handle /privacy* /terms* /data-deletion* {
+		root * /home/talkwisp/talkwisp/site
+		try_files {path}.html {path}
+		file_server
+	}
+	handle / {
+		root * /home/talkwisp/talkwisp/site
+		rewrite * /index.html
+		file_server
+	}
+
+	# --- everything else is the API ----------------------------------------
+	# uvicorn binds 127.0.0.1:8200 and must never bind 0.0.0.0: on a public VM
+	# that makes the origin reachable on 8200 directly, in plaintext, bypassing
+	# both Caddy and Cloudflare at once.
+	handle {
+		reverse_proxy 127.0.0.1:8200 {
+			# Cloudflare rewrites the client IP, so the app sees Cloudflare's
+			# address unless the real one is passed through. Nothing reads this
+			# yet; the /auth/request rate limiter will, and a limiter keyed on
+			# the wrong IP throttles every visitor at once.
+			header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+		}
+	}
+}
