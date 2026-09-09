@@ -14,6 +14,7 @@ down and no way for two copies to drift apart.
 
 import os
 import pathlib
+import re
 import urllib.parse
 
 import psycopg
@@ -99,10 +100,33 @@ def link_env_to_business(conn: psycopg.Connection) -> None:
     owner = os.getenv("TELEGRAM_OWNER_ID")
     if not token:
         return
+
+    # A PLACEHOLDER IS WORSE THAN NULL, and this used to write one.
+    #
+    # bot_token is nullable on purpose: a business that has signed up but not
+    # connected a channel yet is a real, expected state, and the dashboard is
+    # built to display it. NULL says "no channel". `CHANGEME` says "a channel is
+    # connected, and it is broken" -- which reads as connected to anything
+    # checking, and is a lie the row tells about itself.
+    #
+    # That is not hypothetical: the .env on the deployment box said CHANGEME,
+    # this function copied it, and the row claimed a channel it did not have.
+    #
+    # Telegram tokens are <bot id digits>:<35-ish chars>. Checking the shape is
+    # enough -- an invalid but well-formed token fails loudly at getMe on the
+    # bot's next start, which is a good failure. A placeholder fails silently by
+    # looking correct.
+    if not re.fullmatch(r"\d{6,}:[A-Za-z0-9_-]{30,}", token.strip()):
+        print(f"  NOT linking TELEGRAM_BOT_TOKEN: {token[:12]!r} is not a "
+              "Telegram token. Leaving bot_token NULL, which is the honest "
+              "value for a business with no channel connected.")
+        return
+
     conn.execute(
         "update business set bot_token = %s,"
         " owner_telegram_id = coalesce(%s, owner_telegram_id) where id = %s",
-        (token, int(owner) if owner and owner.strip() else None, row[0]))
+        (token.strip(), int(owner) if owner and owner.strip() else None,
+         row[0]))
     print("  linked TELEGRAM_BOT_TOKEN to the single business row")
 
 
