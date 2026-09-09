@@ -276,8 +276,34 @@ FILE_SOURCE = (
 def main() -> None:
     with pool:
         with connection() as conn:
-            # One statement, one transaction: the tables are never half-loaded.
-            conn.execute("truncate fact, alias, chunk, source restart identity cascade")
+            # DELETE, NEVER TRUNCATE, and this is a tenancy decision rather
+            # than a style one.
+            #
+            # TRUNCATE is not subject to row-level security -- Postgres says so
+            # explicitly -- so on a tenanted connection it empties the whole
+            # table, every business's rows, not the one this connection is bound
+            # to. On a single-tenant database those are the same thing, which is
+            # why this went unnoticed; on the second business it is a
+            # one-statement wipe of somebody else's knowledge base, with the
+            # policy silently not applying.
+            #
+            # The app role is deliberately not granted TRUNCATE (0007 grants
+            # only select/insert/update/delete), so this failed loudly the first
+            # time seed.py was run after tenancy landed -- three days later, on
+            # the box, because nothing had re-run it in between. Granting the
+            # privilege would have "fixed" it by removing the protection.
+            #
+            # DELETE is filtered by the policy. Order matters because there is
+            # no CASCADE: fact and alias reference source with ON DELETE
+            # RESTRICT, chunk with CASCADE. `restart identity` is gone with the
+            # TRUNCATE and is not missed -- every id is a uuidv7() default and
+            # there are no sequences.
+            #
+            # Still one transaction, so the tables are never half-loaded.
+            conn.execute("delete from fact")
+            conn.execute("delete from alias")
+            conn.execute("delete from chunk")
+            conn.execute("delete from source")
 
             file_source = conn.execute(
                 "insert into source (kind, label, filename, media_type, content,"
