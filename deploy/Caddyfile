@@ -90,6 +90,21 @@ talkwisp.uz {
 		file_server
 	}
 
+	# `handle /` matches the EXACT path / and nothing else, so the landing
+	# page's own assets fell through to the API and 404'd. The font still
+	# rendered -- the browser fell back through `Manrope, system-ui,
+	# sans-serif` to a system face -- so the page looked right and quietly was
+	# not in the typeface the design specifies. Measured on the live site:
+	# /fonts/manrope.css 404, /favicon.svg 404, /icons.svg 404.
+	#
+	# Listed explicitly rather than served as a catch-all file root, so this
+	# block cannot shadow an API path added later.
+	@siteassets path /fonts/* /favicon.svg /icons.svg /robots.txt
+	handle @siteassets {
+		root * /home/talkwisp/talkwisp/site
+		file_server
+	}
+
 	# Port 80 stays open and Caddy keeps redirecting it to 443, even though
 	# validation no longer needs it. Someone typing `talkwisp.uz` with no
 	# scheme should land on HTTPS rather than on nothing, and Cloudflare

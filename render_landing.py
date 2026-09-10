@@ -36,7 +36,20 @@ sys.stdout.reconfigure(encoding="utf-8")
 SOURCE = pathlib.Path("prototype/Landing Page.dc.html").resolve()
 OUT = pathlib.Path("site/index.html")
 
-DEMO_BOT = "https://t.me/avisenamed_bot"
+# THE DOUBLE _bot IS REAL. The username is avisenamed_bot_bot, not
+# avisenamed_bot -- and this is not a cosmetic distinction:
+#
+#   t.me/avisenamed_bot      -> "Avisena Medical Texnikum bot"   SOMEBODY ELSE'S
+#   t.me/avisenamed_bot_bot  -> "avisenamed_bot"                 ours
+#
+# The first render shipped the single-_bot form, because the doubled suffix
+# reads as a typo and "correcting" it produced a valid link to a stranger's bot.
+# Seven links on a live landing page pointed at it. verify_bot() below fetches
+# the profile and refuses to render unless the title matches, so a plausible
+# username belonging to someone else cannot pass again.
+BOT_USERNAME = "avisenamed_bot_bot"
+BOT_TITLE = "avisenamed_bot"          # what t.me shows for that username
+DEMO_BOT = f"https://t.me/{BOT_USERNAME}"
 
 # Every href in the source is "#" or a prototype artboard. Matched on the link's
 # visible text, because that is the only stable handle the design gives us --
@@ -176,7 +189,27 @@ TRANSFORM = """
 """
 
 
+def verify_bot() -> None:
+    """Refuse to render if the bot username is not the one we think it is.
+
+    A render-time network call, deliberately: the alternative is trusting a
+    string that has already been wrong once, in a way that produced a working
+    link to an unrelated bot rather than a visible failure.
+    """
+    import urllib.request
+    url = f"https://t.me/{BOT_USERNAME}"
+    with urllib.request.urlopen(url, timeout=20) as r:
+        body = r.read().decode("utf-8", "replace")
+    if BOT_TITLE not in body:
+        raise SystemExit(
+            f"\n{url} does not look like the expected bot: {BOT_TITLE!r} is "
+            "not on the page. Refusing to render links that may point at "
+            "somebody else's bot.")
+    print(f"  verified {url} is {BOT_TITLE!r}")
+
+
 def main() -> None:
+    verify_bot()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()
