@@ -54,6 +54,16 @@ BOT_USERNAME = "avisenamed_bot_bot"
 BOT_TITLE = "avisenamed_bot"          # what t.me shows for that username
 DEMO_BOT = f"https://t.me/{BOT_USERNAME}"
 
+# Head metadata. The design tool emits none, so the page shipped with no title,
+# no lang and no unfurl -- for a product sold through Telegram.
+META = {
+    "title": "Talkwisp — an agent that answers the questions you get every day",
+    "description": ("One agent doing the work an operator does now, for your "
+                    "clinic, salon, courses or service business. Answers in "
+                    "Uzbek, Russian and English, in both scripts."),
+    "url": "https://talkwisp.uz/",
+}
+
 # Every href in the source is "#" or a prototype artboard. Matched on the link's
 # visible text, because that is the only stable handle the design gives us --
 # there are no ids or classes to target.
@@ -206,11 +216,54 @@ TRANSFORM = """
   });
 
   // 3. Mark the language buttons so the replacement script can find them.
+  //    They also get 6px of vertical padding: the design gives them a 38px
+  //    min-height, which is under the 44px touch target the direction doc calls
+  //    non-negotiable. Padding rather than min-height so the pill grows without
+  //    the text moving off centre.
   document.querySelectorAll('button').forEach(b => {
     const t = b.textContent.trim();
-    if (['UZ', 'RU', 'EN'].includes(t)) b.setAttribute('data-lang', t);
+    if (['UZ', 'RU', 'EN'].includes(t)) {
+      b.setAttribute('data-lang', t);
+      b.style.paddingTop = '6px';
+      b.style.paddingBottom = '6px';
+    }
     b.removeAttribute('onClick');
   });
+
+  // 3b. HEAD METADATA. The rendered page had no title, no lang, no description
+  //     and no Open Graph tags at all -- the design tool does not emit them.
+  //
+  //     og: matters more here than usual: this product is sold through
+  //     Telegram, and pasting talkwisp.uz into a Telegram chat currently
+  //     produces no unfurl whatsoever. A link with no preview, shared into the
+  //     channel the product lives in, is the worst place to have none.
+  //
+  //     NOTE there is no og:image. A real one is a 1200x630 raster that does
+  //     not exist yet; pointing at favicon.svg would be worse, because Telegram
+  //     does not render SVG previews and the unfurl would silently show a
+  //     broken or blank thumbnail. Text-only unfurl until a real image exists.
+  document.documentElement.setAttribute('lang', 'en');
+  const meta = (attr, key, value) => {
+    const el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    el.setAttribute('content', value);
+    document.head.appendChild(el);
+  };
+  const title = document.createElement('title');
+  title.textContent = config.meta.title;
+  document.head.appendChild(title);
+  meta('name', 'description', config.meta.description);
+  meta('property', 'og:type', 'website');
+  meta('property', 'og:site_name', 'Talkwisp');
+  meta('property', 'og:title', config.meta.title);
+  meta('property', 'og:description', config.meta.description);
+  meta('property', 'og:url', config.meta.url);
+  meta('name', 'twitter:card', 'summary');
+  const icon = document.createElement('link');
+  icon.rel = 'icon';
+  icon.type = 'image/svg+xml';
+  icon.href = 'favicon.svg';
+  document.head.appendChild(icon);
 
   // 4. Self-hosted Manrope replaces the fonts.googleapis.com link. That removes
   //    a third party that would otherwise see every visitor's IP before they
@@ -305,7 +358,7 @@ def main() -> None:
                                   json.dumps(dictionary, ensure_ascii=False))
         stats = page.evaluate(TRANSFORM, {
             "links": LINKS, "remove": sorted(REMOVE_TEXT), "langJs": lang_js,
-            "relabel": RELABEL, "demoBot": DEMO_BOT})
+            "relabel": RELABEL, "demoBot": DEMO_BOT, "meta": META})
         html = page.content()
         browser.close()
 
@@ -351,6 +404,10 @@ def main() -> None:
         raise SystemExit("\ndead href='#' links left in the output")
     if "@talkwisp_bot" in html:
         raise SystemExit("\nthe platform bot is still named in the page")
+    for tag in ("<title>", 'property="og:title"', 'name="description"',
+                'rel="icon"'):
+        if tag not in html:
+            raise SystemExit(f"\nhead metadata missing: {tag}")
     if "support.js" in html:
         raise SystemExit("\nthe design-tool runtime is still referenced")
     # The stylesheet LIVES in fonts/, so its url() paths are already relative to

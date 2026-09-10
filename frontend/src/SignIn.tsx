@@ -14,9 +14,12 @@ import { ApiError, requestLink } from "./api";
  * who wants to know which clinics use Talkwisp. The server behaves the same
  * way; this screen just has to not undo it.
  *
- * While email delivery is the console backend, the link is printed to the
- * server log rather than sent. The message below says so, because a person
- * waiting for an email that is never coming has no way to work that out. */
+ * IT SAYS NOTHING ABOUT DELIVERY, deliberately. It used to announce that email
+ * sending was off and the link went to the server log. That was true when
+ * written and false the day Resend was wired, but it was hardcoded and
+ * unconditional -- so it went on telling people their link was never coming
+ * while it sat in their inbox. This screen cannot know how the server is
+ * configured; a claim about that is only correct until the day it is not. */
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -80,7 +83,15 @@ export default function SignIn() {
                 so in its response, or nothing says so. */}
             <button
               className="control control-quiet"
-              onClick={() => setState({ kind: "idle" })}
+              onClick={() => {
+                // Clear the field, not just the state. Leaving the old value
+                // in place means the next keystroke appends to a mistyped
+                // address rather than replacing it -- and a form that silently
+                // concatenates reads as a broken site, on the screen whose
+                // whole job is to let someone in.
+                setEmail("");
+                setState({ kind: "idle" });
+              }}
             >
               Use a different address
             </button>
