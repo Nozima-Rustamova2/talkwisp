@@ -33,7 +33,10 @@ from playwright.sync_api import sync_playwright
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+import json
+
 SOURCE = pathlib.Path("prototype/Landing Page.dc.html").resolve()
+I18N = pathlib.Path("site/i18n.json")
 OUT = pathlib.Path("site/index.html")
 
 # THE DOUBLE _bot IS REAL. The username is avisenamed_bot_bot, not
@@ -95,22 +98,68 @@ CHIP_TEXTS = [
     "“How much is a consultation?”",
 ]
 
-# The switch highlights the selected language; it does not translate anything
-# yet. Rendered statically the three buttons become dead controls, which is
-# worse than one that half-works -- so the highlight is reimplemented here.
-# Deliberately does NOT pretend to translate.
+# The language switch, reimplemented. The runtime's version only highlighted the
+# selected button; this one actually swaps the copy.
+#
+# THE DICTIONARY IS AN ALLOWLIST, and that is what makes it safe. Any string not
+# present in site/i18n.json is left exactly as rendered -- which is how the four
+# Telegram exchanges (already Uzbek and Russian, and the whole point of them is
+# that they are real), the three example-question chips (deliberately one per
+# language, demonstrating that the agent follows the customer) and the
+# SCREENSHOT 2/3/4 capture notes survive untouched. Translating any of those
+# would destroy what they are for, and a denylist would eventually miss one.
+#
+# Text nodes are snapshotted once on load, so switching back and forth is
+# lossless and never translates a translation.
 LANG_JS = """
-document.querySelectorAll('[data-lang]').forEach(function (btn) {
-  btn.addEventListener('click', function () {
-    var group = btn.parentElement;
-    group.querySelectorAll('[data-lang]').forEach(function (other) {
-      var on = other === btn;
-      other.style.background = on ? '#fff' : 'transparent';
-      other.style.color = on ? '#14181f' : '#5c6675';
-      other.style.boxShadow = on ? '0 1px 2px rgba(20,24,31,0.12)' : 'none';
+(function () {
+  var DICT = __I18N__;
+  var nodes = [];
+  var walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var n;
+  while ((n = walk.nextNode())) {
+    if (n.parentElement.closest('script,style')) continue;
+    var t = n.textContent.trim();
+    if (t) nodes.push({node: n, en: t, raw: n.textContent});
+  }
+
+  function apply(lang) {
+    nodes.forEach(function (item) {
+      var entry = DICT[item.en];
+      if (lang === 'EN' || !entry || !entry[lang.toLowerCase()]) {
+        item.node.textContent = item.raw;            // untranslated stays put
+      } else {
+        item.node.textContent = item.raw.replace(
+          item.en, entry[lang.toLowerCase()]);       // keep surrounding space
+      }
+    });
+    document.documentElement.lang =
+      lang === 'UZ' ? 'uz' : lang === 'RU' ? 'ru' : 'en';
+  }
+
+  document.querySelectorAll('[data-lang]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var lang = btn.getAttribute('data-lang');
+      document.querySelectorAll('[data-lang]').forEach(function (other) {
+        var on = other.getAttribute('data-lang') === lang;
+        other.style.background = on ? '#fff' : 'transparent';
+        other.style.color = on ? '#14181f' : '#5c6675';
+        other.style.boxShadow = on ? '0 1px 2px rgba(20,24,31,0.12)' : 'none';
+      });
+      apply(lang);
+      try { localStorage.setItem('tw_lang', lang); } catch (e) {}
     });
   });
-});
+
+  // Remembered across visits. A visitor who chose Uzbek should not land in
+  // English every time.
+  var saved = null;
+  try { saved = localStorage.getItem('tw_lang'); } catch (e) {}
+  if (saved && saved !== 'EN') {
+    var b = document.querySelector('[data-lang="' + saved + '"]');
+    if (b) b.click();
+  }
+})();
 """
 
 # Runs inside the page once the runtime has rendered. Everything it changes is
@@ -219,8 +268,13 @@ def main() -> None:
         # nodes rather than for a timer -- the pricing cards come from <sc-for>.
         page.wait_for_function(
             "() => !document.body.innerHTML.includes('{{')", timeout=30000)
+        dictionary = {k: v for k, v in
+                      json.loads(I18N.read_text(encoding="utf-8")).items()
+                      if not k.startswith("_")}
+        lang_js = LANG_JS.replace("__I18N__",
+                                  json.dumps(dictionary, ensure_ascii=False))
         stats = page.evaluate(TRANSFORM, {
-            "links": LINKS, "remove": sorted(REMOVE_TEXT), "langJs": LANG_JS,
+            "links": LINKS, "remove": sorted(REMOVE_TEXT), "langJs": lang_js,
             "relabel": RELABEL, "demoBot": DEMO_BOT})
         html = page.content()
         browser.close()
