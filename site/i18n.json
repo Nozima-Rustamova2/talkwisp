@@ -1,9 +1,13 @@
 {
   "_note": "English -> {uz, ru}. AN ALLOWLIST: any string absent from this file is left exactly as rendered. That is what protects the four Telegram exchanges (already in Uzbek and Russian, and the point of them is that they are real), the three example-question chips (deliberately one per language, demonstrating that the agent follows the customer), and the SCREENSHOT 2/3/4 capture notes. Translating any of those would destroy what they are for.",
-
-  "Sign up": { "uz": "Roʻyxatdan oʻtish", "ru": "Регистрация" },
-  "Book a demo": { "uz": "Demoga yozilish", "ru": "Заказать демо" },
-
+  "Sign up": {
+    "uz": "Roʻyxatdan oʻtish",
+    "ru": "Регистрация"
+  },
+  "Book a demo": {
+    "uz": "Demoga yozilish",
+    "ru": "Заказать демо"
+  },
   "An agent that answers the questions you get every day.": {
     "uz": "Har kuni keladigan savollarga javob beradigan agent.",
     "ru": "Агент, который отвечает на вопросы, поступающие каждый день."
@@ -20,7 +24,6 @@
     "uz": "Yoki roʻyxatdan oʻtib, oʻzingiz yarating →",
     "ru": "Или зарегистрируйтесь и создайте сами →"
   },
-
   "Message it yourself, right now.": {
     "uz": "Hoziroq oʻzingiz yozib koʻring.",
     "ru": "Напишите ему прямо сейчас."
@@ -29,20 +32,34 @@
     "uz": "Bu — haqiqiy klinikaning agenti, oʻsha klinikaning oʻz maʼlumotlaridan javob beradi. Roʻyxatdan oʻtish ham, forma ham kerak emas — bir necha soniyada javob qaytaradi.",
     "ru": "Это агент реальной клиники, отвечающий по её собственным данным. Без регистрации и форм — ответ за несколько секунд."
   },
-  "Try the bot": { "uz": "Botni sinab koʻring", "ru": "Открыть бота" },
-  "Scan to chat": { "uz": "Skanerlab yozing", "ru": "Отсканируйте, чтобы написать" },
+  "Try the bot": {
+    "uz": "Botni sinab koʻring",
+    "ru": "Открыть бота"
+  },
+  "Scan to chat": {
+    "uz": "Skanerlab yozing",
+    "ru": "Отсканируйте, чтобы написать"
+  },
   "Tap a question to send it": {
     "uz": "Savolni bosing — u yuboriladi",
     "ru": "Нажмите на вопрос, чтобы отправить"
   },
-  "A real exchange": { "uz": "Haqiqiy yozishma", "ru": "Реальная переписка" },
-  "Telegram · Uzbek": { "uz": "Telegram · oʻzbekcha", "ru": "Telegram · узбекский" },
-
+  "A real exchange": {
+    "uz": "Haqiqiy yozishma",
+    "ru": "Реальная переписка"
+  },
+  "Telegram · Uzbek": {
+    "uz": "Telegram · oʻzbekcha",
+    "ru": "Telegram · узбекский"
+  },
   "Three things it does that matter.": {
     "uz": "Muhim boʻlgan uchta narsa.",
     "ru": "Три вещи, которые действительно важны."
   },
-  "It doesn't guess": { "uz": "U taxmin qilmaydi", "ru": "Он не догадывается" },
+  "It doesn't guess": {
+    "uz": "U taxmin qilmaydi",
+    "ru": "Он не догадывается"
+  },
   "It says “I don't know” instead of inventing an answer.": {
     "uz": "Javob oʻylab topish oʻrniga «bilmayman» deydi.",
     "ru": "Он говорит «не знаю» вместо того, чтобы придумать ответ."
@@ -51,8 +68,10 @@
     "uz": "Agent faqat siz bergan maʼlumotlar asosida javob beradi. Boshqasiga javob bermaydi — mijozdan savolni sizga uzatishni soʻraydi va Telegramingizga yuboradi. Siz oʻzingiz javob berasiz, javobingiz saqlanadi va keyingi safar agent buni biladi.",
     "ru": "Агент отвечает только по тем данным, которые вы ему дали. На остальное он не отвечает — спрашивает клиента, передать ли вопрос вам, и отправляет его вам в Telegram. Вы отвечаете сами, ваш ответ сохраняется, и в следующий раз агент его знает."
   },
-
-  "You can check it": { "uz": "Buni tekshirish mumkin", "ru": "Это можно проверить" },
+  "You can check it": {
+    "uz": "Buni tekshirish mumkin",
+    "ru": "Это можно проверить"
+  },
   "Every answer shows where it came from.": {
     "uz": "Har bir javob qayerdan olinganini koʻrsatadi.",
     "ru": "Каждый ответ показывает, откуда он взят."
@@ -61,7 +80,6 @@
     "uz": "Istalgan javobni oching — uni qaysi maʼlumotingiz keltirib chiqarganini va u maʼlumotni oʻzingiz kiritganmisiz yoki yuklagan fayldan oʻqilganmi, koʻrasiz. Agent aytadigan hech narsa sizning maʼlumotlaringizdan boshqa joydan kelmaydi.",
     "ru": "Откройте любой ответ — и увидите, какой именно ваш факт его породил и вписали ли вы этот факт сами или он был прочитан из загруженного файла. Ничто из сказанного агентом не берётся ниоткуда, кроме ваших собственных данных."
   },
-
   "Both scripts, one conversation": {
     "uz": "Ikki alifbo, bitta suhbat",
     "ru": "Две графики, один разговор"
@@ -74,46 +92,74 @@
     "uz": "Bu yerda mijozlar gap oʻrtasida tilni almashtiradi va oʻzbekchani lotinda qanchalik koʻp yozsa, kirillda ham shunchalik yozadi. Agent mijozni tanlashga majburlamaydi — u mijozga ergashadi va qaysi tilda yozilgan boʻlsa, oʻshanda javob beradi.",
     "ru": "Здесь клиенты меняют язык посреди фразы и пишут по-узбекски кириллицей не реже, чем латиницей. Агент не заставляет выбирать — он следует за клиентом и отвечает на том языке, на котором ему написали."
   },
-
-  "Who it's for": { "uz": "Kimlar uchun", "ru": "Для кого" },
-  "Online courses": { "uz": "Onlayn kurslar", "ru": "Онлайн-курсы" },
+  "Who it's for": {
+    "uz": "Kimlar uchun",
+    "ru": "Для кого"
+  },
+  "Online courses": {
+    "uz": "Onlayn kurslar",
+    "ru": "Онлайн-курсы"
+  },
   "What's in the course, when it starts, what it costs, how to enrol": {
     "uz": "Kursda nima bor, qachon boshlanadi, narxi qancha, qanday yozilish mumkin",
     "ru": "Что входит в курс, когда старт, сколько стоит, как записаться"
   },
-  "Clinics": { "uz": "Klinikalar", "ru": "Клиники" },
+  "Clinics": {
+    "uz": "Klinikalar",
+    "ru": "Клиники"
+  },
   "Opening hours, which doctors work when, roughly what a visit costs": {
     "uz": "Ish vaqti, qaysi shifokor qachon qabul qiladi, qabul taxminan qancha turadi",
     "ru": "Часы работы, кто из врачей когда принимает, сколько примерно стоит приём"
   },
-  "Salons": { "uz": "Salonlar", "ru": "Салоны" },
+  "Salons": {
+    "uz": "Salonlar",
+    "ru": "Салоны"
+  },
   "Who's free, how long a service takes, price ranges": {
     "uz": "Kim boʻsh, xizmat qancha vaqt oladi, narxlar oraligʻi",
     "ru": "Кто свободен, сколько занимает услуга, диапазон цен"
   },
-  "Service businesses": { "uz": "Xizmat koʻrsatish biznesi", "ru": "Сервисный бизнес" },
+  "Service businesses": {
+    "uz": "Xizmat koʻrsatish biznesi",
+    "ru": "Сервисный бизнес"
+  },
   "What areas you cover, what a job costs, how soon you can come": {
     "uz": "Qaysi hududlarda ishlaysiz, ish qancha turadi, qachon kela olasiz",
     "ru": "В каких районах работаете, сколько стоит работа, как скоро приедете"
   },
-
-  "How it works": { "uz": "Qanday ishlaydi", "ru": "Как это работает" },
-  "Add what you know": { "uz": "Bilganingizni qoʻshing", "ru": "Добавьте то, что знаете" },
+  "How it works": {
+    "uz": "Qanday ishlaydi",
+    "ru": "Как это работает"
+  },
+  "Add what you know": {
+    "uz": "Bilganingizni qoʻshing",
+    "ru": "Добавьте то, что знаете"
+  },
   "A photo of your price list, a document, or just type the facts.": {
     "uz": "Narxlar roʻyxatining surati, hujjat yoki shunchaki maʼlumotni yozing.",
     "ru": "Фото прайса, документ или просто впишите факты."
   },
-  "Check what it read": { "uz": "Nimani oʻqiganini tekshiring", "ru": "Проверьте, что он прочитал" },
+  "Check what it read": {
+    "uz": "Nimani oʻqiganini tekshiring",
+    "ru": "Проверьте, что он прочитал"
+  },
   "See every fact beside the text it came from. Fix or drop anything wrong.": {
     "uz": "Har bir maʼlumotni u olingan matn yonida koʻring. Notoʻgʻrisini tuzating yoki oʻchiring.",
     "ru": "Смотрите каждый факт рядом с текстом, откуда он взят. Исправьте или удалите неверное."
   },
-  "Test it yourself": { "uz": "Oʻzingiz sinab koʻring", "ru": "Протестируйте сами" },
+  "Test it yourself": {
+    "uz": "Oʻzingiz sinab koʻring",
+    "ru": "Протестируйте сами"
+  },
   "Ask it the questions your customers ask, before anyone can reach it.": {
     "uz": "Hech kim unga yeta olmasidan oldin, mijozlaringiz beradigan savollarni bering.",
     "ru": "Задайте ему вопросы, которые задают ваши клиенты, до того как кто-то до него доберётся."
   },
-  "Connect Telegram": { "uz": "Telegramni ulang", "ru": "Подключите Telegram" },
+  "Connect Telegram": {
+    "uz": "Telegramni ulang",
+    "ru": "Подключите Telegram"
+  },
   "One token from BotFather, and it starts answering.": {
     "uz": "BotFather'dan bitta token — va u javob bera boshlaydi.",
     "ru": "Один токен из BotFather — и он начинает отвечать."
@@ -122,32 +168,50 @@
     "uz": "Taxminan oʻn besh daqiqa. Siz oʻzingiz sinab koʻrmaguningizcha hech narsa ishga tushmaydi.",
     "ru": "Примерно пятнадцать минут. Ничего не запускается, пока вы сами не протестируете."
   },
-
-  "Channels": { "uz": "Kanallar", "ru": "Каналы" },
-  "Live today": { "uz": "Bugun ishlayapti", "ru": "Работает сегодня" },
-  "Instagram is coming — it isn't built yet, so we don't show its logo here. Telegram is what works today, and it's what our customers' customers already use.": {
-    "uz": "Instagram rejada — u hali qilinmagan, shuning uchun logotipini bu yerda koʻrsatmaymiz. Bugun ishlaydigani Telegram, va mijozlarimizning mijozlari allaqachon undan foydalanadi.",
-    "ru": "Instagram в планах — он ещё не сделан, поэтому мы не показываем здесь его логотип. Сегодня работает Telegram, и именно им уже пользуются клиенты наших клиентов."
+  "Channels": {
+    "uz": "Kanallar",
+    "ru": "Каналы"
   },
-
-  "Pricing": { "uz": "Narxlar", "ru": "Цены" },
-  "Start": { "uz": "Start", "ru": "Start" },
-  "200 conversations a month": { "uz": "Oyiga 200 ta suhbat", "ru": "200 разговоров в месяц" },
+  "Live today": {
+    "uz": "Bugun ishlayapti",
+    "ru": "Работает сегодня"
+  },
+  "Pricing": {
+    "uz": "Narxlar",
+    "ru": "Цены"
+  },
+  "Start": {
+    "uz": "Start",
+    "ru": "Start"
+  },
+  "200 conversations a month": {
+    "uz": "Oyiga 200 ta suhbat",
+    "ru": "200 разговоров в месяц"
+  },
   "For a single clinic, salon or course.": {
     "uz": "Bitta klinika, salon yoki kurs uchun.",
     "ru": "Для одной клиники, салона или курса."
   },
-  "Business": { "uz": "Business", "ru": "Business" },
+  "Business": {
+    "uz": "Business",
+    "ru": "Business"
+  },
   "Most businesses start here": {
     "uz": "Koʻpchilik shu yerdan boshlaydi",
     "ru": "Большинство начинает отсюда"
   },
-  "800 conversations a month": { "uz": "Oyiga 800 ta suhbat", "ru": "800 разговоров в месяц" },
+  "800 conversations a month": {
+    "uz": "Oyiga 800 ta suhbat",
+    "ru": "800 разговоров в месяц"
+  },
   "For a growing business with steady enquiries.": {
     "uz": "Murojaatlari barqaror, oʻsib borayotgan biznes uchun.",
     "ru": "Для растущего бизнеса с постоянным потоком обращений."
   },
-  "Custom": { "uz": "Custom", "ru": "Custom" },
+  "Custom": {
+    "uz": "Custom",
+    "ru": "Custom"
+  },
   "2 000+ conversations, or pay as you go": {
     "uz": "2 000+ suhbat yoki foydalanganingiz uchun toʻlov",
     "ru": "2 000+ разговоров или оплата по факту"
@@ -164,7 +228,6 @@
     "uz": "Limitdan oshsangiz ham agent javob berishda davom etadi — biz jim qolmaymiz, sizga aytamiz.",
     "ru": "Если вы превысите лимит, агент продолжит отвечать — мы сообщим вам, а не замолчим."
   },
-
   "We have no customers to quote yet.": {
     "uz": "Hozircha keltiradigan mijozlarimiz yoʻq.",
     "ru": "Пока нам некого цитировать."
@@ -173,15 +236,36 @@
     "uz": "Talkwisp yangi. Bu joyni logotiplar va foizlar bilan toʻldirishimiz mumkin edi, lekin butun mahsulot javob oʻylab topish oʻrniga «bilmayman» deyishga qurilgan — shuning uchun yuqoridagi agentga yozib, oʻzingiz baho berganingizni maʼqul koʻramiz.",
     "ru": "Talkwisp — новый продукт. Мы могли бы заполнить это место логотипами и процентами, но весь продукт построен на том, чтобы говорить «не знаю» вместо выдуманного ответа — поэтому лучше напишите агенту выше и оцените сами."
   },
-
   "Stop answering the same question.": {
     "uz": "Bir xil savolga javob berishni bas qiling.",
     "ru": "Перестаньте отвечать на один и тот же вопрос."
   },
-  "Tashkent, Uzbekistan": { "uz": "Toshkent, Oʻzbekiston", "ru": "Ташкент, Узбекистан" },
-  "Legal": { "uz": "Huquqiy", "ru": "Юридическое" },
-  "Privacy policy": { "uz": "Maxfiylik siyosati", "ru": "Политика конфиденциальности" },
-  "Terms of service": { "uz": "Foydalanish shartlari", "ru": "Условия использования" },
-  "Data deletion": { "uz": "Maʼlumotlarni oʻchirish", "ru": "Удаление данных" },
-  "Language": { "uz": "Til", "ru": "Язык" }
+  "Tashkent, Uzbekistan": {
+    "uz": "Toshkent, Oʻzbekiston",
+    "ru": "Ташкент, Узбекистан"
+  },
+  "Legal": {
+    "uz": "Huquqiy",
+    "ru": "Юридическое"
+  },
+  "Privacy policy": {
+    "uz": "Maxfiylik siyosati",
+    "ru": "Политика конфиденциальности"
+  },
+  "Terms of service": {
+    "uz": "Foydalanish shartlari",
+    "ru": "Условия использования"
+  },
+  "Data deletion": {
+    "uz": "Maʼlumotlarni oʻchirish",
+    "ru": "Удаление данных"
+  },
+  "Language": {
+    "uz": "Til",
+    "ru": "Язык"
+  },
+  "Coming soon": {
+    "uz": "Tez orada",
+    "ru": "Скоро"
+  }
 }

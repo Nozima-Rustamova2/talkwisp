@@ -230,6 +230,45 @@ TRANSFORM = """
     b.removeAttribute('onClick');
   });
 
+  // 3a. CHANNELS: two rows, no paragraph.
+  //
+  //     The section used to carry "Instagram is coming -- it isn't built yet,
+  //     so we don't show its logo here. Telegram is what works today, and it's
+  //     what our customers' customers already use."
+  //
+  //     Two things wrong with it. It explained a decision about THE PAGE -- why
+  //     a logo is absent -- which the reader had not noticed and would not have
+  //     wondered about; the sentence created the doubt it then answered. And it
+  //     claimed "our customers' customers" on a page that says, further down,
+  //     "We have no customers to quote yet." Both were live at once.
+  //
+  //     Two rows and two badges say the same thing without a sentence. The
+  //     Instagram badge is deliberately quieter -- grey against the accent --
+  //     so the hierarchy reads at a glance.
+  //
+  //     STILL NO LOGO, just the word. That rule stands; it simply does not need
+  //     stating on the page.
+  const liveBadge = [...document.querySelectorAll('span')].find(
+    el => el.textContent.trim() === 'Live today' && el.children.length === 0);
+  if (liveBadge) {
+    const row = liveBadge.parentElement;
+    const soon = row.cloneNode(true);
+    const spans = soon.querySelectorAll('span');
+    spans[0].textContent = 'Instagram';
+    spans[1].textContent = config.soonLabel;
+    // Grey, not accent. Same shape so the rows read as a pair; less weight so
+    // "not yet" is legible without reading the word.
+    spans[1].setAttribute('style', spans[1].getAttribute('style')
+      .replace('rgb(231, 240, 255)', 'rgb(240, 242, 246)')
+      .replace('rgb(22, 87, 192)', 'rgb(92, 102, 117)'));
+    soon.style.marginTop = '10px';   // the card has padding, not a flex gap
+    row.after(soon);
+
+    // The paragraph goes. The badges carry it.
+    const para = soon.nextElementSibling;
+    if (para && para.tagName === 'P') para.remove();
+  }
+
   // 3b. HEAD METADATA. The rendered page had no title, no lang, no description
   //     and no Open Graph tags at all -- the design tool does not emit them.
   //
@@ -358,7 +397,7 @@ def main() -> None:
                                   json.dumps(dictionary, ensure_ascii=False))
         stats = page.evaluate(TRANSFORM, {
             "links": LINKS, "remove": sorted(REMOVE_TEXT), "langJs": lang_js,
-            "relabel": RELABEL, "demoBot": DEMO_BOT, "meta": META})
+            "relabel": RELABEL, "demoBot": DEMO_BOT, "meta": META, "soonLabel": "Coming soon"})
         html = page.content()
         browser.close()
 
@@ -408,6 +447,10 @@ def main() -> None:
                 'rel="icon"'):
         if tag not in html:
             raise SystemExit(f"\nhead metadata missing: {tag}")
+    if "we don't show its logo here" in html:
+        raise SystemExit("\nthe old Channels paragraph is still in the output")
+    if "Coming soon" not in html:
+        raise SystemExit("\nthe Instagram row did not render")
     if "support.js" in html:
         raise SystemExit("\nthe design-tool runtime is still referenced")
     # The stylesheet LIVES in fonts/, so its url() paths are already relative to
