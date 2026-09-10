@@ -119,7 +119,10 @@ export default function SignIn() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@clinic.uz"
+              // "you@clinic.uz" assumed a clinic. The clinic is the test case, not
+              // the market: the positioning is any business with repeat
+              // questions -- salons, courses, service businesses.
+              placeholder="you@company.uz"
               style={{ width: "100%", marginBottom: 14 }}
             />
             <button
@@ -143,6 +146,40 @@ export default function SignIn() {
             )}
           </form>
         )}
+
+        {/* THERE IS NO SIGN-UP, AND THIS SAYS SO.
+            The landing page's button leads here. Without this, someone who
+            arrives from it types their address, reads "if that address has an
+            account, a link is on its way", and nothing ever happens -- a dead
+            end reached from a control that promised the opposite.
+
+            Worded so it reads as deliberate rather than broken: onboarding is
+            by hand because we are early, not because something failed. The
+            same-answer-either-way message above cannot say "no such account"
+            without becoming an address checker, so the explanation has to live
+            here, outside the form, where it is true for everyone.
+
+            Secondary weight on purpose -- a link, not a second button. Two
+            buttons of equal weight would make the real one harder to find. */}
+        <div
+          style={{
+            marginTop: 20,
+            paddingTop: 16,
+            borderTop: "1px solid var(--rule)",
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "var(--text-faint)",
+          }}
+        >
+          Don't have an account yet? Talkwisp is in early access and we set up
+          your first agent with you.{" "}
+          <a
+            href="https://t.me/talkwisp_demo_bot"
+            style={{ color: "var(--accent-pressed)", fontWeight: 600 }}
+          >
+            Contact us and we'll set you up
+          </a>
+        </div>
       </div>
     </div>
   );

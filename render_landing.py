@@ -36,6 +36,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 import json
 
 SOURCE = pathlib.Path("prototype/Landing Page.dc.html").resolve()
+# The dictionary is BAKED INTO index.html at render time, not fetched by
+# the page. So editing i18n.json alone changes nothing that ships -- the
+# render has to run again. Caught by adding two translations and watching
+# all three languages keep showing English.
 I18N = pathlib.Path("site/i18n.json")
 OUT = pathlib.Path("site/index.html")
 
@@ -97,6 +101,26 @@ REMOVE_TEXT = {"@talkwisp_bot"}
 # Body copy that has to change because its destination did. The only text this
 # script touches, and only where leaving it would make the page lie.
 RELABEL = {"Open @talkwisp_bot": "Try the bot"}
+
+# Body copy replaced outright. Kept in one dict so the change is visible as a
+# change rather than buried in the transform, and so the old strings can be
+# removed from i18n.json by matching this.
+#
+# The no-customers band narrated a decision the visitor did not need to know had
+# been made -- "we could fill this space with logos and percentages, but..."
+# The section still makes its point by BEING honest; it does not also need to
+# explain that it is being honest. Same fault as the Channels paragraph, and the
+# same fix.
+COPY = {
+    "We have no customers to quote yet.":
+        "Talkwisp is in early access.",
+    ("Talkwisp is new. We could fill this space with logos and percentages, "
+     "but the whole product is built on saying \"I don't know\" instead of "
+     "inventing an answer — so we'd rather you message the agent above and "
+     "judge it yourself."):
+        "We set up your first agent ourselves, with you. Message the agent "
+        "above and judge it for yourself.",
+}
 
 # The three example-question chips ship as href="#" -- dead controls on a live
 # page. They point at the bot: tapping a question you can see answered and
@@ -230,6 +254,15 @@ TRANSFORM = """
     b.removeAttribute('onClick');
   });
 
+  // 2b. Copy replaced outright, matched on the exact existing text so a
+  //     silent miss is impossible: the count is reported and asserted below.
+  let recopied = 0;
+  document.querySelectorAll('h1, h2, h3, p, span, div').forEach(el => {
+    if (el.children.length) return;
+    const t = el.textContent.trim().split(/\s+/).join(' ');
+    if (config.copy[t]) { el.textContent = config.copy[t]; recopied++; }
+  });
+
   // 3a. CHANNELS: two rows, no paragraph.
   //
   //     The section used to carry "Instagram is coming -- it isn't built yet,
@@ -355,7 +388,7 @@ TRANSFORM = """
   js.textContent = config.langJs;
   document.body.appendChild(js);
 
-  return {hoverRules: rules.length, wired, removed, relabelled, chips, placeholders};
+  return {hoverRules: rules.length, wired, removed, relabelled, chips, placeholders, recopied};
 }
 """
 
@@ -397,7 +430,7 @@ def main() -> None:
                                   json.dumps(dictionary, ensure_ascii=False))
         stats = page.evaluate(TRANSFORM, {
             "links": LINKS, "remove": sorted(REMOVE_TEXT), "langJs": lang_js,
-            "relabel": RELABEL, "demoBot": DEMO_BOT, "meta": META, "soonLabel": "Coming soon"})
+            "relabel": RELABEL, "demoBot": DEMO_BOT, "meta": META, "soonLabel": "Coming soon", "copy": COPY})
         html = page.content()
         browser.close()
 
@@ -406,7 +439,12 @@ def main() -> None:
     print(f"  {stats['hoverRules']} hover rules, {stats['wired']} links wired, "
           f"{stats['relabelled']} relabelled, {stats['chips']} chips, "
           f"{stats['removed']} removed, "
-          f"{stats['placeholders']} capture notes stripped")
+          f"{stats['placeholders']} capture notes stripped, "
+          f"{stats['recopied']} copy blocks replaced")
+    if stats["recopied"] != len(COPY):
+        raise SystemExit(
+            f"\nreplaced {stats['recopied']} of {len(COPY)} copy blocks -- a "
+            "source string changed and the match silently missed it")
 
     # --- the placeholders must have survived --------------------------------
     # Not a formality. The instruction was that nothing unfinished may be

@@ -228,14 +228,6 @@
     "uz": "Limitdan oshsangiz ham agent javob berishda davom etadi — biz jim qolmaymiz, sizga aytamiz.",
     "ru": "Если вы превысите лимит, агент продолжит отвечать — мы сообщим вам, а не замолчим."
   },
-  "We have no customers to quote yet.": {
-    "uz": "Hozircha keltiradigan mijozlarimiz yoʻq.",
-    "ru": "Пока нам некого цитировать."
-  },
-  "Talkwisp is new. We could fill this space with logos and percentages, but the whole product is built on saying \"I don't know\" instead of inventing an answer — so we'd rather you message the agent above and judge it yourself.": {
-    "uz": "Talkwisp yangi. Bu joyni logotiplar va foizlar bilan toʻldirishimiz mumkin edi, lekin butun mahsulot javob oʻylab topish oʻrniga «bilmayman» deyishga qurilgan — shuning uchun yuqoridagi agentga yozib, oʻzingiz baho berganingizni maʼqul koʻramiz.",
-    "ru": "Talkwisp — новый продукт. Мы могли бы заполнить это место логотипами и процентами, но весь продукт построен на том, чтобы говорить «не знаю» вместо выдуманного ответа — поэтому лучше напишите агенту выше и оцените сами."
-  },
   "Stop answering the same question.": {
     "uz": "Bir xil savolga javob berishni bas qiling.",
     "ru": "Перестаньте отвечать на один и тот же вопрос."
@@ -267,5 +259,13 @@
   "Coming soon": {
     "uz": "Tez orada",
     "ru": "Скоро"
+  },
+  "Talkwisp is in early access.": {
+    "uz": "Talkwisp erta kirish bosqichida.",
+    "ru": "Talkwisp в раннем доступе."
+  },
+  "We set up your first agent ourselves, with you. Message the agent above and judge it for yourself.": {
+    "uz": "Birinchi agentingizni siz bilan birga oʻzimiz sozlab beramiz. Yuqoridagi agentga yozing va oʻzingiz baho bering.",
+    "ru": "Первого агента мы настраиваем сами, вместе с вами. Напишите агенту выше и оцените сами."
   }
 }
