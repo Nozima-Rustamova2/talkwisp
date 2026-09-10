@@ -100,7 +100,16 @@ REMOVE_TEXT = {"@talkwisp_bot"}
 
 # Body copy that has to change because its destination did. The only text this
 # script touches, and only where leaving it would make the page lie.
-RELABEL = {"Open @talkwisp_bot": "Try the bot"}
+RELABEL = {
+    "Open @talkwisp_bot": "Try the bot",
+    # "Sign up" promised account creation that does not exist -- onboarding is
+    # invite-only and by hand. "Get started" keeps the route for customers who
+    # DO have an account (it still lands on the sign-in screen) without
+    # promising a form to strangers, and the sign-in screen now explains the
+    # rest. A fourth "Book a demo" was the alternative and would have flattened
+    # a hierarchy the page already has three of.
+    "Sign up": "Get started",
+}
 
 # Body copy replaced outright. Kept in one dict so the change is visible as a
 # change rather than buried in the transform, and so the old strings can be

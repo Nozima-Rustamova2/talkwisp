@@ -1,9 +1,5 @@
 {
   "_note": "English -> {uz, ru}. AN ALLOWLIST: any string absent from this file is left exactly as rendered. That is what protects the four Telegram exchanges (already in Uzbek and Russian, and the point of them is that they are real), the three example-question chips (deliberately one per language, demonstrating that the agent follows the customer), and the SCREENSHOT 2/3/4 capture notes. Translating any of those would destroy what they are for.",
-  "Sign up": {
-    "uz": "Roʻyxatdan oʻtish",
-    "ru": "Регистрация"
-  },
   "Book a demo": {
     "uz": "Demoga yozilish",
     "ru": "Заказать демо"
@@ -267,5 +263,9 @@
   "We set up your first agent ourselves, with you. Message the agent above and judge it for yourself.": {
     "uz": "Birinchi agentingizni siz bilan birga oʻzimiz sozlab beramiz. Yuqoridagi agentga yozing va oʻzingiz baho bering.",
     "ru": "Первого агента мы настраиваем сами, вместе с вами. Напишите агенту выше и оцените сами."
+  },
+  "Get started": {
+    "uz": "Boshlash",
+    "ru": "Начать"
   }
 }

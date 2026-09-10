@@ -227,6 +227,22 @@ this file wins.
   column, backfill one value, extend the indexes" was right about the shape and
   wrong about the cost: the column was the easy half, and the two global unique
   constraints and the three ways RLS silently does nothing were the rest.
+- **THE LANDING PAGE TRANSLATES; THE PRODUCT DOES NOT.** `site/i18n.json`
+  drives the static page in Uzbek, Russian and English. The React app has no
+  translation mechanism at all — no locale, no dictionary, no language state —
+  so every screen is English only.
+
+  A Russian-speaking owner therefore reads a Russian landing page, clicks
+  through, and lands on an English dashboard. The product's central claim is
+  that it handles exactly these languages and both scripts; the first thing a
+  customer sees after being sold that is a screen that does not.
+
+  Not urgent while onboarding is hand-held and the owner is walked through it in
+  person. It undercuts the pitch the moment a customer meets both surfaces
+  unaccompanied, which is the same day self-serve signup exists. Sizing it
+  honestly: the app has far fewer strings than the landing page, but it needs a
+  mechanism the landing page does not — the static page can bake a dictionary in
+  at render time, and a running SPA cannot.
 - **MULTI-TENANCY IS CORRECT IN THE DATABASE AND UNUSABLE IN PRACTICE.** This
   is a blocker, not a cleanup. The moment a second `business` row exists,
   `app_sole_business()` raises — and nine scripts call `connection()` with no
@@ -1941,6 +1957,42 @@ two controls without which the section proves nothing:
   control the payment check taught us to write.
 
 Both pass: the pid matches, `SET LOCAL` is gone, and the bare `SET` survives.
+
+### The file was right and the artifact was stale — 2026-09-10
+
+Two translations were added to `site/i18n.json`, the page was opened, all three
+languages were checked, and every one of them showed English. The dictionary was
+correct. The check was correct. The answer was wrong.
+
+`site/i18n.json` is **baked into `index.html` at render time** — the shipped page
+carries the dictionary as a literal inside its own script, it does not fetch the
+file. So the page under test held the *previous* dictionary, and editing the
+source of truth changed nothing about the thing being measured.
+
+The same shape as the rest of this table, with the objects swapped: usually a
+check reads something adjacent to what the behaviour uses. Here the check read
+exactly the right thing — the live page, in a real browser, clicking the real
+button — and the *page* was the stale copy. The freshness of the artifact was
+the hidden variable, and nothing in the output distinguished "no translation
+exists" from "the translation exists but this build predates it".
+
+The tell was available and ignored: the render had not been re-run since the
+edit. That is obvious stated plainly and invisible in the moment, because
+editing a data file does not feel like editing code that needs building.
+
+The fix is a comment at the definition — `I18N = pathlib.Path(...)` now says the
+dictionary is baked in and the render has to run again. A comment is the weakest
+remedy in the ranking, and it is the right one here: the alternative is having
+the page fetch the JSON at runtime, which trades a build step for a network
+request on every visit and a flash of untranslated content. The build-time
+inlining is the correct design; it just has a consequence worth writing down.
+
+**Generalisation worth keeping: when a generated artifact embeds its inputs, the
+input and the artifact are two objects, and "I changed the input" is not
+evidence about the artifact.** Every generated file in this repo has that
+property — `site/index.html` embeds the dictionary, `frontend/dist/` embeds the
+TypeScript, and both are gitignored or generated, so both can silently lag their
+source.
 
 ### A zero that looked like a count — 2026-09-10
 
