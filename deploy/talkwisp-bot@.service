@@ -1,0 +1,68 @@
+# /etc/systemd/system/talkwisp-bot@.service
+#
+# A TEMPLATE, one instance per business:
+#
+#   sudo systemctl enable --now talkwisp-bot@"Rangli Salon"
+#   journalctl -u talkwisp-bot@"Rangli Salon" -f
+#
+# %i is the business NAME, and bot.py reads that business's bot_token off its
+# row. That inversion -- business -> token rather than token -> business -- is
+# what makes one unit file serve every customer:
+#
+#   * no per-business env file, so the token lives in exactly one place. Two
+#     copies of a credential is the duplicate-definition problem this codebase
+#     has hit repeatedly, and it fails at runtime rather than at edit time.
+#   * onboarding's manual step is one line instead of writing a unit, copying
+#     it, reloading and enabling.
+#
+# systemd escapes the instance name, so a business whose name contains a space
+# or a slash still works -- but quote it on the command line as above, and use
+# systemd-escape if you ever need the escaped form by hand.
+#
+# ONE INSTANCE PER TOKEN, NEVER TWO. Telegram allows a single getUpdates
+# consumer per token; a second does not fail cleanly, it steals updates from the
+# first and messages vanish for whichever loses the race. Enabling the same
+# business twice is the way to cause that.
+#
+# The older talkwisp-bot.service (no @) is the single-tenant form and reads
+# TELEGRAM_BOT_TOKEN from .env. Both work; stop that one before enabling an
+# instance for the same business.
+
+[Unit]
+Description=Talkwisp Telegram agent bot for %I
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=exec
+User=talkwisp
+Group=talkwisp
+WorkingDirectory=/home/talkwisp/talkwisp
+
+# ONE secrets file, the repo's .env. It carries the database URLs and the model
+# credentials; the BOT token is not here at all any more -- it is on the
+# business row, which is the whole point of the template.
+EnvironmentFile=/home/talkwisp/talkwisp/.env
+
+# Not `uv run`: it re-resolves the environment on every start and needs a
+# writable cache at ~/.cache/uv, which ProtectHome=read-only refuses. See the
+# long note in talkwisp-api.service.
+ExecStart=/home/talkwisp/talkwisp/.venv/bin/python -u bot.py --business %I
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+Environment=PYTHONUNBUFFERED=1
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+# messages.jsonl is appended to on every customer message.
+ReadWritePaths=/home/talkwisp/talkwisp
+
+[Install]
+WantedBy=multi-user.target

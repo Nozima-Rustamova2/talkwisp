@@ -36,7 +36,8 @@ from dotenv import load_dotenv
 from app import buy, orders, payment
 from app.answer import answer, detect_language
 from app.followup import rewrite
-from app.db import assert_app_role, business_for_token, connection, pool
+from app.db import (assert_app_role, business_by_name,
+                    business_for_token, connection, pool)
 from app.llm import LLMError, check_configured, check_reachable
 from app.normalize import normalize
 from app.typed import candidates, conflicts
@@ -46,7 +47,21 @@ from app.typed import parse as parse_fact, store as store_fact
 load_dotenv()
 sys.stdout.reconfigure(encoding="utf-8")
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# Resolved in main(), not at import. Either from --business (the token is read
+# off the business row) or, failing that, from TELEGRAM_BOT_TOKEN.
+#
+# THE PREFERRED DIRECTION IS BUSINESS -> TOKEN, not token -> business. The token
+# already lives on the business row, so reading it from there means one
+# credential in one place instead of two, and one systemd TEMPLATE unit instead
+# of a unit plus an env file per customer:
+#
+#     sudo systemctl enable --now talkwisp-bot@"Clinic Name"
+#
+# The env fallback stays deliberately: the currently deployed unit uses it, and
+# removing it would break the running bot on the first restart after a pull.
+# That is not a thing to discover in production.
+TOKEN: str | None = None
+API: str | None = None
 
 # Both resolved in main() from the BUSINESS ROW this token belongs to, not
 # from the environment. The token is the tenant: an update arrives on one
@@ -59,7 +74,6 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 BUSINESS_ID: str | None = None
 OWNER_ID: str | None = None
 
-API = f"https://api.telegram.org/bot{TOKEN}"
 POLL_TIMEOUT = 30  # seconds Telegram holds the connection open with no updates
 
 # A token bucket, not a fixed gap. A flat 4-second minimum was tried first and
@@ -1004,24 +1018,61 @@ def check_database() -> None:
         ) from None
 
 
-def main() -> None:
-    if not TOKEN:
+def resolve_identity() -> tuple[str, str]:
+    """(business_id, token). --business wins; the env token is the fallback.
+
+    business -> token is the direction that scales: the token is already on the
+    row, so one systemd template unit serves every customer and there is no
+    per-business env file to drift out of step with the database.
+    """
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Talkwisp Telegram agent bot.")
+    ap.add_argument("--business",
+                    help="business name; its bot_token is read from the row")
+    args = ap.parse_args()
+
+    if args.business:
+        business_id = business_by_name(args.business)
+        if business_id is None:
+            raise RuntimeError(
+                f"No business named {args.business!r}. Create it first:\n"
+                f"  uv run python onboard.py --name {args.business!r} ...")
+        # RLS lets a tenanted connection read its OWN business row, which is
+        # exactly this and nothing wider.
+        with connection(business_id) as conn:
+            row = conn.execute("select bot_token from business").fetchone()
+        if not row or not row[0]:
+            raise RuntimeError(
+                f"{args.business!r} has no bot_token. A business with no channel "
+                "connected is a real state -- the dashboard is built to show it "
+                "-- but nothing can poll for it.\n"
+                "  Add one from @BotFather:  onboard.py --name ... --token ...")
+        return business_id, row[0]
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
         raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN is not set. Get one from @BotFather and add it "
-            "to .env."
-        )
+            "Neither --business nor TELEGRAM_BOT_TOKEN. Prefer --business: the "
+            "token is already on the business row, and reading it from there "
+            "keeps one credential in one place.")
+    business_id = business_for_token(token)
+    if business_id is None:
+        raise RuntimeError(
+            "No business owns this bot token, so there is no way to tell whose "
+            "questions these are. Use --business, or set bot_token on the row.")
+    return business_id, token
+
+
+def main() -> None:
+    global TOKEN, API, BUSINESS_ID, OWNER_ID
+
     # Fail now, not on the first customer message. The second call
     # spends one tiny generation to prove the pinned model answers for
     # this credential -- a wrong Vertex model id authenticates fine and
     # 404s at answer time, which is a boot-time fact found too late.
     check_configured()
     check_reachable()
-
-    me = httpx.get(f"{API}/getMe", timeout=30).json()
-    if not me.get("ok"):
-        raise RuntimeError(f"Telegram rejected the token: {me}")
-
-    global BUSINESS_ID, OWNER_ID
 
     offset = None
     last_seen: dict[int, tuple[float, float]] = {}
@@ -1036,15 +1087,17 @@ def main() -> None:
         # business's facts and nothing would fail. Boot failure, not a warning.
         assert_app_role()
 
-        BUSINESS_ID = business_for_token(TOKEN)
-        if BUSINESS_ID is None:
-            raise RuntimeError(
-                "No business owns this bot token, so there is no way to tell "
-                "whose questions these are.\n"
-                "  Link it once:  update business set bot_token = "
-                "'<the token in .env>' where name = 'Default business';\n"
-                "  migrate.py does this automatically while exactly one "
-                "business exists and has no token yet.")
+        BUSINESS_ID, TOKEN = resolve_identity()
+        API = f"https://api.telegram.org/bot{TOKEN}"
+
+        # getMe BEFORE announcing anything, so the last line printed names the
+        # bot that is actually about to poll rather than the one somebody
+        # believes is configured. A token that is valid but belongs to a
+        # different bot than intended is otherwise invisible -- which is how
+        # seven landing-page links ended up pointing at a stranger's bot.
+        me = httpx.get(f"{API}/getMe", timeout=30).json()
+        if not me.get("ok"):
+            raise RuntimeError(f"Telegram rejected the token: {me}")
 
         with connection(BUSINESS_ID) as conn:
             name, OWNER_ID = conn.execute(

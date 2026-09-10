@@ -29,6 +29,26 @@ sys.stdout.reconfigure(encoding="utf-8")
 passed = failed = 0
 
 
+def rejects_msg(label, fn, needle):
+    """Refused, AND the message names the knob to turn."""
+    global passed, failed
+    try:
+        fn()
+    except Exception as exc:  # noqa: BLE001
+        if needle.lower() in str(exc).lower():
+            passed += 1
+            print(f"  [ok  ] {label}")
+            return
+        failed += 1
+        print(f"  [FAIL] {label}")
+        print(f"         refused, but never mentions {needle!r}: {exc}")
+        return
+    failed += 1
+    print(f"  [FAIL] {label}")
+    print("         it was allowed")
+
+
+
 def check(label, got, want):
     global passed, failed
     ok = got == want
@@ -195,6 +215,81 @@ def leaky():
 check("control: a thread that is never stopped IS counted",
       threads_left_by(leaky), 1)
 _leak.set()
+
+# ---------------------------------------------------------------------------
+print("\n  the bot resolves business -> token, not token -> business")
+# The direction inverted so one systemd TEMPLATE unit serves every customer:
+# `bot.py --business NAME` reads that business's bot_token off its row, instead
+# of every business needing an env file carrying its own copy of the token.
+#
+# BOTH CHECK SUITES PASSED BEFORE THIS SECTION EXISTED -- because neither
+# touched resolve_identity(). A green suite that does not cover the new code is
+# the failure this project keeps cataloguing, so the coverage is written rather
+# than assumed.
+
+import contextlib as _ctx  # noqa: E402
+import os as _os  # noqa: E402
+
+import app.db as _db  # noqa: E402
+
+_argv = sys.argv[:]
+_by_name, _by_token, _conn = _db.business_by_name, _db.business_for_token, bot.connection
+
+REAL_ID = "biz-uuid"
+REAL_TOKEN = "8123456789:AA" + "x" * 30
+
+
+class _FakeConn:
+    def __init__(self, token):
+        self._token = token
+
+    def execute(self, *a, **k):
+        return self
+
+    def fetchone(self):
+        return (self._token,)
+
+
+def _fake_connection(business_id):
+    return _ctx.nullcontext(_FakeConn({REAL_ID: REAL_TOKEN}.get(business_id)))
+
+
+def _resolve(argv, names=None, tokens=None):
+    sys.argv = ["bot.py"] + argv
+    bot.business_by_name = lambda n: (names or {}).get(n)
+    bot.business_for_token = lambda t: (tokens or {}).get(t)
+    bot.connection = _fake_connection
+    try:
+        return bot.resolve_identity()
+    finally:
+        sys.argv = _argv[:]
+        bot.business_by_name, bot.business_for_token = _by_name, _by_token
+        bot.connection = _conn
+
+
+check("--business reads the token off that business's row",
+      _resolve(["--business", "Clinic"], names={"Clinic": REAL_ID}),
+      (REAL_ID, REAL_TOKEN))
+
+rejects_msg("an unknown business name refuses and says how to create it",
+            lambda: _resolve(["--business", "Nope"], names={}),
+            "no business named")
+
+rejects_msg("a business with no bot_token refuses -- a real state, but nothing "
+            "can poll for it",
+            lambda: _resolve(["--business", "Empty"],
+                             names={"Empty": "other-uuid"}),
+            "no bot_token")
+
+# The env fallback has to keep working: the deployed unit still uses it, and
+# breaking it would take the bot down on the first restart after a pull.
+_os.environ["TELEGRAM_BOT_TOKEN"] = REAL_TOKEN
+check("the env fallback still resolves token -> business",
+      _resolve([], tokens={REAL_TOKEN: REAL_ID}), (REAL_ID, REAL_TOKEN))
+_os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+
+rejects_msg("with neither, it says which to prefer",
+            lambda: _resolve([]), "prefer --business")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
