@@ -222,7 +222,37 @@ TRANSFORM = """
   font.href = 'fonts/manrope.css';
   document.head.appendChild(font);
 
-  // 5. The runtime has done its work; the output must not carry it.
+  // 5. THE SCREENSHOT CAPTURE NOTES COME OUT.
+  //
+  //    "SCREENSHOT 2 -- two panels: the bot declining a question..." is an
+  //    instruction to whoever takes the screenshot. It was meant to be visible
+  //    so WE would act on it, and it shipped where customers could read it.
+  //
+  //    REMOVE THE NOTE, NOT THE FRAME. Two earlier attempts got this wrong and
+  //    the bubble assertion caught both:
+  //
+  //      1. Matching on textContent hit the frame div, its span and an inner
+  //         span -- three per note, nine in all -- and the parentElement
+  //         fallback then reached into unrelated markup.
+  //      2. Removing the outermost match deleted the whole dashed card. That is
+  //         wrong because the frames for SCREENSHOT 2 and 4 also CONTAIN the
+  //         little example exchanges, so two of the four conversations went
+  //         with them.
+  //
+  //    So: delete the note element itself, keep whatever else the frame holds,
+  //    and drop the frame only when nothing visible is left inside it -- which
+  //    is the SCREENSHOT 3 case, where the note was all there was.
+  let placeholders = 0;
+  const notes = [...document.querySelectorAll('span, div')].filter(el =>
+    /^SCREENSHOT [0-9]/.test(el.textContent.trim()) && el.children.length === 0);
+  notes.forEach(note => {
+    const frame = note.closest('div[style*="dashed"]');
+    note.remove();
+    placeholders++;
+    if (frame && !frame.textContent.trim()) frame.remove();
+  });
+
+  // 6. The runtime has done its work; the output must not carry it.
   document.querySelectorAll('script').forEach(s => s.remove());
 
   const style = document.createElement('style');
@@ -233,7 +263,7 @@ TRANSFORM = """
   js.textContent = config.langJs;
   document.body.appendChild(js);
 
-  return {hoverRules: rules.length, wired, removed, relabelled, chips};
+  return {hoverRules: rules.length, wired, removed, relabelled, chips, placeholders};
 }
 """
 
@@ -283,7 +313,8 @@ def main() -> None:
     print(f"  {SOURCE.name} -> {OUT}  ({len(html) / 1024:.0f} KB)")
     print(f"  {stats['hoverRules']} hover rules, {stats['wired']} links wired, "
           f"{stats['relabelled']} relabelled, {stats['chips']} chips, "
-          f"{stats['removed']} removed")
+          f"{stats['removed']} removed, "
+          f"{stats['placeholders']} capture notes stripped")
 
     # --- the placeholders must have survived --------------------------------
     # Not a formality. The instruction was that nothing unfinished may be
@@ -292,10 +323,13 @@ def main() -> None:
     # unfinished where it is.
     must_survive = {
         "the checkerboard QR": "repeating-conic-gradient",
-        "screenshot 2 placeholder": "SCREENSHOT 2",
-        "screenshot 3 placeholder": "SCREENSHOT 3",
-        "screenshot 4 placeholder": "SCREENSHOT 4",
     }
+    # Inverted deliberately. These were "must survive" while the page was
+    # unpublished and the notes were addressed to us. On a public page they are
+    # addressed to customers, which is not what they were for.
+    for n in ("SCREENSHOT 2", "SCREENSHOT 3", "SCREENSHOT 4"):
+        if n in html:
+            raise SystemExit(f"\n{n} capture note is still in the output")
     failures = [name for name, needle in must_survive.items()
                 if needle not in html]
 
@@ -319,6 +353,22 @@ def main() -> None:
         raise SystemExit("\nthe platform bot is still named in the page")
     if "support.js" in html:
         raise SystemExit("\nthe design-tool runtime is still referenced")
+    # The stylesheet LIVES in fonts/, so its url() paths are already relative to
+    # that directory. Prefixing them with "fonts/" resolves to
+    # /fonts/fonts/x.woff2 -- 404 on every face, while the page still LOOKS
+    # correct because it falls back through `Manrope, system-ui, sans-serif` to
+    # a system font. It shipped exactly that way and was live for a day.
+    css = pathlib.Path("site/fonts/manrope.css")
+    if css.exists():
+        doubled = css.read_text(encoding="utf-8").count("url(fonts/")
+        if doubled:
+            raise SystemExit(
+                f"\n{doubled} font url()s are double-prefixed (fonts/fonts/...). "
+                "Every face would 404 and the page would quietly fall back to a "
+                "system font.")
+        faces = len(list(css.parent.glob("*.woff2")))
+        print(f"  {faces} font faces, url() paths single-prefixed")
+
     print("\n  placeholders intact, runtime gone, bindings resolved")
 
 

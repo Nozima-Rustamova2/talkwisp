@@ -66,20 +66,18 @@ export default function SignIn() {
               If that address has an account, a sign-in link is on its way. It
               expires in 15 minutes.
             </p>
-            {/* Said plainly rather than left as a surprise. Email delivery is
-                not built yet, and someone staring at an inbox has no way to
-                know that from anything else on screen. */}
-            <p
-              style={{
-                margin: "0 0 18px",
-                fontSize: 13,
-                lineHeight: 1.55,
-                color: "var(--text-faint)",
-              }}
-            >
-              Email sending is not switched on yet, so the link is printed in the
-              server log rather than sent.
-            </p>
+            {/* This used to say "Email sending is not switched on yet, so the
+                link is printed in the server log rather than sent." It was true
+                when written and became false the day Resend was wired -- but it
+                was hardcoded and unconditional, so it kept telling people their
+                link was never coming while it was already in their inbox. Anyone
+                reading it stops trying, which made a working sign-in look
+                broken.
+
+                The lesson is narrow: the frontend cannot state a fact about the
+                backend's configuration. It does not know, and a hardcoded claim
+                is only correct until the day it is not. Either the server says
+                so in its response, or nothing says so. */}
             <button
               className="control control-quiet"
               onClick={() => setState({ kind: "idle" })}
