@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
 from app import auth, console, extract, review, sources, vision
-from app.db import IN_HTTP_REQUEST, assert_app_role, connection, pool
+from app.db import assert_app_role, connection, pool
 from app.llm import check_configured, check_reachable
 from app.retrieval import find
 from app.typed import parse as parse_fact, store as store_fact
@@ -79,23 +79,6 @@ app = FastAPI(title="Talkwisp", lifespan=lifespan, openapi_url=None,
               dependencies=[Depends(gate)])
 
 
-@app.middleware("http")
-async def _mark_request(request: Request, call_next):
-    """Tell app/db.py that this is a request, for the length of the request.
-
-    Its only purpose is the guard inside sole_business(): that function is the
-    pre-auth "the only business there is" fallback, correct for the check
-    scripts and the bot and catastrophic on an HTTP path, where it would serve a
-    logged-out visitor somebody else's data and look like it was working. A rule
-    saying "don't call it from a request" has no failure signal. This does.
-    """
-    token = IN_HTTP_REQUEST.set(True)
-    try:
-        return await call_next(request)
-    finally:
-        IN_HTTP_REQUEST.reset(token)
-
-
 def current_business(request: Request) -> str:
     """Which business this request is for. THE INNER HALF OF DEFAULT DENY.
 
@@ -105,9 +88,11 @@ def current_business(request: Request) -> str:
     to be had. Same shape as the payment view in 0005: the safe thing is the only
     thing, rather than the thing you have to remember.
 
-    It notably does NOT fall back to sole_business() any more. That fallback is
-    how a logged-out request reads someone's data, and it reads as correct for
-    exactly as long as there is one business.
+    It notably does NOT fall back to "the only business there is". That default
+    is gone from connection() entirely -- a missing tenant is now a TypeError at
+    the call site rather than a silent substitution, which is stronger than the
+    ContextVar guard that used to police it. There is nothing left to fall back
+    to.
     """
     business_id = auth.resolve(request)
     if business_id is None:

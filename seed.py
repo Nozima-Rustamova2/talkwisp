@@ -27,7 +27,7 @@ import json
 import pathlib
 import sys
 
-from app.db import connection, pool
+from app.db import HARNESS_BUSINESS, business_by_name, connection, pool
 from app.embeddings import DIMENSIONS, MODEL, embed_document
 from app.normalize import normalize
 from app import payment
@@ -274,8 +274,28 @@ FILE_SOURCE = (
 
 
 def main() -> None:
+    # THE ONLY SCRIPT THAT NAMES AN ARBITRARY TENANT, and the only one that
+    # creates a business. Everything else resolves a name that must already
+    # exist and refuses otherwise -- so "not found" stays a real error rather
+    # than a case that quietly invents a row.
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--business", default=HARNESS_BUSINESS,
+                    help="name of the business to seed into; created if absent")
+    args = ap.parse_args()
+
     with pool:
-        with connection() as conn:
+        target = business_by_name(args.business)
+        if target is None:
+            with pool.connection() as conn:
+                target = str(conn.execute(
+                    "insert into business (name) values (%s) returning id",
+                    (args.business,)).fetchone()[0])
+            print(f"created business {args.business!r}")
+        else:
+            print(f"seeding into existing business {args.business!r}")
+        with connection(target) as conn:
             # DELETE, NEVER TRUNCATE, and this is a tenancy decision rather
             # than a style one.
             #

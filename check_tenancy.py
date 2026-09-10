@@ -37,7 +37,7 @@ from psycopg_pool import ConnectionPool
 
 import app.main as api
 from app import auth
-from app.db import assert_app_role, connection, pool, sole_business
+from app.db import assert_app_role, connection, harness_business, pool
 
 load_dotenv()
 sys.stdout.reconfigure(encoding="utf-8")
@@ -168,7 +168,7 @@ rejects("as the app role, the same query refuses to run", untenanted_count)
 # ---------------------------------------------------------------------------
 print("\n3. Two businesses cannot see each other, through the real endpoints")
 
-BUSINESS_A = sole_business()  # must be called while there is still only one
+BUSINESS_A = harness_business()  # must be called while there is still only one
 b_row = admin.execute(
     "insert into business (name) values ('check_tenancy B') returning id"
 ).fetchone()[0]

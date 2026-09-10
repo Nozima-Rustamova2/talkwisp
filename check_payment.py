@@ -22,7 +22,7 @@ import sys
 
 import psycopg
 
-from app.db import connection, pool
+from app.db import connection, harness_business, pool
 # The ONLY import from app/ that the checks below depend on, and it is here to
 # be verified against the migration rather than trusted.
 from app.payment import PAYMENT_SUBJECT, PAYMENT_SUBJECT_KEY
@@ -58,7 +58,7 @@ def rejects(label, fn):
 
 
 with pool:
-    with connection() as conn:
+    with connection(harness_business()) as conn:
         # Read BEFORE anything is written, compared after the rollback. The
         # alternative is a literal count, which goes stale the moment the owner
         # adds a line of copy -- and a verifier asserting a stale snapshot is

@@ -84,39 +84,45 @@ def assert_app_role() -> None:
                 "at the talkwisp_app role. Refusing to start.")
 
 
-# True for the duration of an HTTP request, set by the middleware in app/main.py.
-# Its only job is the guard in sole_business() below.
-IN_HTTP_REQUEST: ContextVar[bool] = ContextVar("in_http_request", default=False)
+# The dataset the harness scripts measure against. A NAME, not "whichever
+# business exists".
+#
+# check_answer's 80/10, check_retrieval's 54/31/5 and check_buy's 22/22 are
+# statements about a specific set of facts. Handed a different tenant they would
+# produce different numbers -- and nothing would distinguish "someone ran this
+# against the wrong business" from "retrieval regressed". That is the failure
+# this project keeps cataloguing: a check and the thing it measures drifting
+# apart while the signal stays green. So the harness names its dataset.
+#
+# Overridable, because the name is data rather than code and a second install
+# may seed under a different one.
+HARNESS_BUSINESS = os.getenv("TALKWISP_HARNESS_BUSINESS", "Default business")
 
 
-def sole_business() -> str:
-    """The only business there is. FOR SCRIPTS AND THE BOT, NEVER FOR A REQUEST.
-
-    The check scripts and seed.py have no session and never will; the bot
-    resolves its tenant from the token that received the update. Both legitimately
-    need to name a business without anyone being logged in.
-
-    An HTTP request must not, and this raises rather than trusting that nobody
-    calls it. Reachable from a request, this is the fallback that serves a
-    logged-out visitor somebody else's data -- silently, because falling back to
-    "the only business" looks exactly like working correctly while there is only
-    one. It would start leaking on the day a second business signs up, which is
-    the day nobody is looking at this function.
-
-    The guard is a ContextVar rather than a rule, because a rule about which
-    functions may call which other functions has no failure signal. check_auth.py
-    proves it fires, and proves it does NOT fire outside a request -- otherwise
-    every script breaks and the guard is worse than the problem.
-    """
-    if IN_HTTP_REQUEST.get():
-        raise RuntimeError(
-            "sole_business() was reached from an HTTP request. It is the "
-            "pre-auth fallback and a request must get its business from the "
-            "session instead -- falling back here serves a logged-out visitor "
-            "the only business there is, which reads as working right up until "
-            "there are two. Use app.main.current_business().")
+def business_by_name(name: str) -> str | None:
     with pool.connection() as conn:
-        return str(conn.execute("select app_sole_business()").fetchone()[0])
+        row = conn.execute(
+            "select app_business_by_name(%s)", (name,)).fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def harness_business() -> str:
+    """The business the check scripts and probes work against.
+
+    Refuses and lists what exists rather than guessing. seed.py is the only
+    thing that creates a business; everything else names one that is already
+    there, so "not found" is a real error and not a case to paper over.
+    """
+    found = business_by_name(HARNESS_BUSINESS)
+    if found:
+        return found
+    with pool.connection() as conn:
+        names = [r[0] for r in conn.execute("select app_business_names()")]
+    raise RuntimeError(
+        f"No business named {HARNESS_BUSINESS!r}. Existing: "
+        f"{names or '(none -- run seed.py)'}.\n"
+        "Set TALKWISP_HARNESS_BUSINESS, or seed one:\n"
+        f"  uv run python seed.py --business {HARNESS_BUSINESS!r}")
 
 
 def business_for_token(token: str) -> str | None:
@@ -132,7 +138,7 @@ def business_for_token(token: str) -> str | None:
 
 
 @contextlib.contextmanager
-def connection(business_id: str | None = None) -> Iterator[Connection]:
+def connection(business_id: str) -> Iterator[Connection]:
     """A connection with its tenant bound. The only checkout in the codebase.
 
     `set_config(..., true)` is SET LOCAL, and the third argument is why this is
@@ -146,11 +152,12 @@ def connection(business_id: str | None = None) -> Iterator[Connection]:
     a negative control with a bare SET, which must show the value surviving.
     Without that control the test could pass by handing out a fresh connection.
 
-    business_id defaults to the sole business, for the check scripts and for the
-    API until auth exists. Endpoints pass it explicitly.
+    business_id is REQUIRED. It used to default to "the only business there
+    is", which is the same fallback shape that would have served a logged-out
+    visitor another tenant's data on the web side -- closed there in 0008 and
+    left open here. A missing argument is now a TypeError at the call site,
+    which is stronger than any runtime guard: there is nothing to fall back to.
     """
-    if business_id is None:
-        business_id = sole_business()
     with pool.connection() as conn:
         conn.execute("select set_config('app.business_id', %s, true)",
                      (str(business_id),))

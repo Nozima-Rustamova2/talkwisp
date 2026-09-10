@@ -28,7 +28,7 @@ from starlette.routing import Mount
 
 import app.main as api
 from app import auth, db
-from app.db import pool, sole_business
+from app.db import harness_business, pool
 
 load_dotenv()
 sys.stdout.reconfigure(encoding="utf-8")
@@ -71,7 +71,7 @@ pool.open()
 # closes the pool on exit while later sections still need it.
 client = TestClient(api.app)
 
-BUSINESS = sole_business()
+BUSINESS = harness_business()
 EMAIL = "check-auth@example.test"
 admin.execute("update business set owner_email = %s where id = %s",
               (EMAIL, BUSINESS))
@@ -177,38 +177,35 @@ raises("the app role cannot read the session table directly",
        read_sessions, "permission denied")
 
 # ---------------------------------------------------------------------------
-print("\n4. sole_business() cannot be reached from a request")
-# The pre-auth fallback. Correct for the check scripts and the bot; on an HTTP
-# path it serves a logged-out visitor the only business there is, and reads as
-# working for exactly as long as there is one business.
+print("\n4. There is no implicit tenant anywhere")
+# This section used to prove that sole_business() -- the "whichever business
+# exists" fallback -- refused when reached from an HTTP request. That guard is
+# gone, and so is the thing it guarded: connection() has no default at all now.
+# A missing tenant is a TypeError at the call site rather than a silent
+# substitution, which is stronger than any runtime check because there is
+# nothing left to fall back TO. The invariant moved, so the assertion moved.
 
-check("outside a request it still works, or every script breaks",
-      sole_business(), BUSINESS)
 
-token = db.IN_HTTP_REQUEST.set(True)
+def connection_without_a_tenant():
+    with db.connection():          # noqa - no argument, deliberately
+        pass
+
+
+raises("connection() with no business is a TypeError, not a default",
+       connection_without_a_tenant, "argument")
+
+check("harness_business() names its dataset and resolves it",
+      harness_business(), BUSINESS)
+
+# It must refuse rather than guess when the name is absent: seed.py is the only
+# thing that creates a business, so "not found" has to stay a real error.
+_saved = db.HARNESS_BUSINESS
+db.HARNESS_BUSINESS = "no such business, deliberately"
 try:
-    raises("inside a request it refuses", sole_business, "HTTP request")
+    raises("an unknown harness business refuses and lists what exists",
+           harness_business, "no business named")
 finally:
-    db.IN_HTTP_REQUEST.reset(token)
-
-# The control: the flag must actually be set during a real request, not merely
-# settable. A sync endpoint runs on a threadpool, so this is really asking
-# whether the ContextVar survives that hop -- if it does not, the guard above is
-# decorative and this section proves nothing.
-seen = {}
-
-
-@api.app.get("/_probe_ctx")
-def _probe_ctx():
-    seen["in_request"] = db.IN_HTTP_REQUEST.get()
-    return {"ok": True}
-
-
-api.PUBLIC_PATHS.add("/_probe_ctx")
-client.get("/_probe_ctx")
-check("control: the flag really is set inside a sync endpoint on the threadpool",
-      seen.get("in_request"), True)
-api.PUBLIC_PATHS.discard("/_probe_ctx")
+    db.HARNESS_BUSINESS = _saved
 
 # ---------------------------------------------------------------------------
 print("\n5. Magic links: single use, and each failure says which")

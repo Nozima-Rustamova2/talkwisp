@@ -58,7 +58,7 @@ import time
 
 from app.answer import (FACT_WINDOW, SIMILARITY_FLOOR, _SEARCH_CHUNKS,
                         _SEARCH_FACTS)
-from app.db import connection, pool
+from app.db import connection, harness_business, pool
 from app.embeddings import DIMENSIONS, MODEL, embed_query
 from app.retrieval import find
 from questions import QUESTIONS
@@ -283,7 +283,7 @@ if __name__ == "__main__":
         )
 
     with pool:
-        with connection() as conn:
+        with connection(harness_business()) as conn:
             current = snapshot(conn, vectors)
 
     if not SNAPSHOT.exists():
