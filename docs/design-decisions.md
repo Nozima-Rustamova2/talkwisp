@@ -227,6 +227,26 @@ this file wins.
   column, backfill one value, extend the indexes" was right about the shape and
   wrong about the cost: the column was the easy half, and the two global unique
   constraints and the three ways RLS silently does nothing were the rest.
+- **MULTI-TENANCY IS CORRECT IN THE DATABASE AND UNUSABLE IN PRACTICE.** This
+  is a blocker, not a cleanup. The moment a second `business` row exists,
+  `app_sole_business()` raises — and nine scripts call `connection()` with no
+  argument, so they all break:
+
+      seed.py          probe_embed.py    check_answer.py   check_buy.py
+      check_drift.py   check_orders.py   check_payment.py  check_retrieval.py
+      check_window.py
+
+  The web app and the bot are fine: auth resolves the tenant from the session,
+  the bot from the token that received the update. But **`seed.py` is one of the
+  nine**, so the first real customer cannot have their knowledge loaded — the
+  tool that would do it stops working on the day they are created. The same
+  wall blocks giving `@talkwisp_demo_bot` its own business.
+
+  So the row-level security, the forced policies and the per-business unique
+  constraints are all real and all verified, and none of it can be exercised by
+  a second tenant. The fix is a `--business` argument on those nine, and it is
+  the thing standing between the schema being correct and the product being
+  multi-tenant.
 - **`escalation`: approved, and now deferred rather than absent.** It was
   approved as a sixth table for forwarding unanswered questions and never
   created. Approved-and-absent is the worst of the three states — it reads as
@@ -1921,6 +1941,44 @@ two controls without which the section proves nothing:
   control the payment check taught us to write.
 
 Both pass: the pid matches, `SET LOCAL` is gone, and the bare `SET` survives.
+
+### A zero that looked like a count — 2026-09-10
+
+Rendering the landing page from design-tool source to static HTML reported:
+
+```
+  0 hover rules, 11 links wired, 1 removed
+```
+
+Read as "there were no `style-hover` attributes to convert". There were five.
+
+The design-tool runtime consumes `style-hover` and inserts the equivalent CSS
+through the **CSSOM** — `sheet.insertRule` against a `<style>` element it leaves
+**empty in the markup**. So the rules exist in the live document, apply
+correctly, and are invisible to `outerHTML`, which is what `page.content()`
+returns. Querying `[style-hover]` after the runtime had run found nothing,
+because the runtime had already removed the attributes.
+
+The output would have shipped a page where every button silently lost its hover
+state. Nothing errored. The check that should have caught it — a count of
+converted rules — reported zero, and zero is a legitimate value for that count.
+
+Same shape as every other row in the table above: **the object measured and the
+object that matters were different.** The DOM's serialisation and the DOM's
+computed style are two different things, and a rule inserted through the CSSOM
+lives in exactly the gap between them.
+
+The fix reads the rules back out of `document.styleSheets`, skipping sheets
+whose `ownerNode` already has text — so whatever the runtime actually generated
+is captured, rather than this script re-deriving it from the source attributes
+and hoping the two agree. Recovered `.scp0` (four blue CTAs) and `.scp1` (the
+question chips), which matches the 4x / 1x split in the source exactly.
+
+The generalisable part is narrow and worth keeping: **when a tool transforms
+something, do not verify the transformation by re-reading your own input.** The
+count was derived from the same query that did the work, so it could only ever
+agree with itself — the third instance of that pattern in this project, after
+the auth.py query extraction and the unique-constraint check.
 
 ### The unique-constraint check was blind, and only a control found it
 

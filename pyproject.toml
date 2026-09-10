@@ -19,3 +19,8 @@ dependencies = [
     "tzdata>=2026.3",
     "uvicorn[standard]>=0.52.4",
 ]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.62.0",
+]
