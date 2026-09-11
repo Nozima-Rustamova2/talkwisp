@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
 import Review from "./Review";
 import SignIn from "./SignIn";
+import TestConsole from "./TestConsole";
 import { getMe, logout, setSpendingAllowed, type Me } from "./api";
 
 /* The shell: header, the two screens that exist, and the route between them.
@@ -16,10 +17,25 @@ import { getMe, logout, setSpendingAllowed, type Me } from "./api";
  *
  * No router library for two screens. */
 
-type Route = "add" | "review";
+type Route = "add" | "review" | "test";
 
+/* THREE SCREENS, STILL A HEADER AND NOT A RAIL.
+ *
+ * The design draws a seven-item left rail. Five of those have nothing behind
+ * them -- Gaps and Conversations have no prototype and no endpoint (gaps.jsonl
+ * is a file, and app/console.py:33 says to promote it "when it earns a table"),
+ * and Templates has neither. Shipping the rail now would be shipping five
+ * affordances that do nothing.
+ *
+ * Three screens are also still a SEQUENCE -- add, review, test -- and a header
+ * says an order better than a rail does. The rail earns its place at the first
+ * item that is not part of that flow, which is Settings holding Connect
+ * Telegram. Four items, not seven. */
 function routeFromHash(): Route {
-  return window.location.hash.replace(/^#\/?/, "") === "review" ? "review" : "add";
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  if (hash === "review") return "review";
+  if (hash === "test") return "test";
+  return "add";
 }
 
 export default function App() {
@@ -67,7 +83,9 @@ export default function App() {
         ? "Sign in — Talkwisp"
         : route === "review"
           ? "Review — Talkwisp"
-          : "Add knowledge — Talkwisp";
+          : route === "test"
+            ? "Test — Talkwisp"
+            : "Add knowledge — Talkwisp";
   }, [route, me]);
 
   /* EVERY HOOK ABOVE THIS LINE, EVERY RETURN BELOW IT.
@@ -131,7 +149,7 @@ export default function App() {
 
   const tab = (to: Route, label: string) => (
     <a
-      href={to === "add" ? "#/" : "#/review"}
+      href={to === "add" ? "#/" : to === "review" ? "#/review" : "#/test"}
       style={{
         minHeight: 44,
         display: "inline-flex",
@@ -176,6 +194,7 @@ export default function App() {
         <nav style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           {tab("add", "Add knowledge")}
           {tab("review", "Review")}
+          {tab("test", "Test")}
           {/* The signed-in address, and a way out. Shown because a session that
               cannot be seen or ended is the one part of auth a person cannot
               verify for themselves -- and on a shared machine that matters more
@@ -209,7 +228,13 @@ export default function App() {
       </header>
 
       {waiting}
-      {route === "review" ? <Review /> : <AddKnowledge />}
+      {route === "review" ? (
+        <Review />
+      ) : route === "test" ? (
+        <TestConsole />
+      ) : (
+        <AddKnowledge />
+      )}
     </div>
   );
 }

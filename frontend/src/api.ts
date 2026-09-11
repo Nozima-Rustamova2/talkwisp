@@ -230,6 +230,150 @@ export const extractSource = (id: string) =>
     { method: "POST" },
   );
 
+/* --- the test console ----------------------------------------------------
+ *
+ * EVERY TYPE BELOW WAS READ OFF A LIVE RESPONSE, not off the docstrings. The
+ * one bug this file has already produced came from writing a plausible key name
+ * instead -- `conflict` for `conflicts` -- which type-checked, built clean, and
+ * made the warning permanently invisible.
+ *
+ * What the live call actually returned, and what the mockup did not predict:
+ * ONE question produced 28 provenance items with used_count 1. The prototype
+ * draws five hand-written lines, which is the most misleading kind of fake
+ * data -- right shape, wrong order of magnitude. Two of the 28 were
+ * contradicting opening-hours facts, one typed and one extracted from a price
+ * list. The screen shows what was used and collapses the rest. */
+
+export type Suggestion = {
+  question: string;
+  language: string;
+  /* "Avisena Med / ish vaqti" -- the subject and attribute the question
+   * resolves back to. The screen does not render it today; it is here because
+   * it is what makes the "all three have answers" claim checkable. */
+  resolves_to: string;
+};
+
+export type Provenance = {
+  kind: "fact" | "chunk";
+  id: string;
+  origin: "typed" | "extracted";
+  /* Demonstrably present in the reply. Facts are matched on exact value,
+   * chunks on word overlap -- a chunk is not unused merely because the reply
+   * paraphrased it, which happens whenever the customer's language differs
+   * from the document's. */
+  used: boolean;
+  source_label: string | null;
+  source_filename: string | null;
+  similarity: number | null;
+  /* kind === "fact" */
+  subject?: string;
+  attribute?: string;
+  value?: string;
+  created_at?: string | null;
+  /* kind === "chunk" */
+  quote?: string;
+  quoted?: boolean;
+};
+
+export type ConsoleAnswer = {
+  question: string;
+  /* CAN BE NULL, AND CAN ALSO BE A POLITE REFUSAL -- both under status
+   * "unknown". app/answer.py sets `answer = reply` when the model was called
+   * and declined, and `answer = None` at line 628 when nothing cleared the
+   * similarity floor and the model was never called at all. A screen that
+   * treated null as "the refusal case" would render its own wording over the
+   * agent's on the first, and nothing on the second. Branch on `status`. */
+  answer: string | null;
+  /* FIVE, not four. "unknown" was missing from the first draft of this type --
+   * it is the most common refusal there is, and it came back from a live call
+   * as `status: "unknown"` with a real Uzbek sentence in `answer`. Read off
+   * the wire, like everything else here. */
+  status: "ok" | "triage" | "not_found" | "ambiguous" | "unknown";
+  route: string | null;
+  language: string;
+  wrong_script: boolean;
+  provenance: Provenance[];
+  used_count: number;
+  /* "unavailable_cross_script" means text matching could not run at all,
+   * because the reply and its sources are in different alphabets. Rendering
+   * "0 sources used" there would report a limitation as a finding. */
+  used_detection: "text_match" | "unavailable_cross_script";
+};
+
+/* A near-miss: something that scored but did not answer. */
+export type Nearest = {
+  subject: string;
+  attribute: string;
+  value: string;
+  similarity: number | null;
+};
+
+/* THREE SHAPES, NOT ONE, and the first version of this type had only the
+ * common fields -- which would have thrown away the most useful half of the
+ * response without any error to say so.
+ *
+ * `review_nearest` carries the five things that ALMOST answered, with scores.
+ * That list is the whole point: "your wording and the customer's differ" is
+ * only actionable if you can see which entry should have matched.
+ *
+ * `choose` carries the five facts the answer came from, and asks the one
+ * question code cannot decide -- whether a retrieved fact is factually wrong,
+ * or a correct fact was used wrongly. The answer goes back as the `reason`
+ * argument to consoleFeedback, which is why that parameter exists. */
+export type NextStep = {
+  action: "none" | "report_bug" | "review_nearest" | "choose";
+  reason: string;
+  /* Prewritten by the server, for all five cases. The screen renders this
+   * string; it does not compose its own advice. An owner sent to fix a fact
+   * when the real problem is a missing alias will edit correct data. */
+  text: string | null;
+  /* action === "review_nearest" */
+  nearest_score?: number | null;
+  nearest?: Nearest[];
+  /* action === "choose" */
+  choices?: ("fact_is_wrong" | "used_the_wrong_fact")[];
+  chosen?: string | null;
+  facts?: { id: string; subject: string; attribute: string; value: string }[];
+};
+
+export type VerdictResult = {
+  stored: boolean;
+  next_step: NextStep;
+  wrong_script: boolean;
+};
+
+export const consoleSuggestions = (limit = 3) =>
+  request<Suggestion[]>(`/console/suggestions?${q({ limit: String(limit) })}`);
+
+/* SPENDS: one embedding and at least one generation. */
+export const consoleAsk = (question: string, fromSuggestion = false) =>
+  request<ConsoleAnswer>(
+    `/console/ask?${q({ q: question, from_suggestion: fromSuggestion })}`,
+    { method: "POST" },
+  );
+
+/* SPENDS A FULL ANSWER, deliberately. The server re-derives the reply rather
+ * than accepting one from the browser, because a verdict stored against a
+ * client-supplied answer records what the browser claimed, not what the agent
+ * did. Clicking Right or Wrong therefore costs a generation.
+ *
+ * AND SO DOES ANSWERING THE FOLLOW-UP. Marking something wrong can return a
+ * `choose` step, and sending the chosen reason back calls this again -- a
+ * second full answer for the same question. Two clicks, two generations. That
+ * is the price of the most valuable record this product makes, and it is worth
+ * knowing rather than discovering. */
+export const consoleFeedback = (
+  question: string,
+  verdict: "right" | "wrong",
+  reason?: string,
+) =>
+  request<VerdictResult>(
+    `/console/feedback?${q(
+      reason ? { q: question, verdict, reason } : { q: question, verdict },
+    )}`,
+    { method: "POST" },
+  );
+
 /* --- signing in ----------------------------------------------------------
  *
  * No credentials option on any of these: the cookie is same-origin, and fetch
