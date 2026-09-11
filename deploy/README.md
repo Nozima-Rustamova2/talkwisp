@@ -47,6 +47,32 @@ Anything allowing 3389, 5432, 8200 or `0.0.0.0/0` on a wide port range should go
 
 ---
 
+## 1b. Two identities, and why
+
+The services run as **`talkwisp-svc`** -- a system account with no login shell
+that has never been in `google-sudoers`. You log in as `talkwisp`, which does
+have passwordless root. That split is the point: an RCE in the API must not be
+root on the box holding the database and every credential.
+
+Do not "simplify" the units back to `User=talkwisp`. And note the group
+membership cannot be edited away instead -- `google-guest-agent` rebuilds it
+from SSH-key metadata. See docs/design-decisions.md.
+
+What `talkwisp-svc` needs, and nothing more:
+
+```bash
+sudo useradd --system --shell /usr/sbin/nologin --no-create-home      --user-group talkwisp-svc
+sudo chown talkwisp:talkwisp-svc .env && sudo chmod 0640 .env
+touch gaps.jsonl messages.jsonl feedback.jsonl
+sudo chown talkwisp:talkwisp-svc *.jsonl && sudo chmod 0660 *.jsonl
+```
+
+**Create all three JSONL files even if empty.** They are opened in append mode,
+which creates them -- and creating a file needs write on the directory, which
+this account deliberately does not have. `console._log` does not catch, so a
+missing `feedback.jsonl` is a 500 on the first Right/Wrong click and nowhere
+else.
+
 ## 2. The secrets file
 
 **There is only one, and it is the repo's `.env`.** An earlier draft of this

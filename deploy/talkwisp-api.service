@@ -16,8 +16,30 @@ Requires=postgresql.service
 
 [Service]
 Type=exec
-User=talkwisp
-Group=talkwisp
+# NOT the login user, and this line is the whole point.
+#
+# talkwisp is in GCP's google-sudoers group -- %google-sudoers ALL=(ALL:ALL)
+# NOPASSWD:ALL -- so running this process as talkwisp made any RCE in an
+# internet-facing app instant root on the box holding the database, the API
+# keys and customers' bot tokens.
+#
+# That group is maintained by google-guest-agent from instance SSH-key
+# metadata, so editing the sudoers file or removing the membership does not
+# hold: the agent puts it back on the next sync, and a security control that
+# silently reverts is worse than a known-bad one because you stop checking it.
+#
+# So the fix is not to fight the rule but to make it irrelevant. talkwisp-svc
+# is a system account with no login shell that has never been in
+# google-sudoers, and nothing an SSH key does will add it. `sudo -l -U
+# talkwisp-svc` says "not allowed to run sudo", measured.
+#
+# What it needs instead, all verified before this line changed: traverse
+# /home/talkwisp (0711), read .env (0640 talkwisp:talkwisp-svc), and append to
+# the three JSONL logs (0660, and feedback.jsonl had to be CREATED -- it did
+# not exist, console._log does not catch, and the first Right/Wrong click would
+# have 500'd).
+User=talkwisp-svc
+Group=talkwisp-svc
 WorkingDirectory=/home/talkwisp/talkwisp
 
 # ONE secrets file, the repo's .env, and never a second copy. migrate.py,

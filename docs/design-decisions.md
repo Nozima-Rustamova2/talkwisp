@@ -1844,6 +1844,87 @@ tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
 deliberately provokes the paths nobody designed: a double-tapped Confirm, a
 screenshot sent before any order exists, and two screenshots for one order.
 
+## The web app does not run as a user who can become root — 2026-09-11
+
+Found while checking whether a settings screen could start a systemd unit: the
+API ran as `User=talkwisp`, and `talkwisp` is in GCP's `google-sudoers` group,
+whose rule is `%google-sudoers ALL=(ALL:ALL) NOPASSWD:ALL`. **Any remote code
+execution in a public web app was instant root** on a box holding the database,
+the Gemini key, the postgres superuser password and customers' bot tokens.
+
+### Why neither obvious fix works
+
+Narrow the sudoers rule, or drop the group membership. Both look right and
+neither holds, because **`google-guest-agent` maintains that group from instance
+SSH-key metadata**. The agent is active; the key this session logs in with was
+pushed as a metadata key, and that is exactly what grants the membership. Edit
+the file and the agent may rewrite it; remove the user and the next metadata
+sync puts it back.
+
+> **A security control that silently reverts is worse than a known-bad one,
+> because you stop checking it.** The same shape as every other entry here: the
+> thing you verified and the thing in force drift apart, and nothing says so.
+
+### What was done instead
+
+The problem was never the sudo rule. It was that **the internet-facing process
+and the human administrator were the same Unix identity**. Splitting them makes
+the rule irrelevant rather than fighting an agent that will undo you.
+
+`talkwisp-svc`: system account, `/usr/sbin/nologin`, no metadata key, never in
+`google-sudoers` and nothing an SSH key does will add it. All three units —
+`talkwisp-api`, `talkwisp-bot`, `talkwisp-bot@` — now run as it.
+
+Measured after the change, not assumed:
+
+| Property | Result |
+|---|---|
+| `sudo -l -U talkwisp-svc` | *"not allowed to run sudo"* |
+| login shell | `/usr/sbin/nologin` |
+| groups | `talkwisp-svc` only |
+| read `/home/talkwisp/.ssh/authorized_keys` | no |
+| write the repo directory | no — only the three logs |
+| read `.env` | yes, and only via group |
+
+### Four permissions, verified before a unit was touched
+
+`/home/talkwisp` was already `0711`, so traversal worked. `.env` became
+`0640 talkwisp:talkwisp-svc` — group-readable, **not world-readable**; it holds
+the Gemini key, the postgres superuser password and bot tokens. The three JSONL
+logs became `0660 talkwisp:talkwisp-svc`, which is *tighter* than the `0644`
+they had.
+
+**`feedback.jsonl` did not exist, and that would have been a 500.** All three
+logs are opened with `"a"`, which creates the file — and creating a file needs
+write on the *directory*, which the service account deliberately does not have.
+`console._log` does not catch, so the first Right or Wrong click on the test
+console, deployed the same afternoon, would have returned a 500. Pre-creating
+the file keeps the directory grant unnecessary.
+
+Found by listing what the app writes before changing anything, rather than by
+switching the unit and waiting to see. The general rule: **an append-mode log is
+a directory write the first time it runs, and only the first time** — which is
+the worst possible schedule for discovering it.
+
+### What is still exposed, deliberately
+
+`nozima_rustamova` and `talkwisp` (via `google-sudoers`) and `ubuntu` (via
+`/etc/sudoers.d/90-cloud-init-users`) **all still have passwordless root**.
+
+That is fine and it is not an oversight: they are human SSH accounts, and that
+is what sudo is for. Narrowing human sudo on a cloud box buys little and risks
+locking you out of your own machine. But it is written down here so nobody later
+reads "we fixed the sudo problem" and concludes the box has no passwordless
+root at all. It has three accounts that do. None of them serves HTTP.
+
+### What this does NOT buy
+
+The service account can still read `.env`, so an RCE still reaches every
+credential in it — that is unavoidable for a process that must connect to the
+database and call the model. What it no longer reaches is root, other users'
+SSH keys, the systemd units, and the ability to write anywhere in the repo but
+three log files.
+
 ## site/index.html has three inputs, and two of them don't look like inputs — 2026-09-11
 
 The landing page is a **committed artifact**. `git pull` brings it; the box

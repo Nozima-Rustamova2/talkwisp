@@ -36,8 +36,13 @@ Requires=postgresql.service
 
 [Service]
 Type=exec
-User=talkwisp
-Group=talkwisp
+# talkwisp-svc, not the login user. See talkwisp-api.service for the full
+# reasoning: talkwisp is in GCP's google-sudoers group, that membership is
+# maintained by google-guest-agent from SSH-key metadata, and fighting it does
+# not hold. This process handles messages from strangers on the internet and
+# has no business being able to become root.
+User=talkwisp-svc
+Group=talkwisp-svc
 WorkingDirectory=/home/talkwisp/talkwisp
 
 # ONE secrets file, the repo's .env. It carries the database URLs and the model
