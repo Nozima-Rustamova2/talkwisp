@@ -1343,6 +1343,7 @@ the details:
 | The frontend's conflict warning | `result.conflict`, a key the API never sends | `result.conflicts`, plural, a list |
 | `check_approval.py`'s negative control, v1 | "did extraction fail?" — and the stub made it fail early, still inside a bound block | whether the **unbound** region raised, which never ran |
 | `site/index.html` translations | the live page in a real browser, clicking the real button | a build that predated the edit to `site/i18n.json` |
+| `render_landing.py --check` v1's diff | two truncated 60 000-character lines | the one edited word, off the right edge of both |
 
 Three of those scored perfectly while broken. The grader scored three correct
 answers as failures; the classifier scored 0 of 90 false positives on a
@@ -1842,6 +1843,90 @@ once rather than at seven call sites where six would have been right.
 tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
 deliberately provokes the paths nobody designed: a double-tapped Confirm, a
 screenshot sent before any order exists, and two screenshots for one order.
+
+## site/index.html has three inputs, and two of them don't look like inputs — 2026-09-11
+
+The landing page is a **committed artifact**. `git pull` brings it; the box
+needs neither Playwright nor the Telegram API to deploy it. That is the right
+call for four reasons, and the strongest is that a copy change shows up in a
+diff as the words that changed, rather than the live page being a function of
+whatever was on the box that day. The others: the renderer drives a headless
+Chromium because the design-tool runtime inserts CSS via CSSOM and is invisible
+to `outerHTML`; `verify_bot()` makes a live Telegram call, so render-on-deploy
+would fail for reasons unrelated to deploying; and the render is deterministic,
+verified byte-for-byte rather than assumed.
+
+The price of committing it is that it can silently lag, and it already has once
+— two translations added to `site/i18n.json`, the page opened, all three
+languages checked in a real browser, every one showing English. The dictionary
+was right. The build was old.
+
+**Three inputs produce `site/index.html`:**
+
+| Input | Looks like an input? |
+|---|---|
+| `prototype/Landing Page.dc.html` | yes — the design |
+| `site/i18n.json` | **no** — baked in at render time; the page carries the dictionary as a literal and never fetches it |
+| `render_landing.py` itself | **no** — every string in `LINKS`, `RELABEL`, `COPY` and `META` ends up in the output |
+
+Editing any of the three leaves the artifact stale. Editing the last two does
+not feel like editing something that needs building, which is exactly why the
+i18n incident happened and why it would happen again.
+
+`render_landing.py --check` renders through the identical code path and writes
+nothing, reporting whether the committed file is what these inputs produce
+*right now*. It converts "did I remember to re-render" into something with an
+answer.
+
+**The source was the wrong half to be missing.** `prototype/Landing Page.dc.html`
+was the only `.dc.html` in `prototype/` never committed — not ignored, just
+missed, while its output had been committed all along. A committed artifact
+whose source lives on one laptop cannot be re-rendered anywhere: every future
+change would have been a hand-patch of generated HTML with the generator having
+nothing to run against.
+
+### Why it is a local step and not a CI gate
+
+The renderer takes `page.content()` from a headless Chromium, so the bytes carry
+that browser's serialization — attribute order, whitespace, how CSS values are
+written back. **A different Chromium can produce an equivalent page with
+different bytes.** As a gate, that is a red build nobody can fix; as a local
+step it is one line of output you read before committing.
+
+The failure message therefore names both cases and says how to tell them apart,
+because the dangerous response to a spurious red is the obvious one: assume the
+artifact is stale, re-render, and commit a large byte-different diff that
+changes nothing, makes the next real change unreviewable, and hands the same
+spurious red to whoever renders next on the other browser. **That would be a new
+drift entry — a check reporting a real difference that means nothing.** The rule
+in the message: if you cannot point at an edit of your own in the excerpt, the
+artifact is fine and your browser is different.
+
+### The first version of the check could not tell you which case you were in
+
+It printed a plain unified diff. `site/index.html` carries the whole i18n
+dictionary as **one line of about sixty thousand characters**, so a stale
+translation — the exact failure the check exists for — produced two truncated
+60KB lines with the edit somewhere off the right edge, under a message
+instructing you to look at the diff for your edit.
+
+Fixed by windowing on the first differing character rather than the line margin,
+so the excerpt now reads
+`"Pricing": {"uz": "Narxlar"}` → `"Pricing": {"uz": "NARXLAR-CONTROL"}`.
+
+And the Cyrillic came out as question marks, because `--check` reports through
+`SystemExit`, which Python prints to **stderr**, and only `stdout` had been
+reconfigured to UTF-8. Both flaws were found by the negative control — planting
+a translation and watching it go red — not by reading the code. A check whose
+output cannot distinguish the two cases it names is the drift pattern with the
+volume turned up rather than down.
+
+### One more thing the same afternoon closed
+
+`.gitignore` contained the single literal line `.env`. `.env.bak-20260909`,
+`.env.save`, `.env.old` and an editor's `.env~` were every one of them
+committable by `git add -A`, and each is a full set of live credentials. Now
+`.env*` with `!.env.example`, verified against all five names.
 
 ## The spending gate: approval is enforced at the credentials — 2026-09-11
 

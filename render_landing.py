@@ -4,6 +4,17 @@
 
     prototype/Landing Page.dc.html  ->  site/index.html
 
+    uv run python render_landing.py           render and write
+    uv run python render_landing.py --check   render and diff, writing nothing
+
+THREE INPUTS, ONE ARTIFACT, AND THE ARTIFACT IS COMMITTED. The .dc.html above
+is the obvious input. site/i18n.json is baked in at render time -- the shipped
+page carries the dictionary as a literal and does not fetch it -- and THIS FILE
+is the third: every string in LINKS, RELABEL, COPY and META ends up in the
+output. Editing any of the three leaves site/index.html stale, and editing the
+last two does not feel like editing something that needs building. --check is
+the answer to "did I remember to re-render".
+
 WHY THIS EXISTS RATHER THAN COPYING THE FILE. The .dc.html is not plain HTML.
 It carries a 69 KB design-tool runtime (support.js), 45 `{{ }}` bindings, seven
 `<sc-for>` loops and an `<sc-if>`, and the page's actual content -- the pricing
@@ -31,7 +42,12 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
+# stdout AND stderr. Not symmetry: --check reports through SystemExit, which
+# Python prints to stderr, so reconfiguring only stdout left every Cyrillic
+# translation in the failure excerpt as question marks -- unreadable in
+# exactly the case the excerpt exists for.
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 import json
 
@@ -421,7 +437,104 @@ def verify_bot() -> None:
     print(f"  verified {url} is {BOT_TITLE!r}")
 
 
-def main() -> None:
+def excerpt(before: str, after: str, width: int = 110) -> str:
+    """The changed region, windowed on the difference rather than the margin.
+
+    A plain unified diff is useless on this artifact and the first version of
+    this check shipped that way. site/index.html carries the whole i18n
+    dictionary as ONE LINE of about sixty thousand characters, so a stale
+    translation -- the exact failure that made this check worth writing --
+    produced two truncated 60KB lines with the edit somewhere off the right
+    edge, under a message telling you to look at the diff for your edit.
+
+    A check whose output cannot distinguish the two cases it names is a check
+    that reports a difference meaning nothing, which is the drift pattern with
+    the volume turned up rather than down.
+
+    So: find where the lines actually differ, and show a window there.
+    """
+    b, a = before.splitlines(), after.splitlines()
+    out, shown = [], 0
+    for n, (lb, la) in enumerate(zip(b, a), 1):
+        if lb == la:
+            continue
+        shown += 1
+        if shown > 3:
+            out.append(f"  ... and {sum(1 for x, y in zip(b, a) if x != y) - 3}"
+                       " more changed line(s)")
+            break
+        # The first character that differs, and the same from the right, so a
+        # one-word change inside a huge line is located instead of hunted.
+        head = 0
+        while head < min(len(lb), len(la)) and lb[head] == la[head]:
+            head += 1
+        start = max(0, head - width // 3)
+        out.append(f"  line {n}, first difference at character {head}:")
+        for tag, line in (("-", lb), ("+", la)):
+            window = line[start:start + width]
+            out.append(f"    {tag} {'...' if start else ''}{window}"
+                       f"{'...' if start + width < len(line) else ''}")
+    if len(b) != len(a):
+        out.append(f"  (and the line count changed: {len(b)} -> {len(a)})")
+    return "\n".join(out) or "  (no line differs; the files differ only in "\
+                              "their trailing newline)"
+
+
+def compare(html: str) -> None:
+    """--check: is the committed artifact what these inputs produce right now?
+
+    site/index.html is COMMITTED, which is right -- a copy change shows up in a
+    diff as the words that changed, and the box needs neither Playwright nor
+    the Telegram API to deploy. The cost of that is this file's failure mode:
+    the artifact can silently lag its inputs, which has already happened once,
+    when two translations were added to site/i18n.json, the page was opened,
+    all three languages were checked in a real browser, and every one of them
+    showed English. The dictionary was right. The build was old.
+
+    THREE INPUTS, and only one of them looks like an input:
+
+        prototype/Landing Page.dc.html   the design, and the obvious one
+        site/i18n.json                   baked in at render time, not fetched
+        render_landing.py                this file -- every string in LINKS,
+                                         RELABEL, COPY and META is an input too
+
+    Editing any of the three leaves the artifact stale, and editing the last
+    two does not feel like editing something that needs building at all.
+    """
+    if not OUT.exists():
+        raise SystemExit(f"\n{OUT} does not exist. Run without --check.")
+    current = OUT.read_text(encoding="utf-8")
+    if current == html:
+        print(f"  {OUT} matches a fresh render, byte for byte")
+        return
+
+    raise SystemExit(
+        f"\n{OUT} DIFFERS from a fresh render of its inputs.\n\n"
+        + excerpt(current, html)
+        + "\n\n  Two very different things produce this, and the excerpt above"
+          "\n  is how you tell them apart:"
+          "\n"
+          "\n  1. THE ARTIFACT IS STALE. One of the three inputs changed and the"
+          "\n     render was not re-run. You can see your own edit above -- a"
+          "\n     link, a translation, a line of copy. Re-run without --check"
+          "\n     and commit the result."
+          "\n"
+          "\n  2. THE DIFF IS SPURIOUS AND MEANS NOTHING. This renderer drives a"
+          "\n     headless Chromium and takes page.content() from it, so the"
+          "\n     output carries that browser's serialization: attribute order,"
+          "\n     whitespace, how CSS values are written back. A different"
+          "\n     Chromium produces an equivalent page with different bytes."
+          "\n     Above you see churn you did not write and cannot explain."
+          "\n"
+          "\n  DO NOT COMMIT A CASE-2 RENDER. It would be a large diff that"
+          "\n  changes nothing, it would make the next real change unreviewable,"
+          "\n  and it would hand the same spurious red to whoever renders next"
+          "\n  on the other browser. If you cannot point at an edit of your own"
+          "\n  above, the artifact is fine and your browser is different. That is"
+          "\n  why this is a local step and not a CI gate.")
+
+
+def main(check: bool = False) -> None:
     verify_bot()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
@@ -443,7 +556,10 @@ def main() -> None:
         html = page.content()
         browser.close()
 
-    OUT.write_text(html, encoding="utf-8")
+    if check:
+        compare(html)
+    else:
+        OUT.write_text(html, encoding="utf-8")
     print(f"  {SOURCE.name} -> {OUT}  ({len(html) / 1024:.0f} KB)")
     print(f"  {stats['hoverRules']} hover rules, {stats['wired']} links wired, "
           f"{stats['relabelled']} relabelled, {stats['chips']} chips, "
@@ -520,4 +636,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # --check renders exactly as a normal run does and writes nothing. Same
+    # code path deliberately: a check that rendered differently from the real
+    # thing would be comparing against something that never ships.
+    main(check="--check" in sys.argv)

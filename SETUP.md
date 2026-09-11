@@ -210,6 +210,7 @@ uv run python check_orders.py      # 55 passed, 0 failed
 uv run python check_payment.py     # 16 passed, 0 failed
 uv run python check_bot.py         # 17 passed, 0 failed
 uv run python check_normalize.py
+uv run python render_landing.py --check   # the committed landing page matches its inputs
 npm --prefix frontend run lint    # no errors; two pre-existing warnings are fine
 uv run python check_language.py    # TOTAL 53/53
 uv run python check_time.py

@@ -1,7 +1,12 @@
 .venv/
 __pycache__/
 *.pyc
-.env
+# Every .env variant, not just the literal name. `.env` alone let
+# `.env.bak-20260909`, `.env.save`, `.env.old` and an editor's `.env~` through --
+# each one a full set of live credentials, one `git add -A` from the history.
+# The negation keeps the template, which carries no secrets and must stay tracked.
+.env*
+!.env.example
 uvicorn.log
 gaps.jsonl
 results.json
