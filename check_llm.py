@@ -36,6 +36,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 from app import gemini_keys, llm  # noqa: E402
+from app.db import connection, harness_business, pool  # noqa: E402
 
 LIVE = "--live" in sys.argv
 passed = failed = 0
@@ -196,7 +197,14 @@ if LIVE:
     # thing here that proves the refactor did not break the shipping provider:
     # everything above is about shapes, and a shape can be right while the call
     # is broken.
-    reply = llm.complete("Reply with exactly the word: ok", "ping")
+    # BOUND, because complete() is gated on the tenant's approval now and a
+    # model call outside a connection() raises. Binding here rather than
+    # calling the ungated boot probe on purpose: this section exists to prove
+    # the SHIPPING path works, and the shipping path goes through the gate.
+    # A probe that routed around it would stop testing the thing it is named
+    # after the first time the gate broke.
+    with pool, connection(harness_business()):
+        reply = llm.complete("Reply with exactly the word: ok", "ping")
     check(f"a real {llm.PROVIDER} generation came back non-empty",
           bool(reply.strip()), True)
     print(f"         {llm.PROVIDER}/{llm.GEMINI_MODEL} said: {reply[:60]!r}")

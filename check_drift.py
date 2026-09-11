@@ -107,10 +107,15 @@ def embed_missing() -> None:
         print(f"cache complete: {len(vectors)} vectors, {STAMP}")
         return
     print(f"embedding {len(missing)} question(s)...")
-    for n, q in enumerate(missing, 1):
-        vectors[key(q["q"])] = [round(x, 6) for x in embed_query(q["q"])]
-        print(f"  {n}/{len(missing)}  {q['id']}")
-        time.sleep(1)
+    # BOUND, and the pool opened, because embedding is gated on the tenant's
+    # approval now. This ran outside both -- it is the only path in this file
+    # that touches a model and it happens before the `with pool` block at the
+    # bottom, so nothing here had a tenant to be asked about.
+    with pool, connection(harness_business()):
+        for n, q in enumerate(missing, 1):
+            vectors[key(q["q"])] = [round(x, 6) for x in embed_query(q["q"])]
+            print(f"  {n}/{len(missing)}  {q['id']}")
+            time.sleep(1)
     CACHE.write_text(json.dumps({"stamp": STAMP, "vectors": vectors}),
                      encoding="utf-8")
     # Vectors are keyed by question TEXT, so two questions with identical text

@@ -21,6 +21,16 @@ WHAT IT DOES NOT PROVE. It does not prove the list of spending endpoints is
 complete, because that list is not the mechanism -- see app/approval.py. It
 proves the two functions that hold the credentials refuse, and section 3 proves
 nothing else holds them.
+
+AND IT DOES NOT FIND CALLERS THAT NOW NEED A TENANT AND HAVE NONE. The gate
+changed the contract for everything that reaches a model: it must be inside a
+bound block. app/ was audited for that; the top-level scripts were not, and two
+of them broke -- `check_llm.py --live` and `check_drift.py --embed`, both of
+which called a model with no connection open and no pool. Neither is a safety
+hole, and that is exactly why nothing here caught them: the failure is a script
+that stops working, not money being spent. They were found by running them.
+There is no static check for this worth writing; the rule is that a script which
+touches a model opens `connection(harness_business())` first.
 """
 
 import contextlib
