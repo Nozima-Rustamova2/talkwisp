@@ -105,9 +105,16 @@ export type Stats = {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /* The server's own word for what went wrong, when it has one. Only
+   * "not_approved" exists today. It is here because a 403 is otherwise
+   * indistinguishable from any other refusal, and the one thing every screen
+   * must not do is render "not approved yet" as a generic failure -- that is
+   * software that looks broken when it is working exactly as designed. */
+  reason?: string;
+  constructor(status: number, message: string, reason?: string) {
     super(message);
     this.status = status;
+    this.reason = reason;
   }
 }
 
@@ -122,13 +129,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     let detail = `${response.status}`;
+    let reason: string | undefined;
     try {
       const body = await response.json();
       if (typeof body?.detail === "string") detail = body.detail;
+      if (typeof body?.reason === "string") reason = body.reason;
     } catch {
       /* a 413 or 431 has no JSON body at all */
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, detail, reason);
   }
   return (await response.json()) as T;
 }
@@ -231,7 +240,38 @@ export const extractSource = (id: string) =>
  * The session cookie is httpOnly, so nothing here can read it. That is the
  * point -- the only way to ask "am I signed in" is to ask the server. */
 
-export type Me = { business: string | null; email: string | null };
+export type Me = {
+  business: string | null;
+  email: string | null;
+  /* Whether this business may spend money -- see app/approval.py. It is NOT
+   * what stops the spending; the server does that, in the two functions that
+   * hold the API credentials, and it would still stop it with this whole file
+   * deleted. This exists so a screen can say what is switched off BEFORE
+   * someone clicks it, instead of letting them pick a document, wait, and read
+   * a 403. The browser copy can only ever be a courtesy. */
+  approved: boolean;
+};
+
+/* The same value, where a screen deep in the tree can read it without four
+ * components passing it down. Written once by App on load, before either screen
+ * renders -- App returns null until getMe() resolves, so there is no window in
+ * which a screen reads the default.
+ *
+ * A plain module variable rather than a context, because it is read in a
+ * handful of `disabled=` expressions and never rendered, so nothing needs to
+ * re-render when it changes: it changes on reload and not otherwise. A context
+ * would be the same information with a provider around it.
+ *
+ * It defaults to TRUE on purpose. If this were somehow read before it is set,
+ * the failure would be an enabled button that the server then refuses -- one
+ * wasted click. Defaulting to false would grey out the product for an approved
+ * business because of a race in the browser, which is the same information and
+ * a much worse mistake. */
+export let spendingAllowed = true;
+
+export function setSpendingAllowed(value: boolean): void {
+  spendingAllowed = value;
+}
 
 /* Answers 200 whether or not you are signed in. A 401 here would be the
  * ordinary logged-out case reported as a failure, which makes every browser
@@ -248,6 +288,21 @@ export function requestLink(email: string): Promise<{ message: string }> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ email }).toString(),
+  });
+}
+
+/* Creates an UNAPPROVED business and mails a sign-in link.
+ *
+ * It answers exactly what requestLink() answers, including when the address is
+ * already taken -- the endpoint deliberately will not say which happened, so
+ * there is nothing here to branch on and nothing for a screen to leak. If this
+ * ever starts returning "already registered", that is a bug in the server and
+ * not a feature to render. */
+export function signUp(email: string, name: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ email, name }).toString(),
   });
 }
 

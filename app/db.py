@@ -39,6 +39,18 @@ pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5, open=False)
 # cannot disagree about which business a line belongs to.
 _CURRENT: ContextVar[str | None] = ContextVar("business_id", default=None)
 
+# Whether that tenant may spend money. Read from `business.approved` at the same
+# moment the tenant is bound, and read AGAIN on the next bind -- so an approval
+# revoked with onboard.py takes effect on the request after it, not on the next
+# restart. It is not a process-wide cache: a cached approval is one you cannot
+# revoke, and revocation is the only reason the flag exists.
+#
+# It is bound here rather than looked up by the gate because the gate runs deep
+# inside an open connection() block. Checking out a SECOND connection there
+# would deadlock the pool under concurrency -- five in-flight answers hold all
+# five connections, and each one waits for a sixth that nobody will return.
+_APPROVED: ContextVar[bool | None] = ContextVar("approved", default=None)
+
 
 def current_business_id() -> str:
     """The tenant of the enclosing connection() block.
@@ -52,6 +64,67 @@ def current_business_id() -> str:
         raise RuntimeError(
             "No business is bound. This runs inside app.db.connection().")
     return value
+
+
+def current_approved() -> bool:
+    """Whether the bound tenant may spend money. Fails closed, loudly.
+
+    Unbound is not "no": it is a bug, and it raises. The one thing this must
+    never do is return False for a tenant that nobody asked about, because a
+    real business would then be told it is unapproved when it is approved, and
+    the message would be wrong in the most confusing possible direction.
+    """
+    value = _APPROVED.get()
+    if value is None:
+        raise RuntimeError(
+            "No business is bound, so nothing can say whether spending is "
+            "allowed. Model calls belong inside app.db.connection() or "
+            "app.db.bind().")
+    return value
+
+
+def _read_approved(conn: Connection, business_id: str) -> bool:
+    """A separate statement from set_config on purpose.
+
+    Both could go in one round trip -- `select set_config(...), (select approved
+    ...)` -- and it would probably work, and "probably" is the problem: the
+    order in which a select list is evaluated is not defined, and the second
+    half depends on the first having already happened, because the RLS policy on
+    `business` filters on the GUC that set_config is setting. One extra round
+    trip on a local socket, against a model call that takes a second, buys a
+    guarantee instead of a likely.
+
+    Missing row means False. A session pointing at a deleted business is not
+    entitled to spend.
+    """
+    row = conn.execute(
+        "select approved from business where id = app_current_business()"
+    ).fetchone()
+    return bool(row and row[0])
+
+
+@contextlib.contextmanager
+def bind(business_id: str) -> Iterator[None]:
+    """Bind a tenant WITHOUT holding a connection open.
+
+    For app/extract.py, which is the one place in the codebase that calls a
+    model with no transaction open -- deliberately, so it does not hold a lock
+    across three network calls. That made it the one place where the spending
+    gate had nothing to read, and a gate with a hole in it is a gate you will
+    find out about from a bill.
+
+    Costs one connection, briefly, at entry. Not one held for the duration --
+    that is the whole reason extract.py drops it.
+    """
+    with connection(business_id):
+        approved = _APPROVED.get()
+    token = _CURRENT.set(str(business_id))
+    approved_token = _APPROVED.set(approved)
+    try:
+        yield
+    finally:
+        _APPROVED.reset(approved_token)
+        _CURRENT.reset(token)
 
 
 def assert_app_role() -> None:
@@ -162,7 +235,12 @@ def connection(business_id: str) -> Iterator[Connection]:
         conn.execute("select set_config('app.business_id', %s, true)",
                      (str(business_id),))
         token = _CURRENT.set(str(business_id))
+        # Read here, with a connection already in hand, rather than where the
+        # gate needs it. See _APPROVED above for why the gate must not check out
+        # one of its own.
+        approved_token = _APPROVED.set(_read_approved(conn, str(business_id)))
         try:
             yield conn
         finally:
+            _APPROVED.reset(approved_token)
             _CURRENT.reset(token)

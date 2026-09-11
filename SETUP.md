@@ -201,9 +201,10 @@ only whoever can read the server log can sign in at all.
 Cheap, no model calls, run these first:
 
 ```bash
-uv run python check_encoding.py    # 97 clean, 0 failed
+uv run python check_encoding.py    # 107 clean, 0 failed
 uv run python check_tenancy.py     # 32 passed, 0 failed
-uv run python check_auth.py        # 42 passed, 0 failed
+uv run python check_auth.py        # 67 passed, 0 failed
+uv run python check_approval.py    # all checks passed -- the spending gate
 uv run python check_llm.py         # 13 passed, 0 failed
 uv run python check_orders.py      # 55 passed, 0 failed
 uv run python check_payment.py     # 16 passed, 0 failed

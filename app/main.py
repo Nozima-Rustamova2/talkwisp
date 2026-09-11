@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
 from app import auth, console, extract, review, sources, vision
+from app.approval import NotApproved
 from app.db import assert_app_role, connection, pool
 from app.llm import check_configured, check_reachable
 from app.retrieval import find
@@ -52,6 +53,7 @@ PUBLIC_PATHS = {
     "/health",           # liveness, for a load balancer that says nothing else
     "/auth/me",          # answers "are you logged in", so it must work logged out
     "/auth/request",     # ask for a magic link
+    "/auth/signup",      # create an account; there is no session yet
     "/auth/callback",    # click a magic link
     "/auth/logout",      # idempotent, and pointless to require a session for
     "/auth/telegram",    # Telegram Login, gated off until a domain exists
@@ -77,6 +79,26 @@ def gate(request: Request) -> None:
 # them not to exist.
 app = FastAPI(title="Talkwisp", lifespan=lifespan, openapi_url=None,
               dependencies=[Depends(gate)])
+
+
+@app.exception_handler(NotApproved)
+def not_approved_handler(request: Request, exc: NotApproved) -> JSONResponse:
+    """403, with a machine-readable reason.
+
+    Not 402 Payment Required, which is the status this looks like it wants: no
+    payment is required, no plan exists, and nothing about this business's
+    account has anything to do with money it owes. It has not been approved
+    yet. 403 with a `reason` the frontend can switch on says that without
+    inventing a billing relationship in an HTTP status code.
+
+    Registered as an app-level exception handler rather than caught per
+    endpoint, so it covers the endpoints that spend today and the ones added
+    next month, the same way the gate itself does.
+    """
+    return JSONResponse(
+        status_code=403,
+        content={"detail": str(exc), "reason": "not_approved",
+                 "action": exc.action})
 
 
 def current_business(request: Request) -> str:
@@ -394,13 +416,35 @@ def auth_me(request: Request) -> dict:
     if business_id is None:
         return {"business": None, "email": None}
     with connection(business_id) as conn:
-        row = conn.execute("select name, owner_email from business").fetchone()
+        row = conn.execute(
+            "select name, owner_email, approved from business").fetchone()
+    # `approved` is here so the screens can say what is switched off BEFORE
+    # someone clicks it, rather than discovering it as a 403 halfway through
+    # uploading a document. The 403 still exists and is still the thing that
+    # actually stops the spending -- this is only how the UI stays honest. The
+    # two cannot drift apart in the dangerous direction: a stale `true` here
+    # buys a disappointing click, a stale `false` buys a confusing one, and
+    # neither spends a cent, because the gate is not in the browser.
     return {"business": row[0] if row else None,
-            "email": row[1] if row else None}
+            "email": row[1] if row else None,
+            "approved": bool(row and row[2])}
+
+
+def _throttle(request: Request, email: str) -> None:
+    """Shared by the two endpoints that send mail to a stranger's address.
+
+    429 with no detail about which limit was hit. "Too many for this address"
+    would confirm the address is worth rate-limiting, which is a slower version
+    of the same leak these endpoints exist to avoid.
+    """
+    ip = auth.client_ip(request)
+    if auth.rate_limited("ip", ip) or auth.rate_limited("email", email.strip().lower()):
+        raise HTTPException(status_code=429,
+                            detail="Too many attempts. Try again later.")
 
 
 @app.post("/auth/request")
-def auth_request(email: str = Form(...)) -> dict:
+def auth_request(request: Request, email: str = Form(...)) -> dict:
     """Send a sign-in link. Says the same thing whether or not the address is known.
 
     An honest "no such account" here turns this endpoint into an address
@@ -408,7 +452,53 @@ def auth_request(email: str = Form(...)) -> dict:
     is only sent if there is somewhere to send it; the reply does not say which
     happened.
     """
+    _throttle(request, email)
     link = auth.issue_link(email)
+    if link:
+        auth.deliver(email, link)
+    return {"sent": True,
+            "message": "If that address has an account, a sign-in link is on "
+                       "its way. It expires in 15 minutes."}
+
+
+@app.post("/auth/signup")
+def auth_signup(request: Request, email: str = Form(...),
+                name: str = Form(...)) -> dict:
+    """Create an unapproved business and mail a sign-in link.
+
+    THE SAME REPLY AS /auth/request, word for word, and that is the point. This
+    endpoint would otherwise be the address checker that one carefully is not:
+    ask it about an address, and "created" versus "already taken" answers the
+    question /auth/request refuses to. Two endpoints, one property, and it is
+    only worth anything if both hold it.
+
+    So an address that already exists gets a sign-in link instead, silently. The
+    person who forgot they had signed up gets in either way, which is also the
+    behaviour they wanted.
+
+    The business is created UNAPPROVED and there is no argument that could make
+    it otherwise -- see app_business_signup() in migrations/0010.
+    """
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400,
+                            detail="A business name is required.")
+    if len(name) > 120:
+        raise HTTPException(status_code=400, detail="That name is too long.")
+    # Validated before the throttle records anything, so a typo does not spend
+    # one of a real person's four attempts.
+    if not auth.valid_email(email):
+        raise HTTPException(status_code=400,
+                            detail="That does not look like an email address.")
+    _throttle(request, email)
+
+    link = auth.sign_up(email, name)
+    if link is None:
+        # Taken. Send a sign-in link instead and say nothing about which
+        # happened. issue_link returns None only if the address vanished
+        # between the two statements, which deliver() handles by not being
+        # called.
+        link = auth.issue_link(email)
     if link:
         auth.deliver(email, link)
     return {"sent": True,

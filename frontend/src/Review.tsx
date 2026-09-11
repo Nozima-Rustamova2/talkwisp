@@ -10,6 +10,7 @@ import {
   type ConflictValue,
   type ParsedFact,
   type Proposal,
+  spendingAllowed,
 } from "./api";
 
 /* Screen D — Review. Ported from prototype/Onboarding Review.dc.html, at ledger
@@ -91,6 +92,16 @@ type RowState =
   | { kind: "removing" }
   | { kind: "removed" }
   | { kind: "failed"; message: string };
+
+/* Confirming a fact spends money -- it re-embeds subject/attribute/value, in
+ * app/review.py -- which is not obvious from the screen and was not obvious
+ * from the endpoint name either. Rejecting does not. So Keep is gated and
+ * Reject is not, which is the honest split rather than the tidy one.
+ *
+ * As in AddKnowledge: this is courtesy, not protection. See BLOCKED there. */
+const BLOCKED =
+  "Your account is not approved yet, so this is switched off. " +
+  "We will email you when it is ready.";
 
 export default function Review() {
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
@@ -297,7 +308,8 @@ export default function Review() {
                 type="button"
                 className="control control-quiet"
                 style={{ fontSize: 14 }}
-                disabled={bulk !== null}
+                disabled={bulk !== null || !spendingAllowed}
+                title={spendingAllowed ? undefined : BLOCKED}
                 onClick={() => void keepAll(open)}
               >
                 {bulk ?? `Keep all ${open.length}`}
@@ -465,6 +477,8 @@ export default function Review() {
                         <button
                           type="button"
                           className="control control-primary"
+                          disabled={!spendingAllowed}
+                          title={spendingAllowed ? undefined : BLOCKED}
                           onClick={() => void saveFix(p, s)}
                         >
                           Save and keep
@@ -543,6 +557,8 @@ export default function Review() {
                       <button
                         type="button"
                         className="control control-primary"
+                        disabled={!spendingAllowed}
+                        title={spendingAllowed ? undefined : BLOCKED}
                         onClick={() => void keep(p)}
                       >
                         Keep

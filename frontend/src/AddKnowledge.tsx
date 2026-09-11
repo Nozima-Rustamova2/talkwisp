@@ -12,6 +12,7 @@ import {
   type FactResult,
   type Source,
   type Stats,
+  spendingAllowed,
 } from "./api";
 
 /* Screen C — Add knowledge. Ported from prototype/Add Knowledge.dc.html and
@@ -112,6 +113,22 @@ function Row(props: {
 // reload. They disappear on refresh, which is honest -- the fact is in the
 // knowledge base either way, only this band forgets it.
 type TypedRow = { id: string; line: string; parsed: FactResult["parsed"]; at: string };
+
+/* Why these controls grey out rather than vanish: a control that disappears
+ * reads as a bug, and a control that says why it is off reads as a decision.
+ * The same argument the sign-in screen makes for explaining that onboarding is
+ * by hand rather than leaving a dead end.
+ *
+ * NONE OF THIS IS THE PROTECTION. Every one of these buttons is refused by the
+ * server, in app/approval.py, at the two functions that hold the API
+ * credentials -- with this whole file deleted, an unapproved business still
+ * cannot spend a cent. These attributes exist so nobody picks a document, waits
+ * for the upload and then reads a 403. Treating them as the gate would be the
+ * mistake of putting a check where it can be bypassed by anyone with a
+ * devtools console. */
+const BLOCKED =
+  "Your account is not approved yet, so this is switched off. " +
+  "We will email you when it is ready.";
 
 export default function AddKnowledge() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -392,7 +409,8 @@ export default function AddKnowledge() {
                   <button
                     type="button"
                     className="control control-secondary"
-                    disabled={readBusy}
+                    disabled={readBusy || !spendingAllowed}
+                    title={spendingAllowed ? undefined : BLOCKED}
                     onClick={() => fileInput.current?.click()}
                   >
                     {readBusy ? "Sending…" : "Choose file"}
@@ -400,6 +418,8 @@ export default function AddKnowledge() {
                   <button
                     type="button"
                     className="control control-secondary"
+                    disabled={!spendingAllowed}
+                    title={spendingAllowed ? undefined : BLOCKED}
                     onClick={() => setPasteOpen(true)}
                   >
                     Paste text
@@ -454,7 +474,8 @@ export default function AddKnowledge() {
                   <button
                     type="button"
                     className="control control-primary"
-                    disabled={readBusy || overLimit || !pasteText.trim()}
+                    disabled={readBusy || overLimit || !pasteText.trim() || !spendingAllowed}
+                    title={spendingAllowed ? undefined : BLOCKED}
                     onClick={() => void ingest(() => createPaste(pasteText.trim()))}
                   >
                     {readBusy ? "Sending…" : "Read this text"}
@@ -645,7 +666,8 @@ export default function AddKnowledge() {
                   <button
                     type="button"
                     className="control control-primary"
-                    disabled={typedBusy}
+                    disabled={typedBusy || !spendingAllowed}
+                    title={spendingAllowed ? undefined : BLOCKED}
                     onClick={() => void commitFact()}
                   >
                     {typedBusy ? "Adding…" : "Yes, add it"}
@@ -662,7 +684,8 @@ export default function AddKnowledge() {
                 <button
                   type="button"
                   className="control control-primary"
-                  disabled={typedBusy || !typedText.trim()}
+                  disabled={typedBusy || !typedText.trim() || !spendingAllowed}
+                  title={spendingAllowed ? undefined : BLOCKED}
                   onClick={() => void showPreview()}
                 >
                   {typedBusy ? "Reading…" : "Add to knowledge base"}
@@ -773,6 +796,8 @@ export default function AddKnowledge() {
                         type="button"
                         className="control control-quiet"
                         style={{ fontSize: 14 }}
+                        disabled={!spendingAllowed}
+                        title={spendingAllowed ? undefined : BLOCKED}
                         onClick={() => {
                           setReading((p) => ({ ...p, [source.id]: true }));
                           void extractSource(source.id)

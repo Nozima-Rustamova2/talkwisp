@@ -359,16 +359,23 @@ print("\n5. Nothing checks a connection out without a tenant, except twice")
 #                    Asks about the server, not about anyone's data.
 #   bot.py        1  check_database -- select 1, before the bot announces it is
 #                    up. Same: about the server.
-#   app/auth.py   6  the chicken-and-egg. "Who is this" has to be answerable
+#   app/auth.py   7  the chicken-and-egg. "Who is this" has to be answerable
 #                    BEFORE a tenant is known, which is exactly what the tenancy
 #                    policies forbid, so these cannot run on a tenanted
 #                    connection. The exemption is made safe by the assertion
 #                    below rather than by trusting the count: every one of them
 #                    calls an app_* SECURITY DEFINER function and none of them
 #                    names a tenant table.
+#
+#                    The seventh is sign_up(), added when signup became
+#                    self-serve. It is the strongest case there is for the
+#                    exemption: it CREATES the tenant, so there is no tenant it
+#                    could have been bound to. It went red here on the day it
+#                    was written, which is the only reason these counts are
+#                    literals rather than computed.
 
 ALLOWED = {str(pathlib.Path("app/main.py")): 1,
-           str(pathlib.Path("app/auth.py")): 6,
+           str(pathlib.Path("app/auth.py")): 7,
            "bot.py": 1}
 
 found: dict[str, int] = {}
@@ -405,8 +412,8 @@ auth_queries = [
     and node.args and isinstance(node.args[0], ast.Constant)
     and isinstance(node.args[0].value, str)
 ]
-check("all seven of auth.py's queries were found, not just the one-liners",
-      len(auth_queries), 7)
+check("all nine of auth.py's queries were found, not just the one-liners",
+      len(auth_queries), 9)
 check("every one of them calls an app_* resolver",
       sum("app_" in q for q in auth_queries), len(auth_queries))
 check("and none names a table directly",
@@ -414,7 +421,7 @@ check("and none names a table directly",
        if any(f" {t} " in f" {q} " for t in TENANT_TABLES)], [])
 check("the resolvers it uses are the ones granted in 0008",
       sorted({q.split("app_")[1].split("(")[0] for q in auth_queries}),
-      sorted(["business_for_email", "business_for_telegram",
+      sorted(["business_for_email", "business_for_telegram", "business_signup",
               "login_token_create", "login_token_claim", "session_create",
               "session_business", "session_delete"]))
 

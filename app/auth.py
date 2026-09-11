@@ -313,3 +313,127 @@ def business_for_telegram(tg_id: int) -> str | None:
         row = conn.execute(
             "select app_business_for_telegram(%s)", (tg_id,)).fetchone()
     return str(row[0]) if row and row[0] else None
+
+
+# --- signing up -------------------------------------------------------------
+
+# The longest a local part and a domain may be, from RFC 5321. Checked because
+# the column is unbounded text and an 80KB "address" is a write we would rather
+# refuse than store.
+_MAX_LOCAL = 64
+_MAX_DOMAIN = 255
+
+
+def valid_email(raw: str) -> bool:
+    """Conservative, and deliberately not a regex off the internet.
+
+    The regexes people paste accept `a@b`, which is a syntactically legal
+    address that no mail server on earth will deliver to -- so it passes
+    validation, creates a row, and the person waits for a link that was never
+    sendable. Validation that admits an address we cannot mail is not doing the
+    only job it has.
+
+    So: one @, both sides non-empty and within the RFC lengths, no whitespace
+    anywhere, a dot in the domain, no empty or hyphen-edged labels, and a TLD of
+    at least two letters. That REJECTS some legal addresses -- quoted local
+    parts with an @ in them, bare-hostname intranet addresses, punycode written
+    as unicode. Every one of those is a thing nobody signing up for a clinic bot
+    in Tashkent has, and each would arrive here as a support message rather than
+    as silence, which is the right way round.
+
+    It does not prove the address exists. Nothing short of sending to it does,
+    and sending to it is exactly what happens next.
+    """
+    addr = raw.strip()
+    if not addr or any(c.isspace() for c in addr) or addr.count("@") != 1:
+        return False
+    local, _, domain = addr.partition("@")
+    if not local or len(local) > _MAX_LOCAL:
+        return False
+    if not domain or len(domain) > _MAX_DOMAIN or "." not in domain:
+        return False
+    labels = domain.split(".")
+    if any(not l or l.startswith("-") or l.endswith("-") for l in labels):
+        return False
+    return len(labels[-1]) >= 2 and labels[-1].isalpha()
+
+
+def sign_up(email: str, name: str) -> str | None:
+    """Create an UNAPPROVED business and return a sign-in link, or None.
+
+    None means the address is already taken, and the endpoint must treat that
+    exactly like success. Saying "that email is registered" would rebuild the
+    address checker that issue_link() is carefully written not to be -- one
+    endpoint that refuses to confirm an address is worth nothing next to a
+    second endpoint that confirms it.
+
+    Nothing here decides whether the business may spend: app_business_signup()
+    writes approved=false in its own body and takes no argument that could say
+    otherwise. This function could not create an approved business if it tried.
+    """
+    with pool.connection() as conn:
+        row = conn.execute("select app_business_signup(%s, %s)",
+                           (email, name)).fetchone()
+        if not row or not row[0]:
+            return None
+        business_id = str(row[0])
+        raw = secrets.token_urlsafe(32)
+        conn.execute("select app_login_token_create(%s, %s, %s::interval)",
+                     (_hash(raw), business_id, LINK_TTL))
+    return (f"{PUBLIC_BASE_URL}/auth/callback?"
+            + urllib.parse.urlencode({"token": raw}))
+
+
+# --- rate limiting ----------------------------------------------------------
+#
+# /auth/request and /auth/signup were both unauthenticated and unlimited, which
+# means anyone could make us send unbounded mail through Resend, on our bill and
+# against our sending reputation -- and now also create unbounded rows.
+#
+# Two windows, because they stop different things. The per-IP one stops a script
+# enumerating addresses or filling the table. The per-address one, which is much
+# tighter, stops that script using one victim's inbox as a mailbomb: an attacker
+# rotating IPs defeats the first limit and not the second.
+#
+# IN-PROCESS AND PER-WORKER, which is worth saying plainly rather than
+# discovering. Two uvicorn workers means two counters and twice the limit. The
+# service runs one worker today (deploy/talkwisp-api.service); if that changes,
+# this becomes a shared store or it becomes decorative.
+_WINDOW = 3600.0
+_PER_IP = 20
+_PER_EMAIL = 4
+_hits: dict[tuple[str, str], list[float]] = {}
+
+
+def client_ip(request: Request) -> str:
+    """Cloudflare's idea of who this is, then Caddy's, then the socket.
+
+    deploy/Caddyfile sets X-Real-IP from CF-Connecting-IP, so in production this
+    is the real client rather than Cloudflare's edge. Locally there is no proxy,
+    the header is absent, and request.client is the truth.
+
+    A client can forge X-Real-IP by reaching the origin directly on port 443,
+    bypassing Cloudflare. That buys an attacker a reset rate-limit counter and
+    nothing else -- no data, no session, no spending -- so the answer is the
+    firewall and Cloudflare's IP allowlist, not more code here.
+    """
+    return (request.headers.get("x-real-ip")
+            or (request.client.host if request.client else "unknown"))
+
+
+def rate_limited(kind: str, key: str) -> bool:
+    """True when this key has used up its window. Counts the attempt either way.
+
+    Counting the refused attempt too is deliberate: a limiter that only counts
+    successes lets someone keep knocking forever as long as they keep failing.
+    """
+    now = time.time()
+    limit = _PER_EMAIL if kind == "email" else _PER_IP
+    # Prune whole keys, not just old entries, or this dict is a slow memory leak
+    # on a long-running process -- one entry per address ever tried.
+    for k in [k for k, v in _hits.items() if v and now - v[-1] > _WINDOW]:
+        del _hits[k]
+    seen = [t for t in _hits.get((kind, key), []) if now - t < _WINDOW]
+    seen.append(now)
+    _hits[(kind, key)] = seen
+    return len(seen) > limit

@@ -4,6 +4,12 @@
         --email malika@example.uz --token 8123456789:AA... \\
         --document data/their-price-list.pdf
 
+It is also how a business is approved to spend money, which self-serve signup
+makes a separate act from existing:
+
+    uv run python onboard.py --list                     who is waiting
+    uv run python onboard.py --name "Rangli Salon" --approve
+
 Run on the box, over SSH: creating a `business` row needs ADMIN_DATABASE_URL,
 because row-level security means the app role cannot insert one. That is the
 right shape for the first ten customers and the wrong one for a hundred; you
@@ -19,6 +25,13 @@ on -- "the agent never invents an answer" only means anything because a person
 decided each fact was true. A command that auto-confirmed would be the product
 contradicting its own argument, so this stops at "23 facts awaiting review" and
 tells you where to look.
+
+IT DOES NOT APPROVE ANYTHING BY ITSELF. A business created here is unapproved,
+exactly like one that signed up on the website, and cannot call a model until
+--approve is passed. Running this command is not approval: `default false` is
+only a rule if it holds for the route I use myself, and an INSERT here that
+quietly set approved=true would be the one exception that makes the column
+decorative. The cost is one extra word on the command line.
 
 IT CANNOT CREATE THE BOT. That is a conversation with @BotFather, and the token
 has to be copied by a human.
@@ -49,6 +62,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 TOKEN_SHAPE = re.compile(r"\d{6,}:[A-Za-z0-9_-]{30,}")
 
+NL = chr(10)
+
 
 def die(message: str) -> None:
     raise SystemExit(f"\n  {message}\n")
@@ -73,10 +88,92 @@ def verify_token(token: str) -> str:
     return me["result"]["username"]
 
 
+def show_all(admin) -> None:
+    """Everyone, waiting first. The waiting list is the reason this exists."""
+    rows = admin.execute(
+        "select name, owner_email, approved, created_at, bot_token is not null "
+        "from business order by approved, created_at desc").fetchall()
+    if not rows:
+        print(NL + "  no businesses" + NL)
+        return
+    print()
+    for name, email, approved, created, has_bot in rows:
+        mark = "approved" if approved else "WAITING "
+        print(f"  {mark}  {created:%Y-%m-%d}  {name}")
+        print(f"            {email or '(no email -- nobody can sign in)'}"
+              f"{'' if has_bot else '   no bot yet'}")
+    print()
+
+
+def resolve_one(admin, name: str) -> str:
+    """The id of the business with this name, refusing to guess between two.
+
+    business.name IS NOT UNIQUE, and self-serve signup means a stranger picks
+    their own. Someone can sign up calling themselves "Avisena Med", and then
+    `--approve "Avisena Med"` has two rows to choose from. db.business_by_name()
+    would return whichever the planner handed back first, silently -- and what
+    is being granted here is permission to spend our money.
+
+    So it refuses and prints both with their addresses, because the email is
+    what actually tells them apart.
+    """
+    rows = admin.execute(
+        "select id, owner_email, approved, created_at from business "
+        "where name = %s order by created_at", (name,)).fetchall()
+    if not rows:
+        known = admin.execute("select name from business order by name").fetchall()
+        die(f"no business named {name!r}. There is: "
+            + ", ".join(repr(r[0]) for r in known))
+    if len(rows) > 1:
+        lines = (NL + "    ").join(
+            f"{r[0]}  {r[1] or '(no email)'}  "
+            f"{'approved' if r[2] else 'waiting'}  signed up {r[3]:%Y-%m-%d}"
+            for r in rows)
+        die(f"{len(rows)} businesses are named {name!r}, and approving the "
+            f"wrong one hands a stranger our billing:" + NL + "    " + lines
+            + NL + "  Names are not unique. Tell them apart by the email above, "
+            f"then rename one or do it in psql by id.")
+    return str(rows[0][0])
+
+
+def set_approved(admin, business_id: str, name: str, want: bool) -> None:
+    """Flip the spending flag. The only code in the repo that may.
+
+    The app role has no update grant on `business` and no approve function to
+    call, so no bug in the web app can reach this column -- see
+    migrations/0010. That is the whole reason this is a command run over SSH
+    rather than a button in an admin page, and it is what makes the
+    inconvenience worth paying.
+    """
+    before = admin.execute(
+        "select approved, owner_email from business where id = %s",
+        (business_id,)).fetchone()
+    if bool(before[0]) == want:
+        print(f"  {name!r} was already "
+              f"{'approved' if want else 'not approved'} -- nothing changed")
+        return
+    admin.execute("update business set approved = %s where id = %s",
+                  (want, business_id))
+    print(f"  {name!r} ({before[1] or 'no email'}) is now "
+          f"{'APPROVED and can spend money' if want else 'NOT APPROVED'}")
+    if not want:
+        # Said out loud, because the alternative assumption is the dangerous
+        # one. The flag is read when a tenant is bound, once per request, so
+        # this stops the next request rather than one already in flight.
+        print("        effective on its next request; nothing caches it "
+              "beyond a request already running")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--name", required=True, help="the business name")
+    ap.add_argument("--name", help="the business name")
+    ap.add_argument("--approve", action="store_true",
+                    help="let this business spend money (see app/approval.py)")
+    ap.add_argument("--unapprove", action="store_true",
+                    help="stop it spending; takes effect on its next request")
+    ap.add_argument("--list", action="store_true", dest="list_all",
+                    help="every business, approved or waiting, and who owns it")
     ap.add_argument("--email", help="owner_email; who may sign in")
     ap.add_argument("--token", help="the agent bot's token, from @BotFather")
     ap.add_argument("--telegram-id", type=int,
@@ -86,6 +183,10 @@ def main() -> None:
     ap.add_argument("--force", action="store_true",
                     help="re-ingest into a business that already has facts")
     args = ap.parse_args()
+    if args.approve and args.unapprove:
+        die("--approve and --unapprove together. Pick one.")
+    if not args.list_all and not args.name:
+        die("--name is required, or --list to see what exists.")
 
     admin_url = os.getenv("ADMIN_DATABASE_URL")
     if not admin_url:
@@ -97,8 +198,32 @@ def main() -> None:
     # else's -- is worse than a failure, because it looks finished.
     username = verify_token(args.token) if args.token else None
 
-    pool.open()
     admin = psycopg.connect(admin_url, autocommit=True)
+
+    # --list and a bare --approve need the owner connection and nothing else,
+    # so they are answered before the app pool is opened. Not tidiness: the pool
+    # spawns worker threads that this script never joins, and a command that
+    # returns in a tenth of a second spent five seconds afterwards printing
+    # "couldn't stop thread" at whoever ran it.
+    if args.list_all:
+        show_all(admin)
+        if not args.name:
+            admin.close()
+            return
+
+    # --approve / --unapprove on their own, with no --token and no --document,
+    # is the everyday use: someone signed up, you looked at them, you said yes.
+    # Handled before the create-or-update path so it never creates a row -- an
+    # approve that silently conjures the business it was asked to approve is a
+    # typo away from approving a business that does not exist.
+    if (args.approve or args.unapprove) and not (
+            args.token or args.email or args.telegram_id or args.document):
+        set_approved(admin, resolve_one(admin, args.name), args.name,
+                     args.approve)
+        admin.close()
+        return
+
+    pool.open()
 
     if args.token:
         clash = admin.execute(
@@ -117,7 +242,30 @@ def main() -> None:
         business_id = str(admin.execute(
             "insert into business (name) values (%s) returning id",
             (args.name,)).fetchone()[0])
+        # approved defaults to false (migrations/0010) and this INSERT does not
+        # override it. Running this command is not itself approval -- the whole
+        # point of `default false` is that a business row appearing by any route
+        # is unapproved until somebody says otherwise, and "any route" has to
+        # include the route I use myself or it is not a rule.
         print(f"  created business {args.name!r}")
+
+    # Ingestion spends money, so it needs the flag. Checked HERE rather than
+    # left to fail at the gate: by the time app/approval.py raises, the bot
+    # token is linked and the sources are stored, and the run stops in the
+    # middle looking like a crash. One sentence up front beats an exception
+    # three modules down that is technically the same information.
+    if args.document and not args.approve:
+        approved = admin.execute(
+            "select approved from business where id = %s",
+            (business_id,)).fetchone()[0]
+        if not approved:
+            die(f"{args.name!r} is not approved, so ingesting documents would "
+                "stop at the spending gate partway through. Add --approve to "
+                "this command, or approve it first with:" + NL
+                + f"    uv run python onboard.py --name {args.name!r} --approve")
+
+    if args.approve or args.unapprove:
+        set_approved(admin, business_id, args.name, args.approve)
 
     fields, values = [], []
     for column, value in (("owner_email", args.email),
@@ -165,6 +313,18 @@ def main() -> None:
     # --- what is left, which is the part you will actually read -------------
     print("\nSTILL TO DO, BY HAND:")
     step = 1
+
+    # FIRST, because without it none of the rest works. This command hands out
+    # a sign-in link at the bottom, and an unapproved account signs in fine and
+    # then cannot read a document or answer a question -- so handing over the
+    # link without this line means personally walking someone into the waiting
+    # state. The checklist is the only thing between me and doing that.
+    if not admin.execute("select approved from business where id = %s",
+                         (business_id,)).fetchone()[0]:
+        print(f"  {step}. Approve it, or it can sign in and do nothing:")
+        print(f"     uv run python onboard.py --name {args.name!r} --approve")
+        step += 1
+
     if args.token:
         print(f"  {step}. sudo systemctl enable --now "
               f'talkwisp-bot@"{args.name}"')

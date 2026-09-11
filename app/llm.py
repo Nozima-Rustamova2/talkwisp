@@ -29,6 +29,7 @@ import httpx
 from dotenv import load_dotenv
 
 from app import embeddings, gemini_keys
+from app.approval import assert_approved
 
 load_dotenv()
 
@@ -330,4 +331,7 @@ def complete(system: str, prompt: str,
     """`image` is (media_type, bytes). A provider that cannot read images should
     raise rather than silently answer from the prompt alone."""
     check_configured()
+    # THE SPENDING GATE. Here rather than on the endpoints, because what a route
+    # costs is a property of what it calls three modules down. See app/approval.py.
+    assert_approved("asking the model")
     return _PROVIDERS[PROVIDER](system, prompt, image)

@@ -19,6 +19,7 @@ similarity floor, NO_ANSWER and the gap log, all unchanged. A bad rewrite
 produces a bad search, not a fabricated answer.
 """
 
+from app.approval import NotApproved
 from app.llm import complete
 from app.normalize import normalize
 
@@ -99,6 +100,13 @@ def rewrite(history: list, question: str) -> tuple[str, bool]:
             "Conversation so far:\n" + "\n".join(lines)
             + f"\n\nLatest message: {question}\n\nRewritten question:",
         ).strip().strip('"')
+    except NotApproved:
+        # Falling back here would be wrong twice over: it hides the first thing
+        # the gate stopped, and it carries on to embed_query() which stops it
+        # again -- so the refusal still happens, just with one silent step in
+        # front of it. A gate that is caught and ignored somewhere is a gate you
+        # cannot reason about from its call sites.
+        raise
     except Exception:  # noqa: BLE001
         # A failed rewrite must not cost the customer an answer. Fall back to
         # the question they actually typed.

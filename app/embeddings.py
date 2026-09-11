@@ -17,6 +17,7 @@ import httpx
 from dotenv import load_dotenv
 
 from app import gemini_keys
+from app.approval import assert_approved
 
 load_dotenv()
 
@@ -27,6 +28,9 @@ _URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:embedCo
 
 
 def _embed(text: str, task_type: str) -> list[float]:
+    # THE SPENDING GATE, the embedding half. Both public functions go through
+    # here, so both are covered by one line. See app/approval.py.
+    assert_approved("embedding text")
     payload = {
         "content": {"parts": [{"text": text}]},
         "taskType": task_type,

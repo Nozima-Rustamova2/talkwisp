@@ -9,10 +9,17 @@ is the point: the protection has to be verifiable without one.
 
 THE CHECK THAT MATTERS MOST is section 1. It does not assert "these routes are
 protected"; it enumerates every route the app has, calls each one with no
-cookie, and asserts that the set which does NOT refuse equals a literal list.
-Adding a route makes that list wrong on the day it is added, not on the day
-someone rereads it. A check that names the routes it protects can only ever be
-as current as its author.
+cookie, and asserts that the set which does NOT refuse is exactly PUBLIC_PATHS.
+Adding a route makes that comparison fail on the day it is added, not on the day
+someone rereads it.
+
+BE PRECISE ABOUT WHAT THAT CATCHES, because the sentence above used to claim a
+literal list and it has never been one. It compares behaviour to the DECLARATION
+-- so a route that is reachable without being declared public is caught, and a
+route someone adds to PUBLIC_PATHS is not. That asymmetry is the intended one:
+editing PUBLIC_PATHS is the deliberate act, and a check that fought it would be
+a check nobody could ever make pass. But it does mean this file cannot tell you
+whether a path BELONGS in PUBLIC_PATHS. Only reading the list does.
 """
 
 import hashlib
@@ -373,6 +380,87 @@ check("a payload with no hash is refused",
       auth.verify_telegram({"id": "42"})[0], False)
 
 auth.PLATFORM_BOT_TOKEN, auth.TELEGRAM_LOGIN_ENABLED = saved
+
+# ---------------------------------------------------------------------------
+print("\n9. Signing up creates an account that cannot spend")
+
+SIGNUP_ADDR = "check-auth-signup@example.invalid"
+admin.execute("delete from business where owner_email = %s", (SIGNUP_ADDR,))
+
+# Validation first, because it is the cheapest thing to get wrong. The regexes
+# people paste accept a@b, which is legal and undeliverable -- so it would
+# create a row and leave someone waiting for a link that could never arrive.
+check("a@b is rejected as an address nothing can deliver to",
+      auth.valid_email("a@b"), False)
+check("an address with no @ is rejected", auth.valid_email("nope"), False)
+check("an address with a space is rejected",
+      auth.valid_email("a b@example.uz"), False)
+check("a trailing-dot domain is rejected",
+      auth.valid_email("a@example."), False)
+check("an ordinary address is accepted",
+      auth.valid_email("malika@example.uz"), True)
+
+bad = client.post("/auth/signup", data={"email": "a@b", "name": "X"})
+check("the endpoint refuses it too, not just the function",
+      bad.status_code, 400)
+check("and nothing was written",
+      admin.execute("select count(*) from business where name = 'X'"
+                    ).fetchone()[0], 0)
+
+fresh = client.post("/auth/signup",
+                    data={"email": SIGNUP_ADDR, "name": "Signup Clinic"})
+check("signing up succeeds", fresh.status_code, 200)
+row = admin.execute(
+    "select name, approved from business where owner_email = %s",
+    (SIGNUP_ADDR,)).fetchone()
+check("a business row exists", row is not None, True)
+check("and it is NOT approved -- it can sign in, not spend",
+      row[1] if row else None, False)
+
+# THE ANTI-ENUMERATION PROPERTY, which is only worth anything if BOTH endpoints
+# have it. /auth/request was written not to confirm whether an address has an
+# account; a signup endpoint that said "already registered" would answer the
+# same question by the back door, and the pair would be no better than the
+# weaker one.
+again = client.post("/auth/signup",
+                    data={"email": SIGNUP_ADDR, "name": "Impostor Clinic"})
+check("signing up again with the same address still says 200",
+      again.status_code, 200)
+check("with the identical message",
+      again.json()["message"], fresh.json()["message"])
+check("and that message is the one /auth/request gives",
+      again.json()["message"],
+      client.post("/auth/request", data={"email": SIGNUP_ADDR}).json()["message"])
+check("no second row was created",
+      admin.execute("select count(*) from business where owner_email = %s",
+                    (SIGNUP_ADDR,)).fetchone()[0], 1)
+check("and the impostor's name did not overwrite the real one",
+      admin.execute("select name from business where owner_email = %s",
+                    (SIGNUP_ADDR,)).fetchone()[0], "Signup Clinic")
+
+# Rate limiting. Both endpoints share it, so exercising one proves the shared
+# counter; what matters here is that it exists at all -- these two endpoints
+# send mail to arbitrary addresses on our bill, and until now nothing capped
+# them.
+auth._hits.clear()
+codes = {client.post("/auth/request",
+                     data={"email": f"rl{n}@example.invalid"}).status_code
+         for n in range(auth._PER_IP + 3)}
+check("too many requests from one IP starts refusing", 429 in codes, True)
+
+auth._hits.clear()
+per_email = [client.post("/auth/request",
+                         data={"email": "one-inbox@example.invalid"}).status_code
+             for _ in range(auth._PER_EMAIL + 2)]
+check("and one address is capped tighter than one IP",
+      429 in per_email, True)
+check("the per-address cap bites before the per-IP one would",
+      per_email.index(429) < auth._PER_IP, True)
+auth._hits.clear()
+
+admin.execute("delete from login_token where business_id in "
+              "(select id from business where owner_email = %s)", (SIGNUP_ADDR,))
+admin.execute("delete from business where owner_email = %s", (SIGNUP_ADDR,))
 
 # ---------------------------------------------------------------------------
 print("\n   tearing down")

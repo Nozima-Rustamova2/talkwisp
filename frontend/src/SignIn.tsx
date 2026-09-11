@@ -1,12 +1,18 @@
 import { useState } from "react";
-import { ApiError, requestLink } from "./api";
+import { ApiError, requestLink, signUp } from "./api";
 
-/* The sign-in screen. An email field and a button, and nothing else.
+/* The sign-in screen, and now the sign-up screen: one form with two modes.
  *
- * There is no password field because there are no passwords, and no "create an
- * account" link because there is no signup -- an account is made by inserting a
- * business row. Offering either would be a control that does nothing, which the
- * design direction argues against more than once.
+ * There is no password field because there are no passwords. There IS a way to
+ * create an account, which there was not until signup became self-serve -- and
+ * this file used to say so at some length, in a block explaining that
+ * onboarding was by hand. That block was true when written and is the kind of
+ * thing that quietly becomes a lie; it is gone rather than reworded.
+ *
+ * SIGNING UP DOES NOT GET YOU A WORKING AGENT, and the copy below must not
+ * imply it does. It gets you an account that can sign in and look around. The
+ * spending -- reading documents, answering questions -- is switched on by a
+ * person, and App.tsx says so in a band across the top once you are in.
  *
  * WHAT IT DELIBERATELY DOES NOT TELL YOU. The success message is the same
  * whether or not the address has an account. That is not vagueness for its own
@@ -23,6 +29,12 @@ import { ApiError, requestLink } from "./api";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
+  /* The business name, only asked for when creating an account. It is the
+     handle every later operation uses -- it is what `onboard.py --approve`
+     takes -- so it is required rather than optional, and it is the one thing
+     this form asks for that sign-in does not. */
+  const [name, setName] = useState("");
+  const [mode, setMode] = useState<"in" | "up">("in");
   const [state, setState] = useState<
     { kind: "idle" } | { kind: "sending" } | { kind: "sent" } | { kind: "failed"; message: string }
   >({ kind: "idle" });
@@ -30,9 +42,11 @@ export default function SignIn() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!email.trim() || state.kind === "sending") return;
+    if (mode === "up" && !name.trim()) return;
     setState({ kind: "sending" });
     try {
-      await requestLink(email.trim());
+      if (mode === "up") await signUp(email.trim(), name.trim());
+      else await requestLink(email.trim());
       setState({ kind: "sent" });
     } catch (error) {
       setState({
@@ -59,7 +73,9 @@ export default function SignIn() {
             Talkwisp
           </div>
           <div style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 2 }}>
-            Sign in to your knowledge base
+            {mode === "up"
+              ? "Create an account for your business"
+              : "Sign in to your knowledge base"}
           </div>
         </div>
 
@@ -69,6 +85,23 @@ export default function SignIn() {
               If that address has an account, a sign-in link is on its way. It
               expires in 15 minutes.
             </p>
+            {/* IDENTICAL WORDING IN BOTH MODES, and the server sends the same
+                sentence for both endpoints. "Account created" here would say
+                out loud what /auth/signup refuses to say in its response --
+                that this address was not already registered -- and one screen
+                is enough to undo the property both endpoints were written to
+                have.
+
+                The extra line below is safe because it is true either way: it
+                describes what approval is, not what just happened. */}
+            {mode === "up" && (
+              <p style={{ margin: "0 0 10px", fontSize: 14, lineHeight: 1.55,
+                          color: "var(--text-faint)" }}>
+                Once you are in you can look around straight away. Reading
+                documents and answering questions are switched on by us, by
+                hand — we will email you when your account is approved.
+              </p>
+            )}
             {/* This used to say "Email sending is not switched on yet, so the
                 link is printed in the server log rather than sent." It was true
                 when written and became false the day Resend was wired -- but it
@@ -98,6 +131,33 @@ export default function SignIn() {
           </div>
         ) : (
           <form onSubmit={submit}>
+            {mode === "up" && (
+              <>
+                <label
+                  htmlFor="business"
+                  style={{
+                    display: "block",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: 6,
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Business name
+                </label>
+                <input
+                  id="business"
+                  className="field"
+                  type="text"
+                  autoComplete="organization"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Rangli Salon"
+                  style={{ width: "100%", marginBottom: 14 }}
+                />
+              </>
+            )}
             <label
               htmlFor="email"
               style={{
@@ -131,7 +191,11 @@ export default function SignIn() {
               disabled={state.kind === "sending"}
               style={{ width: "100%" }}
             >
-              {state.kind === "sending" ? "Sending…" : "Send sign-in link"}
+              {state.kind === "sending"
+                ? "Sending…"
+                : mode === "up"
+                  ? "Create account"
+                  : "Send sign-in link"}
             </button>
             {state.kind === "failed" && (
               <p
@@ -147,20 +211,18 @@ export default function SignIn() {
           </form>
         )}
 
-        {/* THERE IS NO SIGN-UP, AND THIS SAYS SO.
-            The landing page's button leads here. Without this, someone who
-            arrives from it types their address, reads "if that address has an
-            account, a link is on its way", and nothing ever happens -- a dead
-            end reached from a control that promised the opposite.
-
-            Worded so it reads as deliberate rather than broken: onboarding is
-            by hand because we are early, not because something failed. The
-            same-answer-either-way message above cannot say "no such account"
-            without becoming an address checker, so the explanation has to live
-            here, outside the form, where it is true for everyone.
-
+        {/* THE SWITCH BETWEEN THE TWO MODES.
             Secondary weight on purpose -- a link, not a second button. Two
-            buttons of equal weight would make the real one harder to find. */}
+            buttons of equal weight would make the real one harder to find, and
+            for most people arriving here the real one is sign in.
+
+            This used to be a paragraph explaining that there was no signup and
+            that we set every agent up by hand. That was true, and it stopped
+            being true, and a hardcoded sentence about how the product works is
+            only correct until the day it is not -- the same mistake as the
+            "email sending is not switched on yet" line that sat here telling
+            people their link was never coming. What replaced it is a control,
+            not a claim. */}
         <div
           style={{
             marginTop: 20,
@@ -171,14 +233,28 @@ export default function SignIn() {
             color: "var(--text-faint)",
           }}
         >
-          Don't have an account yet? Talkwisp is in early access and we set up
-          your first agent with you.{" "}
-          <a
-            href="https://t.me/talkwisp_demo_bot"
-            style={{ color: "var(--accent-pressed)", fontWeight: 600 }}
+          {mode === "in" ? "Don't have an account yet? " : "Already have one? "}
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === "in" ? "up" : "in");
+              /* Clear the outcome, not just the mode. Switching modes under a
+                 "link is on its way" message would leave the old result sitting
+                 above a form that now does something different. */
+              setState({ kind: "idle" });
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              font: "inherit",
+              cursor: "pointer",
+              color: "var(--accent-pressed)",
+              fontWeight: 600,
+            }}
           >
-            Contact us and we'll set you up
-          </a>
+            {mode === "in" ? "Create one" : "Sign in instead"}
+          </button>
         </div>
       </div>
     </div>

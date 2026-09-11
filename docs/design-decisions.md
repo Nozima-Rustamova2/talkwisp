@@ -272,6 +272,27 @@ this file wins.
   backfill argument does not apply to an empty table. Decide it again when
   Feature B is actually built.
 
+**Rate limiting on `/auth/request` and `/auth/signup` is per-worker.** Two
+uvicorn workers means two counters and twice the limit. The service runs one
+today (`deploy/talkwisp-api.service`); if that changes, it becomes a shared
+store or it becomes decorative. Written down rather than pre-solved, because one
+worker is the right size for now and a Redis dependency is not.
+
+**Nothing counts what an approved business spends.** `approved` is a gate, not a
+budget: once it is true there is no cap, no meter and no alert. The protection
+today is that approval is by hand and there are very few businesses. The first
+approved customer who uploads a thousand-page PDF is what makes this urgent, and
+that is the point to decide between a per-business monthly ceiling and an alert,
+not before.
+
+**An unapproved business's bot answers nothing, and says "something went wrong"
+when asked.** Almost unreachable — a self-serve signup has no bot token, and a
+token is only set by `onboard.py` — but if it happens, a customer of that
+business gets the generic apology rather than anything true. Deliberate: a
+stranger messaging a clinic has no business being told about the clinic's
+account status. The operator gets a distinct log line instead. Worth revisiting
+only if a business ever connects its own bot before approval.
+
 ## Vision — measured, not assumed
 
 Tested 2026-08-30 on a real phone photo of a printed cafe menu: angled, glare,
@@ -1320,6 +1341,8 @@ the details:
 | `check_bot.py`'s action scan | `if action == "x"` branches | a dispatcher with **two** shapes — that, plus membership in `ORDER_ACTIONS` |
 | `check_orders.py`'s cleanup assertion | `count(*) from purchase == 0`, the whole table | whether *this run* left rows behind |
 | The frontend's conflict warning | `result.conflict`, a key the API never sends | `result.conflicts`, plural, a list |
+| `check_approval.py`'s negative control, v1 | "did extraction fail?" — and the stub made it fail early, still inside a bound block | whether the **unbound** region raised, which never ran |
+| `site/index.html` translations | the live page in a real browser, clicking the real button | a build that predated the edit to `site/i18n.json` |
 
 Three of those scored perfectly while broken. The grader scored three correct
 answers as failures; the classifier scored 0 of 90 false positives on a
@@ -1819,6 +1842,176 @@ once rather than at seven call sites where six would have been right.
 tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
 deliberately provokes the paths nobody designed: a double-tapped Confirm, a
 screenshot sent before any order exists, and two screenshots for one order.
+
+## The spending gate: approval is enforced at the credentials — 2026-09-11
+
+Self-serve signup means a stranger can create a business row without anyone
+agreeing to it first, and every model call costs real money on a billing-enabled
+key that nothing in this codebase counts or caps. So there is now a boolean,
+`business.approved`, and nothing that costs money runs without it.
+
+**The gate is on spending. Not on the bot, not on signing in, not on the
+product.** An unapproved business gets a real account, a real console, a real
+review queue, and `/ask` answering from facts with no model involved. What it
+cannot do is reach a model. That split is the design, and it is why the column
+is `approved` and not `paid`: nothing about it describes money owed, it records
+that a person said yes.
+
+### Why it is not on the routes
+
+The obvious design is a dependency on the endpoints that spend. It was written
+out on paper first, and the list was wrong twice before any code existed.
+
+Traced rather than remembered, **eight of the twenty-five endpoints spend**, and
+two of them do not look like it:
+
+| Endpoint | What it buys | Obvious? |
+|---|---|---|
+| `POST /fact` | one generation to parse — **even without `confirm=true`** — plus an embedding when confirmed | half |
+| `POST /source/{id}/extract` | vision + extraction + prose-splitting generations, then one embedding **per passage**. `dry_run=true` spends all of it and only skips the writing | yes |
+| `POST /source/{id}/read` | one vision generation | yes |
+| `GET /answer` | an embedding and a generation, plus a second on the follow-up and purchase branches | yes |
+| `POST /console/ask` | wraps `answer()` | yes |
+| `POST /review/{id}/confirm` | re-embeds subject/attribute/value | **no** |
+| `POST /console/feedback` | **a full `answer()`** — it re-answers the question to attach the route and scores to the verdict | **no** |
+| `POST /auth/request` | no model, but Resend costs money and is unauthenticated | no |
+
+And the two that sound expensive and are free: `POST /source/paste` and
+`POST /source/upload` store bytes and spend nothing — the money goes at extract.
+`GET /console/suggestions` uses `find()`, not `answer()`.
+
+So the decorator list assembled by reading route names **would have blocked two
+free endpoints and missed six paid ones.** That is not carelessness to be more
+careful about next time. What an endpoint costs is a property of what it calls
+three modules down, and route names do not carry it.
+
+### Where it actually sits
+
+`app/approval.py`, called from exactly two places: `llm.complete()` and
+`embeddings._embed()`. Every generation and every embedding in the repo passes
+through one of them.
+
+The property that makes this structural is the one `current_business()` has: **a
+new endpoint inherits the gate by calling a model at all**, not by remembering
+anything. It also covers the two callers that are not endpoints and that a route
+decorator would never have touched — `bot.py`, which answers Telegram without
+going near FastAPI, and `onboard.py`, which ingests a whole business from a
+command line.
+
+Not gated, deliberately: `llm.check_reachable()` calls the provider directly
+rather than through `complete()`. It is the boot probe — platform money, once
+per process, with no tenant to ask about — and gating it would mean the app
+could not start.
+
+### The flag is read per request and never cached
+
+`app/db.py` reads `business.approved` in the same block that binds the tenant,
+into a ContextVar beside it. One extra round trip on a local socket, against a
+model call that takes a second.
+
+It is read there rather than where the gate needs it because the gate runs deep
+inside an open `connection()` block, and checking out a **second** connection
+there deadlocks the pool under concurrency: five in-flight answers hold all five
+connections and each waits for a sixth that nobody will return.
+
+A cached approval is one that cannot be revoked, and revocation is the only
+reason the flag exists. `check_approval.py` section 5 flips it in the database
+with the process running and asserts the next request sees the new value.
+
+### The web app cannot approve itself
+
+`talkwisp_app` has `select` on `business` and no `update`, and there is no
+`app_business_approve()` function for it to call. Measured, not assumed:
+`permission denied for table business`.
+
+Signup still needs to create rows, so it gets exactly one INSERT, through
+`app_business_signup()`. **`approved` is written as `false` in the function body
+and is not a parameter** — so the role that serves the internet can create a
+business and has no way to express an approved one. There is no argument to get
+wrong and no injection that produces a spending account.
+
+Approval is `onboard.py --approve "Name"`, which connects as the owner role over
+SSH. A gate is only worth having if the thing it protects cannot switch it off.
+
+`--approve` **refuses an ambiguous name**, and that is not a nicety.
+`business.name` is not unique and self-serve signup lets a stranger pick their
+own, so someone can sign up calling themselves "Avisena Med" and
+`business_by_name()` would hand back whichever row the planner returned first.
+What is being granted is permission to spend our money.
+
+### `default false` is the load-bearing half
+
+It is on the column, not in the signup path, so a business row appearing by
+**any** route is unapproved unless someone said otherwise — including
+`onboard.py`, which now needs `--approve` like everything else. An INSERT there
+that quietly set `approved = true` would be the one exception that makes the
+column decorative. Existing rows were backfilled to `true`: every business that
+existed was created by hand on the box, which is exactly what approval means,
+and backfilling `false` would have silently stopped the live bot with no error
+anywhere to say why.
+
+### The negative control, and how it went red for the wrong reason
+
+`app/extract.py` is the one place in the codebase that calls a model with no
+transaction open — deliberately, so it does not hold a lock across three network
+calls. That made it the one place the gate had nothing to read, so `run()` now
+binds the tenant itself with `db.bind()`, which costs one brief connection and
+holds none.
+
+Deleting that line is silent at the call site. So `check_approval.py` section 4
+deletes it — `app.db.bind` is replaced with a context manager that does not bind
+— and asserts extraction stops.
+
+**The first version of that control passed while proving nothing.** The stub that
+stands in for the network made the *first* model call raise, inside
+`extract.read()`, which is still inside a `connection()` block and therefore
+still bound. `run()` caught it, marked the source failed, and returned. Red,
+convincingly, with the unbound region never executing — and `status == "failed"`
+was true either way.
+
+It was caught only because the control asserts the *reason* as well as the
+outcome. With the bind removed: `RuntimeError('No business is bound')`. With it
+restored: the stub's marker. Two distinguishable errors, which is the whole
+point.
+
+> **A control that goes red before reaching the thing it is controlling for
+> proves nothing. The assertion has to name the specific failure the restored
+> bug causes, or it is measuring something adjacent again.**
+
+That is the same family as everything in the drift table, one level up: the
+first version was a *check on a check* that read a different object than the one
+it was validating.
+
+### One more thing the gate forced
+
+`extract.run` catches `Exception` around its model calls and records the failure
+on the source row. Left alone, an unapproved business would get a perfectly good
+document stamped `failed` because of an account flag, and would come back after
+approval to a source that says it failed. `NotApproved` is its own exception type
+precisely so those handlers can let it through, and `app/followup.py` — which
+swallows a failed rewrite and carries on — re-raises it for the same reason.
+
+### Deliberately not built
+
+No plans, no billing, no usage counting, no trial limits, no "X of Y questions
+used", no admin web page. `approved` is a boolean and stays one; if any of that
+arrives it is new columns, not new values in this one. An admin surface would be
+a new authentication problem for something done three times a month.
+
+### What is honest about the waiting state
+
+The band in `App.tsx` says what is true — look around, the screens are real,
+spending is off, we approve by hand, we will email *this address* — and gives no
+estimate of how long. There is no queue and no automation behind it; "within 24
+hours" would be a number invented to sound reassuring, and the first time it
+slipped it would be a broken promise on the screen. It names the address so a
+typo is visible, which is the only place someone who signed up as
+`malika@gmial.com` could ever find that out.
+
+Blocked controls grey out with a `title` rather than vanishing: a control that
+disappears reads as a bug, a control that says why it is off reads as a decision.
+None of that is protection. The server refuses every one of them with this whole
+frontend deleted.
 
 ## Multi-tenancy is enforced below the query layer — 2026-09-07
 

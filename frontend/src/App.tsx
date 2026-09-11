@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
 import Review from "./Review";
 import SignIn from "./SignIn";
-import { getMe, logout, type Me } from "./api";
+import { getMe, logout, setSpendingAllowed, type Me } from "./api";
 
 /* The shell: header, the two screens that exist, and the route between them.
  *
@@ -38,8 +38,14 @@ export default function App() {
      * piece of business data comes from an endpoint that refuses without a
      * session. */
     getMe()
-      .then(setMe)
-      .catch(() => setMe({ business: null, email: null }));
+      .then((who) => {
+        /* Before setMe, so no screen can render against a stale value. The
+           screens read it out of the module rather than from props -- see
+           spendingAllowed in api.ts for why. */
+        setSpendingAllowed(who.approved);
+        setMe(who);
+      })
+      .catch(() => setMe({ business: null, email: null, approved: false }));
   }, []);
 
   useEffect(() => {
@@ -83,6 +89,45 @@ export default function App() {
    * step someone skips. */
   if (me === "asking") return null;
   if (!me.business) return <SignIn />;
+
+  /* THE WAITING STATE.
+   *
+   * Shown as a band above the app rather than instead of it, because everything
+   * below it genuinely works: the screens are real, the review queue is real,
+   * /ask answers from facts with no model involved. Replacing the product with
+   * a "pending approval" page would be claiming less than is true, and would
+   * also mean nobody could look at what they had signed up for.
+   *
+   * WHAT IT DOES NOT SAY, deliberately: any estimate of how long. There is no
+   * queue, no SLA and no automation behind this -- it is me reading an email --
+   * so "within 24 hours" would be a number invented to sound reassuring, and
+   * the first time it slipped it would be a broken promise on the screen. It
+   * says the mechanism instead: by hand, early access, we will email you.
+   *
+   * It names the address so a typo is visible. Someone who signed up as
+   * malika@gmial.com will never get the mail, and this is the only place they
+   * could ever find that out. */
+  const waiting = !me.approved && (
+    <div
+      style={{
+        background: "var(--accent-tint, #eef4f0)",
+        borderBottom: "1px solid var(--rule)",
+        padding: "14px 24px",
+        fontSize: 14,
+        lineHeight: 1.6,
+        color: "var(--text-secondary)",
+      }}
+    >
+      <strong style={{ color: "var(--text-primary, #1c2430)" }}>
+        Your account is not approved yet.
+      </strong>{" "}
+      Look around as much as you like — the screens below are real. But adding
+      knowledge and asking questions cost money to run, so those are switched
+      off until we approve you. Talkwisp is in early access and we approve
+      accounts by hand; we will email{" "}
+      <span style={{ fontWeight: 600 }}>{me.email}</span> when yours is ready.
+    </div>
+  );
 
   const tab = (to: Route, label: string) => (
     <a
@@ -163,6 +208,7 @@ export default function App() {
         </nav>
       </header>
 
+      {waiting}
       {route === "review" ? <Review /> : <AddKnowledge />}
     </div>
   );

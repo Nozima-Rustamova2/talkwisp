@@ -38,6 +38,7 @@ from app.answer import answer, detect_language
 from app.followup import rewrite
 from app.db import (assert_app_role, business_by_name,
                     business_for_token, connection, pool)
+from app.approval import NotApproved
 from app.llm import LLMError, check_configured, check_reachable
 from app.normalize import normalize
 from app.typed import candidates, conflicts
@@ -948,6 +949,18 @@ def handle(conn, message: dict, last_seen: dict) -> None:
             send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
             log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
                  "outcome": "llm_error", "error": str(exc)[:300]})
+            return
+        except NotApproved as exc:
+            # Same treatment as the database being gone, for the same reason:
+            # the customer gets the generic apology -- a stranger messaging a
+            # clinic has no business being told about the clinic's account --
+            # and the operator gets a line that says exactly what to do. Without
+            # this it lands in the catch-all below as "error", which is how a
+            # one-command fix turns into an afternoon of reading logs.
+            print(f"NOT APPROVED, so nothing can be answered: {exc}", flush=True)
+            send(chat_id, _say(BROKEN, BROKEN_DEFAULT, text))
+            log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                 "outcome": "not_approved"})
             return
         except psycopg.OperationalError as exc:
             # Say it where the operator will see it. A customer-facing apology is

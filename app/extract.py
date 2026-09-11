@@ -22,7 +22,8 @@ import re
 from psycopg import Connection
 
 from app import chunks
-from app.db import connection
+from app.approval import NotApproved
+from app.db import bind, connection
 from app.llm import complete
 from app.normalize import normalize
 
@@ -200,32 +201,55 @@ def run(business: str, source: dict) -> dict:
     This function deliberately holds no transaction across its model calls --
     that is the point of splitting read from store -- so it opens three short
     connections of its own and each one has to be told whose data it is.
+
+    THE TENANT IS BOUND HERE, not only inside the three connection() blocks.
+    The model calls below run with no transaction open -- that is the point of
+    this function -- which left them as the one place in the codebase that
+    reaches a model with no tenant bound, and so the one place the spending gate
+    in app/approval.py had nothing to read. bind() costs one brief connection
+    and holds none, so the reason the transaction was dropped still holds.
+
+    Removing it does not fail here. It fails two modules away in
+    embeddings._embed(), with "no business is bound" -- which is exactly what
+    check_approval.py section 4 restores on purpose, because a gate whose
+    failure mode is silence has to be watched failing at least once.
     """
-    try:
-        with connection(business) as conn:
-            facts = read(conn, source)
-    except Exception as exc:  # noqa: BLE001 - every failure must be recorded
-        _mark_failed(business, source["id"], repr(exc))
-        return {"source_id": source["id"], "status": "failed",
-                "error": repr(exc)[:300], "facts": []}
+    with bind(business):
+        try:
+            with connection(business) as conn:
+                facts = read(conn, source)
+        except NotApproved:
+            # Not an extraction failure, so it must not be recorded as one.
+            # These handlers exist to turn a bad document into a source marked
+            # `failed` with an explanation; catching this one would stamp that
+            # status on a perfectly good document because of an account flag,
+            # and the owner would come back after approval to a source that
+            # says it failed. It is the reason NotApproved is its own type.
+            raise
+        except Exception as exc:  # noqa: BLE001 - every failure must be recorded
+            _mark_failed(business, source["id"], repr(exc))
+            return {"source_id": source["id"], "status": "failed",
+                    "error": repr(exc)[:300], "facts": []}
 
-    # Steps 15-16. Both model calls and all the embedding happen with no
-    # transaction open; only the writing is transactional.
-    try:
-        passages, rejected = chunks.find_prose(source["content"] or "")
-        embedded = chunks.embed_all(passages)
-    except Exception as exc:  # noqa: BLE001
-        _mark_failed(business, source["id"], repr(exc))
-        return {"source_id": source["id"], "status": "failed",
-                "error": repr(exc)[:300], "facts": [], "chunks": 0}
+        # Steps 15-16. Both model calls and all the embedding happen with no
+        # transaction open; only the writing is transactional.
+        try:
+            passages, rejected = chunks.find_prose(source["content"] or "")
+            embedded = chunks.embed_all(passages)
+        except NotApproved:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            _mark_failed(business, source["id"], repr(exc))
+            return {"source_id": source["id"], "status": "failed",
+                    "error": repr(exc)[:300], "facts": [], "chunks": 0}
 
-    try:
-        store(business, source["id"], facts, embedded)
-    except Exception as exc:  # noqa: BLE001
-        _mark_failed(business, source["id"], repr(exc))
-        return {"source_id": source["id"], "status": "failed",
-                "error": repr(exc)[:300], "facts": [], "chunks": 0}
+        try:
+            store(business, source["id"], facts, embedded)
+        except Exception as exc:  # noqa: BLE001
+            _mark_failed(business, source["id"], repr(exc))
+            return {"source_id": source["id"], "status": "failed",
+                    "error": repr(exc)[:300], "facts": [], "chunks": 0}
 
-    return {"source_id": source["id"], "status": "extracted", "error": None,
-            "facts": facts, "chunks": len(embedded),
-            "prose_rejected_as_not_verbatim": rejected}
+        return {"source_id": source["id"], "status": "extracted", "error": None,
+                "facts": facts, "chunks": len(embedded),
+                "prose_rejected_as_not_verbatim": rejected}
