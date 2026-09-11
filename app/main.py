@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
-from app import auth, console, extract, review, sources, vision
+from app import auth, channel, console, extract, review, sources, vision
 from app.approval import NotApproved
 from app.db import assert_app_role, connection, pool
 from app.llm import check_configured, check_reachable
@@ -396,6 +396,92 @@ def console_feedback(business: Business, q: str, verdict: str,
             return console.record(conn, q, verdict, reason)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# --- the Telegram channel ---------------------------------------------------
+
+
+@app.get("/channel")
+def channel_state(business: Business) -> dict:
+    """What is connected, and what is still missing.
+
+    NEVER RETURNS THE TOKEN. Not masked, not truncated, not last-four: the
+    screen has no use for it, and the only thing sending it to a browser can do
+    is put a live credential somewhere it can leak. `connected` and the username
+    are what a person needs to know.
+
+    The username comes from asking Telegram, not from a column, because a token
+    revoked in BotFather leaves the row looking perfectly healthy. If that call
+    fails the row is still reported as connected -- Telegram being unreachable
+    is not evidence about the token.
+    """
+    with connection(business) as conn:
+        row = conn.execute(
+            "select bot_token, owner_telegram_id from business").fetchone()
+    token = row[0] if row else None
+    if not token:
+        # owner_linked is READ here, not assumed false. The first version
+        # hardcoded it, which was wrong for a business that had linked its
+        # owner and later disconnected the bot: the screen would have told
+        # someone to link an owner they already are. A field returned without
+        # being looked at is the same mistake as a check reading a different
+        # object than the behaviour uses -- it just fails in the UI instead.
+        return {"connected": False, "bot_username": None, "live": None,
+                "owner_linked": row is not None and row[1] is not None,
+                "claim_link": None}
+
+    ok, detail = channel.verify_token(token)
+    return {
+        "connected": True,
+        "bot_username": detail if ok else None,
+        # Tri-state on purpose. None means "we could not ask", which is not the
+        # same as False, and a screen that showed "your bot is broken" because
+        # api.telegram.org blipped would be worse than saying nothing.
+        "live": ok if ok else (False if "rejected" in detail else None),
+        "detail": None if ok else detail,
+        "owner_linked": row[1] is not None,
+        # Regenerated per request and short-lived, so the page can be left open
+        # without the link going stale in a way anyone has to think about.
+        "claim_link": (None if row[1] is not None or not ok else
+                       f"https://t.me/{detail}?start="
+                       f"{channel.claim_code(business, token)}"),
+    }
+
+
+@app.post("/channel/telegram")
+def channel_connect(business: Business, token: str = Form(...)) -> dict:
+    """Store a BotFather token for this business, after proving whose it is.
+
+    Form-encoded rather than a query parameter, unlike most POSTs here. A token
+    in a query string ends up in the access log, in browser history and in the
+    Referer header of anything the page loads next -- which is the one place a
+    live credential must not be.
+    """
+    ok, detail = channel.verify_token(token)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+
+    with connection(business) as conn:
+        outcome = conn.execute(
+            "select app_business_set_bot_token(%s, %s)",
+            (business, token.strip())).fetchone()[0]
+
+    if outcome == "taken":
+        # Deliberately does not say which business holds it. onboard.py names
+        # the collision because it runs as the owner on the box; saying it here
+        # would let anyone paste a token and learn whether its owner is a
+        # Talkwisp customer.
+        raise HTTPException(
+            status_code=409,
+            detail="That bot is already connected to another account. One bot "
+                   "answers for one business — create a new one in @BotFather.")
+    if outcome != "ok":
+        raise HTTPException(status_code=400, detail="Could not save that token.")
+
+    return {"connected": True, "bot_username": detail,
+            # The truthful next step, and it is a manual one. See app/channel.py
+            # for why this cannot switch the bot on by itself.
+            "polling": False}
 
 
 # --- signing in -------------------------------------------------------------

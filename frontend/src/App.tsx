@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
 import Review from "./Review";
+import Settings from "./Settings";
 import SignIn from "./SignIn";
 import TestConsole from "./TestConsole";
 import { getMe, logout, setSpendingAllowed, type Me } from "./api";
@@ -17,24 +18,25 @@ import { getMe, logout, setSpendingAllowed, type Me } from "./api";
  *
  * No router library for two screens. */
 
-type Route = "add" | "review" | "test";
+type Route = "add" | "review" | "test" | "settings";
 
-/* THREE SCREENS, STILL A HEADER AND NOT A RAIL.
+/* FOUR ITEMS, NOT SEVEN.
  *
- * The design draws a seven-item left rail. Five of those have nothing behind
- * them -- Gaps and Conversations have no prototype and no endpoint (gaps.jsonl
- * is a file, and app/console.py:33 says to promote it "when it earns a table"),
- * and Templates has neither. Shipping the rail now would be shipping five
- * affordances that do nothing.
+ * The design draws a seven-item left rail. Three of those still have nothing
+ * behind them: Gaps and Conversations have no prototype and no endpoint
+ * (gaps.jsonl is a file, and app/console.py:33 says to promote it "when it
+ * earns a table"), and Templates has neither. They are not here.
  *
- * Three screens are also still a SEQUENCE -- add, review, test -- and a header
- * says an order better than a rail does. The rail earns its place at the first
- * item that is not part of that flow, which is Settings holding Connect
- * Telegram. Four items, not seven. */
+ * Settings is what changed. Add, Review and Test are a SEQUENCE -- you do them
+ * in that order -- and a header says an order better than a rail does. Settings
+ * is the first thing that is not part of that flow: you go to it when something
+ * needs changing, not because it comes next. That is the point at which people
+ * jump rather than progress, and jumping is what a rail is for. */
 function routeFromHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
   if (hash === "review") return "review";
   if (hash === "test") return "test";
+  if (hash === "settings") return "settings";
   return "add";
 }
 
@@ -85,7 +87,9 @@ export default function App() {
           ? "Review — Talkwisp"
           : route === "test"
             ? "Test — Talkwisp"
-            : "Add knowledge — Talkwisp";
+            : route === "settings"
+              ? "Settings — Talkwisp"
+              : "Add knowledge — Talkwisp";
   }, [route, me]);
 
   /* EVERY HOOK ABOVE THIS LINE, EVERY RETURN BELOW IT.
@@ -149,7 +153,7 @@ export default function App() {
 
   const tab = (to: Route, label: string) => (
     <a
-      href={to === "add" ? "#/" : to === "review" ? "#/review" : "#/test"}
+      href={to === "add" ? "#/" : `#/${to}`}
       style={{
         minHeight: 44,
         display: "inline-flex",
@@ -195,6 +199,7 @@ export default function App() {
           {tab("add", "Add knowledge")}
           {tab("review", "Review")}
           {tab("test", "Test")}
+          {tab("settings", "Settings")}
           {/* The signed-in address, and a way out. Shown because a session that
               cannot be seen or ended is the one part of auth a person cannot
               verify for themselves -- and on a shared machine that matters more
@@ -232,6 +237,8 @@ export default function App() {
         <Review />
       ) : route === "test" ? (
         <TestConsole />
+      ) : route === "settings" ? (
+        <Settings />
       ) : (
         <AddKnowledge />
       )}

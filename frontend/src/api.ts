@@ -374,6 +374,41 @@ export const consoleFeedback = (
     { method: "POST" },
   );
 
+/* --- the Telegram channel ------------------------------------------------ */
+
+export type Channel = {
+  connected: boolean;
+  bot_username: string | null;
+  /* TRI-STATE. true = Telegram confirmed the token, false = Telegram rejected
+   * it, null = we could not ask. null is not false: a screen that said "your
+   * bot is broken" because api.telegram.org blipped would be worse than one
+   * that says nothing. */
+  live: boolean | null;
+  detail?: string | null;
+  owner_linked: boolean;
+  /* A t.me deep link carrying a signed, short-lived claim code. Null once an
+   * owner is linked, and null when there is no bot -- a claim link for a bot
+   * that does not exist is a control that cannot work. */
+  claim_link: string | null;
+};
+
+/* THE TOKEN IS NEVER IN A RESPONSE, so there is nothing here to hold it. */
+export const getChannel = () => request<Channel>("/channel");
+
+/* Form-encoded, not a query parameter, unlike most POSTs in this file. A token
+ * in a query string lands in the access log, in browser history and in the
+ * Referer of whatever the page loads next. */
+export function connectTelegram(token: string) {
+  return request<{ connected: boolean; bot_username: string; polling: boolean }>(
+    "/channel/telegram",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }).toString(),
+    },
+  );
+}
+
 /* --- signing in ----------------------------------------------------------
  *
  * No credentials option on any of these: the cookie is same-origin, and fetch

@@ -38,6 +38,7 @@ from app.answer import answer, detect_language
 from app.followup import rewrite
 from app.db import (assert_app_role, business_by_name,
                     business_for_token, connection, pool)
+from app import channel
 from app.approval import NotApproved
 from app.llm import LLMError, check_configured, check_reachable
 from app.normalize import normalize
@@ -872,6 +873,47 @@ def handle(conn, message: dict, last_seen: dict) -> None:
         return
 
     if text.startswith("/start"):
+        # THE PAYLOAD IS NOT DECORATION. `/start <code>` from the Settings
+        # screen is how a business claims its own bot: Telegram will not tell
+        # you a user id from a bot token, so the owner has to message the bot
+        # and the bot has to recognise them.
+        #
+        # Signed with this bot's own token, so a stranger who presses Start
+        # cannot claim it -- which matters because a bot is findable the moment
+        # it exists, and `owner_telegram_id` gates /fact and the owner buttons.
+        # Single use is the database's job, not this code's: 0011 only writes
+        # `where owner_telegram_id is null`, so a second claim is refused
+        # however good its code is.
+        payload = text[len("/start"):].strip()
+        if payload and channel.check_claim(payload, BUSINESS_ID, TOKEN):
+            user_id = (message.get("from") or {}).get("id")
+            claimed = False
+            if user_id is not None:
+                # The connection handle() was GIVEN, not a new one. handle() is
+                # already inside a connection() block, so checking out a second
+                # would be the nested checkout app/db.py warns about -- the one
+                # that deadlocks a five-connection pool under concurrency.
+                claimed = conn.execute(
+                    "select app_business_claim_owner(%s, %s)",
+                    (BUSINESS_ID, user_id)).fetchone()[0]
+            if claimed:
+                global OWNER_ID
+                OWNER_ID = str(user_id)
+                send(chat_id,
+                     "Tayyor — bu bot endi sizga bogʻlandi.\n"
+                     "Готово — бот привязан к вам.")
+                log({"chat_id": chat_id, "is_owner": True,
+                     "outcome": "owner_claimed"})
+                return
+            # A valid code that claimed nothing means somebody already owns
+            # this bot. Say so rather than silently falling through to the
+            # greeting, which would look like the link did not work.
+            send(chat_id, "Bu botning egasi allaqachon bor.\n"
+                          "У этого бота уже есть владелец.")
+            log({"chat_id": chat_id, "is_owner": is_owner,
+                 "outcome": "owner_claim_refused"})
+            return
+
         send(chat_id, "Salom! Klinika haqida savolingizni yozing.\n"
                       "Здравствуйте! Напишите свой вопрос о клинике."
                       + ("\n\n(Siz egasi sifatida tanildingiz.)" if is_owner else ""))
