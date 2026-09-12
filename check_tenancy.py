@@ -138,11 +138,50 @@ owns = admin.execute(
     " and tableowner = %s", (user,)).fetchone()[0]
 check("the app role owns no tables, so FORCE means something", owns, 0)
 
-forced = admin.execute(
-    "select count(*) from pg_class where relname in"
-    " ('source','fact','alias','chunk','purchase','business')"
-    " and relrowsecurity and relforcerowsecurity").fetchone()[0]
-check("all six tables have RLS enabled AND forced", forced, 6)
+# DERIVED, NOT LISTED. This named six tables, and `escalation` was added in
+# 0014 without appearing here -- so the check passed while the new tenant table
+# was entirely uncovered. A check that names what it protects can only ever be
+# as current as its author, which is the same correction check_auth's route
+# enumeration already carries.
+#
+# A tenant table is one with a business_id column. Ask the database which those
+# are and assert that EVERY one is protected; then a seventh table added without
+# RLS fails on the day it is written rather than whenever someone rereads this.
+tenant_tables = [r[0] for r in admin.execute(
+    "select c.relname from pg_class c"
+    " join pg_namespace n on n.oid = c.relnamespace"
+    " join pg_attribute a on a.attrelid = c.oid"
+    " where n.nspname = 'public' and c.relkind = 'r'"
+    "   and a.attname = 'business_id' and not a.attisdropped"
+    " order by c.relname").fetchall()]
+# THE INVARIANT IS NOT "every tenant table has RLS". It is that the app role
+# can only REACH a tenant table under RLS. `session` and `login_token` carry a
+# business_id and deliberately have no RLS -- 0008 grants the app role nothing
+# on them at all, so they are protected by the absence of privileges, which is
+# stronger. Asserting RLS alone would have demanded a policy on two tables that
+# are safer without one.
+unprotected = [r[0] for r in admin.execute(
+    "select c.relname from pg_class c"
+    " join pg_namespace n on n.oid = c.relnamespace"
+    " join pg_attribute a on a.attrelid = c.oid"
+    " where n.nspname = 'public' and c.relkind = 'r'"
+    "   and a.attname = 'business_id' and not a.attisdropped"
+    "   and not (c.relrowsecurity and c.relforcerowsecurity)"
+    "   and (has_table_privilege(%s, c.oid, 'SELECT')"
+    "     or has_table_privilege(%s, c.oid, 'INSERT')"
+    "     or has_table_privilege(%s, c.oid, 'UPDATE')"
+    "     or has_table_privilege(%s, c.oid, 'DELETE'))"
+    " order by c.relname", (user, user, user, user)).fetchall()]
+check(f"every tenant table the app role can reach is under RLS "
+      f"({len(tenant_tables)} found: {', '.join(tenant_tables)})",
+      unprotected, [])
+
+# `business` carries the tenant identity in `id` rather than `business_id`, so
+# the query above cannot see it. Named explicitly, and it is the only one.
+biz = admin.execute(
+    "select relrowsecurity and relforcerowsecurity from pg_class"
+    " where relname = 'business'").fetchone()[0]
+check("and business itself, which has no business_id column", biz, True)
 
 invoker = admin.execute(
     "select reloptions from pg_class where relname = 'retrievable_fact'"
