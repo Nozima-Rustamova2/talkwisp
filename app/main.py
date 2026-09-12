@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
-from app import auth, channel, console, extract, review, sources, vision
+from app import auth, channel, console, extract, knowledge, review, sources, vision
 from app.approval import NotApproved
 from app.db import assert_app_role, connection, pool
 from app.llm import check_configured, check_reachable
@@ -348,6 +348,92 @@ def reject_fact(business: Business, fact_id: str) -> dict:
                        "elsewhere -- rejecting means the extraction was wrong, "
                        "not that the thing stopped being true.")
         return {"id": fact_id, "rejected": True}
+
+
+# --- the knowledge base -----------------------------------------------------
+#
+# /review serves `where not confirmed`, so a fact became invisible to the API
+# the moment it was confirmed. These are the other half: what the agent actually
+# knows, and the operations on it.
+
+
+@app.get("/knowledge")
+def knowledge_base(business: Business) -> list[dict]:
+    """Everything, grouped by subject, with provenance.
+
+    No pagination and no server-side search. 140 facts across 25 subjects on the
+    largest business is one modest response, and the screen filters what it
+    already has -- which is instant, works while typing, and is one fewer
+    endpoint to keep in step with the grouping. When a business has ten thousand
+    facts this becomes wrong; it is not wrong yet.
+    """
+    with connection(business) as conn:
+        return knowledge.everything(conn)
+
+
+@app.patch("/fact/{fact_id}")
+def edit_confirmed_fact(business: Business, fact_id: str,
+                        subject: str | None = None,
+                        attribute: str | None = None,
+                        value: str | None = None) -> dict:
+    """Change a fact the business has already confirmed.
+
+    SEPARATE FROM /review/{id}, deliberately, and for the reason review.reject()
+    already states about deletion: correcting a proposal and changing what the
+    business says is true are different actions that should not share an
+    endpoint. The review endpoint also returns `confirmed: false`
+    unconditionally, which would be a lie about a confirmed fact.
+
+    SPENDS an embedding when the fact is confirmed -- see knowledge.py for why
+    not doing so leaves the agent matching on the old wording forever.
+    """
+    with connection(business) as conn:
+        result = knowledge.edit_confirmed(conn, fact_id, subject, attribute,
+                                          value)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No such fact.")
+    return result
+
+
+@app.delete("/fact/{fact_id}")
+def delete_fact(business: Business, fact_id: str) -> dict:
+    """Remove a fact outright. A real delete, not a soft one."""
+    with connection(business) as conn:
+        if not knowledge.remove(conn, fact_id):
+            raise HTTPException(status_code=404, detail="No such fact.")
+    return {"id": fact_id, "deleted": True}
+
+
+@app.get("/alias")
+def list_aliases(business: Business) -> list[dict]:
+    """Every alias. Nothing in the product could create one until now."""
+    with connection(business) as conn:
+        return knowledge.aliases(conn)
+
+
+@app.post("/alias")
+def create_alias(business: Business, subject_key: str, alias: str) -> dict:
+    """Point another spelling at an existing subject."""
+    if not alias.strip():
+        raise HTTPException(status_code=400, detail="An alias needs text.")
+    with connection(business) as conn:
+        result = knowledge.add_alias(conn, subject_key, alias)
+    if result is None:
+        # Not a 404 on the alias -- the SUBJECT is what is missing, and an alias
+        # for a subject with no facts could never match anything.
+        raise HTTPException(
+            status_code=400,
+            detail="No subject by that name, so an alias for it would never "
+                   "match anything.")
+    return result
+
+
+@app.delete("/alias/{alias_id}")
+def delete_alias(business: Business, alias_id: str) -> dict:
+    with connection(business) as conn:
+        if not knowledge.remove_alias(conn, alias_id):
+            raise HTTPException(status_code=404, detail="No such alias.")
+    return {"id": alias_id, "deleted": True}
 
 
 @app.get("/conflicts")
