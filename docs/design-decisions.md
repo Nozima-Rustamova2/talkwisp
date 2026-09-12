@@ -1342,6 +1342,7 @@ the details:
 | `check_orders.py`'s cleanup assertion | `count(*) from purchase == 0`, the whole table | whether *this run* left rows behind |
 | The frontend's conflict warning | `result.conflict`, a key the API never sends | `result.conflicts`, plural, a list |
 | `check_approval.py`'s negative control, v1 | "did extraction fail?" — and the stub made it fail early, still inside a bound block | whether the **unbound** region raised, which never ran |
+| `check_tenancy.py`'s RLS assertion | a hardcoded list of six table names | every table that actually carries a `business_id` — a seventh arrived uncovered and the suite stayed green |
 | `site/index.html` translations | the live page in a real browser, clicking the real button | a build that predated the edit to `site/i18n.json` |
 | `render_landing.py --check` v1's diff | two truncated 60 000-character lines | the one edited word, off the right edge of both |
 
@@ -1843,6 +1844,57 @@ once rather than at seven call sites where six would have been right.
 tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
 deliberately provokes the paths nobody designed: a double-tapped Confirm, a
 screenshot sent before any order exists, and two screenshots for one order.
+
+## A negative control must prove the bug was introduced — 2026-09-12
+
+This project has produced the same non-event three times, and it deserves a rule
+rather than a habit applied when someone happens to remember.
+
+> **A negative control must verify the bug was actually introduced BEFORE it
+> verifies the check catches it. Otherwise you are testing that a check passes
+> on unmodified code, which it always will — and reading that as proof.**
+
+The three instances, all of which reported green:
+
+| The control | What it thought it planted | What it actually did |
+|---|---|---|
+| `check_bot`'s clinic guard | `klinika` restored into `DONT_KNOW_DEFAULT` | nothing — the string is split across two source lines by implicit concatenation, so it never appears contiguously |
+| `check_tenancy`'s RLS guard | a reachable tenant table with no RLS | nothing — `load_dotenv()` cannot resolve a path when run from stdin, so the script died before the `CREATE TABLE` |
+| `check_supervise`'s give-up | `main()` failing eight reconciles | it died on `signal.signal()`, which only works in the main thread, so the first assertion passed on the wrong exception |
+
+The third is the nastiest, because it *did* go red — for a reason that had
+nothing to do with the thing under test. Red is not evidence either; **a control
+has to fail for the stated reason.**
+
+### What this looks like in practice
+
+```python
+s2 = source.replace(old, new, 1)
+assert s2 != source, "nothing was planted -- the control would prove nothing"
+```
+
+or, against a database:
+
+```python
+assert reachable and not rls, "the control did not actually plant the bug"
+```
+
+Two lines, and they convert "the check passed" from a fact about nothing into a
+fact about the check.
+
+### Why it keeps happening
+
+Because planting a bug is *editing*, and editing is the thing nobody thinks to
+verify. The check is the object under scrutiny, so all the care goes there —
+while the setup, which the whole exercise rests on, is written quickly and
+assumed to have worked. It is the drift pattern pointed at the scaffolding
+instead of the subject: **the control read a different object from the one the
+check reads, and passed.**
+
+It also has the property that makes this family dangerous: every one of these
+failures produced a *more* reassuring result than the truth. A control that
+silently plants nothing does not error, does not warn, and leaves a green line
+that reads exactly like a proof.
 
 ## The web app does not run as a user who can become root — 2026-09-11
 
