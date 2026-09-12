@@ -300,6 +300,12 @@ verification and larger Google Cloud credits. Manual confirmation stays as the
 fallback regardless, because a seller with no entity can never have a merchant
 account.
 
+**Booking is still not built, and no longer flatly excluded.** A shape exists
+that avoids the original objection -- the agent collects requests and never
+confirms -- and the decision now rests on discovery rather than on principle.
+The seven questions to ask a real merchant are written down; ask them before
+building anything.
+
 ## Vision — measured, not assumed
 
 Tested 2026-08-30 on a real phone photo of a printed cafe menu: angled, glare,
@@ -1548,6 +1554,12 @@ time you are writing it down.
 
 ## Booking is deliberately out of scope — 2026-09-05
 
+> **Revised 2026-09-12** — see the section "Booking, revisited: the shape
+> that would fit".
+> Still not built, and the reason below still stands. What changed is that
+> a shape exists which does not commit the failure this section describes:
+> the agent collects a request and never confirms one.
+
 Not unbuilt. Out of scope, decided, with a reason — because it is the most
 natural-looking extension of the order flow and it is not one.
 
@@ -1851,6 +1863,123 @@ once rather than at seven call sites where six would have been right.
 tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
 deliberately provokes the paths nobody designed: a double-tapped Confirm, a
 screenshot sent before any order exists, and two screenshots for one order.
+
+## Booking, revisited: the shape that would fit — 2026-09-12
+
+**Status: not built, not designed in detail.** This revises the 2026-09-05
+exclusion below rather than overturning it — the reason booking was excluded is
+precisely what the shape here avoids.
+
+### Why it was excluded, and why that still holds
+
+Everything built so far is stateless in one sense: a fact is true or it is not,
+and an order is a row nobody else competes for. **A booking is a claim on a
+resource other bookings compete for.** Two customers asking for Tuesday at 3pm is
+a conflict that exists nowhere else in the system.
+
+The recorded reason:
+
+> A bot that confirms appointments it cannot guarantee is the same class of
+> failure as marking an order paid from a screenshot — the system asserting
+> something it does not know.
+
+### The shape that fits
+
+**The agent never confirms.** It collects a request, forwards it to the owner,
+the owner confirms, and only then does the slot become real.
+
+Same discipline as payment confirmation and the same machinery as takeover:
+escalation-style notification, buttons, owner decides. Nothing is promised until
+a human promises it, which is the exact objection above, answered.
+
+### Two decisions, both provisional
+
+**1. Requests-only to start, not availability.**
+
+Requests-only is much simpler and still useful — every request reaches the owner
+with nothing promised. Seeing availability is better UX and requires the calendar
+to be real and maintained, which is a commitment from the owner, not just from
+us. Whether it is worth building depends on the discovery answers below, and
+specifically on how often double-bookings actually happen.
+
+**2. Our own table, not Google Calendar sync.**
+
+Sync costs OAuth per business, token refresh with the same 60-day rotation
+problem Meta has, and a two-way question with no good answer: if the owner moves
+an appointment in Google our table is stale, and if the bot books a slot Google
+needs updating. **Two writers to one truth — whichever wrote last wins and
+neither knows about the other.** That is the drift pattern this project keeps
+hitting, and it is the reason `bot_last_seen_at` is written by the bot and not
+also by the supervisor.
+
+Our own table gives one source of truth, no external dependency, no OAuth, and
+booking state living next to order state. A customer who booked and paid is one
+row here rather than two systems that have to agree.
+
+**The real cost of that choice**, stated rather than glossed: an owner who runs
+their day out of Google Calendar now has a second place to look. Two ways to
+soften it without a sync —
+
+- **One-way push.** We own the truth; on confirmation we create an event in
+  their calendar so it appears in their day. No reading back, no conflict, and
+  it can fail without breaking anything.
+- **An .ics feed.** Our table publishes a read-only calendar URL they subscribe
+  to. No OAuth at all, appears in Google, Apple, whatever they use. Probably
+  good enough.
+
+**Build the table first with neither.** Add one-way push only if owners actually
+complain about checking two places.
+
+### What it would need
+
+- A booking table: requested, confirmed, declined, cancelled.
+- Availability the owner defines — working hours plus existing bookings — **only
+  if the discovery answers justify it**.
+- Reschedule and cancel paths. This is where bookings get genuinely messy, and
+  owners underestimate how often it happens.
+
+### Discovery questions — for a conversation, not a form
+
+Ask in order and let them talk.
+
+1. **How do people book with you right now?** Open question first, their words
+   rather than our categories. Listen for whether it is DM, phone, walk-in or a
+   platform — and whether they say "book" at all. **Some businesses do not
+   schedule, they queue.**
+2. **Walk me through the last booking you took.** Concrete and recent beats
+   general; it surfaces the steps they would forget to mention.
+3. **Where do you keep it?** Notebook, phone calendar, Google, a wall chart,
+   their head. This is the question that decides one-way push versus nothing —
+   **if the answer is "in my head", calendar integration solves a problem they
+   do not have.**
+4. **How often do two people end up booked for the same time?** If never,
+   availability checking is over-engineering. If weekly, that is the actual pain
+   and it is worth more than the booking flow itself.
+5. **What happens when someone wants to change or cancel?** Reschedules are
+   where this gets hard, and their answer decides whether that path is needed in
+   v1.
+6. **How many people ask about a time you cannot do?** The availability question
+   from the customer side. Tells us whether "Tuesday 3pm is taken, would 4
+   work?" is worth building.
+7. **If someone asks to book at 11pm, what happens now?** The out-of-hours case
+   is the whole pitch. If they say "I reply in the morning", ask whether they
+   lose any of those.
+
+**Two questions not to ask:**
+
+- *"Would you like calendar integration?"* — everyone says yes to a feature
+  described in the abstract.
+- *"Would you pay for this?"* — people are polite. Ask what they pay now for
+  whoever handles bookings.
+
+### Competitive note
+
+MoonAI demos a beauty salon managing appointments, checking slot availability
+and working with calendars and booking systems, so it is a feature the market
+expects in this category. **But their customer is a business with managers to
+replace.** The discovery questions above are what tell us whether our customer
+has the same problem or a smaller one — and answering that before building is
+the entire point of writing them down rather than starting.
 
 ## Payment providers — Payme / Click — designed, blocked, nothing built — 2026-09-12
 
