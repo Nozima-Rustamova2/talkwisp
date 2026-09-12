@@ -73,6 +73,23 @@ this account deliberately does not have. `console._log` does not catch, so a
 missing `feedback.jsonl` is a 500 on the first Right/Wrong click and nowhere
 else.
 
+## 1c. The supervisor's log directory
+
+`supervise.py` writes one log per tenant into `logs/`, and `talkwisp-svc`
+deliberately has no write access to the repo directory -- so the directory must
+exist and be group-writable before the service starts, exactly like the JSONL
+files above:
+
+```bash
+mkdir -p logs
+sudo chown talkwisp:talkwisp-svc logs
+sudo chmod 2770 logs          # setgid: files the service creates keep the group
+```
+
+Without it every reconcile fails with `PermissionError(13)` and no bot starts.
+The loop reports it and keeps retrying rather than crashing, so the symptom is a
+supervisor that is `active` while nothing polls -- worth recognising.
+
 ## 2. The secrets file
 
 **There is only one, and it is the repo's `.env`.** An earlier draft of this
