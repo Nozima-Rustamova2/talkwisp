@@ -76,6 +76,15 @@ API: str | None = None
 # answer per business, so it cannot stay a single global.
 BUSINESS_ID: str | None = None
 OWNER_ID: str | None = None
+# The business's own name, read once at startup and used in the greeting.
+#
+# EVERY CANNED STRING IN THIS FILE USED TO SAY "klinika". Seventeen of them, in
+# three languages, telling a course provider's customers to ask about a clinic
+# and a salon's customers to contact one. Avisena Med was the only tenant until
+# self-serve signup, so the test case had quietly become the copy -- the same
+# mistake as the sign-in screen's "you@clinic.uz", which the design direction
+# already argues against: the clinic is the test case, not the market.
+BUSINESS_NAME: str | None = None
 
 POLL_TIMEOUT = 30  # seconds Telegram holds the connection open with no updates
 
@@ -94,12 +103,16 @@ _GREETINGS = {"assalom", "assalomu", "alaykum", "salom", "hello", "hi",
               "hey", "privet", "zdravstvuyte", "xayrli", "hayrli", "kun"}
 _THANKS = {"rahmat", "raxmat", "spasibo", "thanks", "thank", "tashakkur"}
 
+# {name} is the business, substituted at send time. Both constructions take a
+# name WITHOUT inflecting it -- Uzbek "X haqida", Russian "о X" -- so a long
+# name, a foreign one, or one in the other alphabet all read correctly. That is
+# why the name goes here rather than into a sentence that would need agreement.
 GREETING_REPLY = {
-    "Russian": "Здравствуйте! Задайте свой вопрос о клинике.",
-    "Uzbek, in CYRILLIC script": "Ассалому алайкум! Клиника ҳақидаги "
+    "Russian": "Здравствуйте! Задайте свой вопрос о {name}.",
+    "Uzbek, in CYRILLIC script": "Ассалому алайкум! {name} ҳақидаги "
                                  "саволингизни ёзинг.",
 }
-GREETING_DEFAULT = "Assalomu alaykum! Klinika haqidagi savolingizni yozing."
+GREETING_DEFAULT = "Assalomu alaykum! {name} haqidagi savolingizni yozing."
 
 THANKS_REPLY = {
     "Russian": "Пожалуйста! Если будут вопросы — пишите.",
@@ -119,7 +132,12 @@ def social(text: str) -> str | None:
     if not words or len(words) > 3:
         return None
     if all(w in _GREETINGS for w in words):
-        return GREETING_REPLY.get(detect_language(text), GREETING_DEFAULT)
+        # A business with no name is not a state that exists -- name is NOT NULL
+        # -- but falling back keeps a greeting from crashing on a half-set-up
+        # process rather than answering a customer with a traceback.
+        return GREETING_REPLY.get(detect_language(text),
+                                  GREETING_DEFAULT).format(
+                                      name=BUSINESS_NAME or "biz")
     if all(w in _THANKS for w in words):
         return THANKS_REPLY.get(detect_language(text), THANKS_DEFAULT)
     return None
@@ -144,11 +162,11 @@ BROKEN_DEFAULT = ("Uzr, texnik nosozlik. Bir daqiqadan soʻng urinib koʻring.")
 
 DONT_KNOW = {
     "Russian": "К сожалению, у меня нет этой информации. Пожалуйста, свяжитесь "
-               "с клиникой напрямую.",
+               "с нами напрямую.",
     "Uzbek, in CYRILLIC script": "Афсуски, менда бу маълумот йўқ. Илтимос, "
-                                 "клиника билан бевосита боғланинг.",
+                                 "биз билан бевосита боғланинг.",
 }
-DONT_KNOW_DEFAULT = ("Afsuski, menda bu maʼlumot yoʻq. Iltimos, klinika bilan "
+DONT_KNOW_DEFAULT = ("Afsuski, menda bu maʼlumot yoʻq. Iltimos, biz bilan "
                      "bevosita bogʻlaning.")
 
 
@@ -291,8 +309,8 @@ _KIND_FOR = {"drop": "fact", "pick": "fact", "save": "fact",
 def is_owner_id(user_id) -> bool:
     return OWNER_ID is not None and str(user_id) == str(OWNER_ID)
 
-NOT_OWNER = ("Bu buyruq faqat klinika egasi uchun.\n"
-             "Эта команда доступна только владельцу клиники.")
+NOT_OWNER = ("Bu buyruq faqat biznes egasi uchun.\n"
+             "Эта команда доступна только владельцу бизнеса.")
 EXPIRED = "Bu taklif eskirgan. Iltimos, /fact buyrugʻini qaytadan yuboring."
 
 
@@ -428,7 +446,7 @@ def handle_callback(conn, cq):
     # owner-only by default. A denylist would make it public by default, and
     # the failure would be silent: the button would simply work for everyone.
     if action not in CUSTOMER_ACTIONS and not is_owner_id(user_id):
-        answer_callback(cq["id"], "Faqat klinika egasi uchun.")
+        answer_callback(cq["id"], "Faqat biznes egasi uchun.")
         return
 
     # ---- orders: the id travels in callback_data, so these survive a restart.
@@ -627,21 +645,21 @@ CHOOSE_WHO_DEFAULT = "Aniq kimga?"
 # price with money attached. See app/orders.py.
 NOT_ORDERABLE = {
     "Russian": "Стоимость этой услуги указана диапазоном, поэтому оплатить её "
-               "через бот пока нельзя. Пожалуйста, свяжитесь с клиникой.",
+               "через бот пока нельзя. Пожалуйста, свяжитесь с нами.",
     "Uzbek, in CYRILLIC script": "Бу хизматнинг нархи оралиқ кўрсатилган, "
                                  "шунинг учун бот орқали тўлаб бўлмайди. "
-                                 "Илтимос, клиника билан боғланинг.",
+                                 "Илтимос, биз билан боғланинг.",
 }
 NOT_ORDERABLE_DEFAULT = ("Bu xizmatning narxi oraliq koʻrsatilgan, shuning "
-                         "uchun bot orqali toʻlab boʻlmaydi. Iltimos, klinika "
+                         "uchun bot orqali toʻlab boʻlmaydi. Iltimos, biz "
                          "bilan bogʻlaning.")
 
 ORDER_BROKEN = {
-    "Russian": "Не удалось оформить оплату. Пожалуйста, свяжитесь с клиникой.",
+    "Russian": "Не удалось оформить оплату. Пожалуйста, свяжитесь с нами.",
     "Uzbek, in CYRILLIC script": "Тўловни расмийлаштириб бўлмади. Илтимос, "
-                                 "клиника билан боғланинг.",
+                                 "биз билан боғланинг.",
 }
-ORDER_BROKEN_DEFAULT = ("Toʻlovni rasmiylashtirib boʻlmadi. Iltimos, klinika "
+ORDER_BROKEN_DEFAULT = ("Toʻlovni rasmiylashtirib boʻlmadi. Iltimos, biz "
                         "bilan bogʻlaning.")
 
 
@@ -710,9 +728,9 @@ REJECTED = {
     },
     "not_received": {
         "Russian": "Мы не видим этот платёж. Пожалуйста, проверьте в своём "
-                   "банке и свяжитесь с клиникой.",
+                   "банке и свяжитесь с нами.",
         "Uzbek, in CYRILLIC script": "Биз бу тўловни кўрмаяпмиз. Илтимос, "
-                                     "банкингиздан текширинг ва клиника билан "
+                                     "банкингиздан текширинг ва биз билан "
                                      "боғланинг.",
     },
 }
@@ -720,7 +738,7 @@ REJECTED_DEFAULT = {
     "amount_mismatch": ("Summa buyurtmaga mos kelmadi. Iltimos, yuqorida "
                         "koʻrsatilgan aniq summani yuboring."),
     "not_received": ("Biz bu toʻlovni koʻrmayapmiz. Iltimos, bankingizdan "
-                     "tekshiring va klinika bilan bogʻlaning."),
+                     "tekshiring va biz bilan bogʻlaning."),
 }
 REJECT_LABELS = {"amount_mismatch": "Summa mos emas",
                  "not_received": "Toʻlov koʻrinmadi"}
@@ -915,8 +933,8 @@ def handle(conn, message: dict, last_seen: dict) -> None:
                  "outcome": "owner_claim_refused"})
             return
 
-        send(chat_id, "Salom! Klinika haqida savolingizni yozing.\n"
-                      "Здравствуйте! Напишите свой вопрос о клинике."
+        send(chat_id, "Salom! {name} haqida savolingizni yozing.\n"
+                      "Здравствуйте! Напишите свой вопрос о {name}."
                       + ("\n\n(Siz egasi sifatida tanildingiz.)" if is_owner else ""))
         return
 
@@ -1196,7 +1214,7 @@ def resolve_identity() -> tuple[str, str]:
 
 
 def main() -> None:
-    global TOKEN, API, BUSINESS_ID, OWNER_ID
+    global TOKEN, API, BUSINESS_ID, OWNER_ID, BUSINESS_NAME
 
     # Fail now, not on the first customer message. The second call
     # spends one tiny generation to prove the pinned model answers for
@@ -1231,8 +1249,9 @@ def main() -> None:
             raise RuntimeError(f"Telegram rejected the token: {me}")
 
         with connection(BUSINESS_ID) as conn:
-            name, OWNER_ID = conn.execute(
+            BUSINESS_NAME, OWNER_ID = conn.execute(
                 "select name, owner_telegram_id from business").fetchone()
+        name = BUSINESS_NAME
         print(f"serving {name}.")
         if not OWNER_ID:
             print("business.owner_telegram_id is not set -- /fact will refuse "

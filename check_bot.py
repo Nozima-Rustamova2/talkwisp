@@ -291,5 +291,38 @@ _os.environ.pop("TELEGRAM_BOT_TOKEN", None)
 rejects_msg("with neither, it says which to prefer",
             lambda: _resolve([]), "prefer --business")
 
+# ---------------------------------------------------------------------------
+print("\nThe canned copy does not assume what kind of business this is")
+# EVERY STRING IN bot.py USED TO SAY "klinika" -- seventeen of them, across
+# Uzbek Latin, Uzbek Cyrillic and Russian, telling a course provider's customers
+# to ask about a clinic and a salon's customers to contact one. Avisena Med was
+# the only tenant until self-serve signup, so the test case had become the copy.
+#
+# A STATIC SCAN, not a rendered one, because the failure is a literal in the
+# source. It would come back the next time someone writes a message with the
+# demo business in mind, and it would be invisible to anyone testing against
+# that same demo business -- which is everyone, most of the time.
+import re as _re
+
+_CLINIC = _re.compile("klinika|" + "\u043a\u043b\u0438\u043d\u0438\u043a", _re.I)
+_source = pathlib.Path("bot.py").read_text(encoding="utf-8")
+_offenders = [
+    (n, line.strip()[:70])
+    for n, line in enumerate(_source.splitlines(), 1)
+    if _CLINIC.search(line) and not line.lstrip().startswith("#")
+]
+check("no canned string names a clinic", _offenders, [])
+
+# And the greeting must actually SUBSTITUTE, not send a literal "{name}" to a
+# customer -- the failure mode of a template nobody rendered.
+import bot as _bot
+
+for _label, _template in (list(_bot.GREETING_REPLY.items())
+                          + [("default", _bot.GREETING_DEFAULT)]):
+    _rendered = _template.format(name="Rangli Salon")
+    check(f"greeting substitutes the business name ({_label})",
+          "Rangli Salon" in _rendered and "{name}" not in _rendered, True)
+
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
