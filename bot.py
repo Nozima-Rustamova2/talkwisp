@@ -34,7 +34,7 @@ import httpx
 import psycopg
 from dotenv import load_dotenv
 
-from app import buy, orders, payment
+from app import buy, console, escalation, orders, payment
 from app.answer import answer, detect_language
 from app.followup import rewrite
 from app.db import (assert_app_role, business_by_name,
@@ -170,6 +170,100 @@ DONT_KNOW_DEFAULT = ("Afsuski, menda bu maʼlumot yoʻq. Iltimos, biz bilan "
                      "bevosita bogʻlaning.")
 
 
+# --- takeover: everything a customer sees ------------------------------------
+#
+# Six strings, and they are the part a customer actually experiences. Each is a
+# table keyed by detected language with an Uzbek-Latin default, the same shape
+# as every other customer-facing string in this file.
+#
+# NONE OF THEM PROMISES A REPLY. "I've sent it" is true the moment it is sent;
+# "they'll get back to you shortly" is a promise about a person who may be
+# asleep, and a promise that fails is worse than the refusal it replaced.
+
+# The button under a refusal. Offered only when the business has a linked owner
+# -- a button with nobody behind it is a control that cannot work.
+OFFER = {
+    "Russian": "Передать им этот вопрос?",
+    "Uzbek, in CYRILLIC script": "Буни уларга юборайинми?",
+}
+OFFER_DEFAULT = "Buni ularga yuborayinmi?"
+
+# THE REFUSAL, SHORTENED, for when the button is offered.
+#
+# The full DONT_KNOW ends with "contact us directly" -- which, next to a button
+# offering to pass the question on, is two contradictory instructions in the
+# same breath. The button IS the contact route at that moment.
+#
+# The honest part is not the second sentence. It is the admission of not
+# knowing, and that is what remains either way.
+DONT_KNOW_SHORT = {
+    "Russian": "К сожалению, у меня нет этой информации.",
+    "Uzbek, in CYRILLIC script": "Афсуски, менда бу маълумот йўқ.",
+}
+DONT_KNOW_SHORT_DEFAULT = "Afsuski, menda bu maʼlumot yoʻq."
+
+# Introduces the suggestions. Deliberately "you could ask me", not "did you
+# mean" -- the agent is not guessing at what they wanted, it is saying what it
+# can answer.
+TRY_ASKING = {
+    "Russian": "Могу ответить, например, на такое:",
+    "Uzbek, in CYRILLIC script": "Масалан, буларга жавоб бера оламан:",
+}
+TRY_ASKING_DEFAULT = "Masalan, bularga javob bera olaman:"
+
+# Per-process, because the confirmed facts a business has change rarely and this
+# is on the refusal path. Not per-request: console.suggestions() is free but not
+# instant, and the customer is already waiting.
+SUGGESTION_TTL = 600
+_SUGGESTIONS: list | None = None
+_SUGGESTIONS_AT = 0.0
+
+# What the customer hears when they tap it.
+# CONDITIONAL, AND THE CONDITIONAL IS THE POINT. This said "you'll get the
+# answer here", which is a promise about a person who may be asleep. Nothing
+# guarantees the owner replies -- the 24-hour expiry message exists precisely
+# because often they will not -- and a promise that fails is worse than the
+# refusal it replaced.
+SENT_ON = {
+    "Russian": "Отправила. Если ответят, ответ придёт сюда.",
+    "Uzbek, in CYRILLIC script": "Юбордим. Жавоб берилса, шу ерда кўрасиз.",
+}
+SENT_ON_DEFAULT = "Yubordim. Javob berilsa, shu yerda koʻrasiz."
+
+# The offer went stale -- the process restarted before they tapped.
+OFFER_GONE = {
+    "Russian": "Это предложение устарело. Задайте вопрос ещё раз.",
+    "Uzbek, in CYRILLIC script": "Бу таклиф эскирган. Саволингизни қайта ёзинг.",
+}
+OFFER_GONE_DEFAULT = "Bu taklif eskirgan. Savolingizni qayta yozing."
+
+# The owner looked and said it is not something they answer. A real outcome, and
+# the customer is still owed the courtesy of being told.
+NO_ANSWER = {
+    "Russian": "К сожалению, на этот вопрос ответить не смогут.",
+    "Uzbek, in CYRILLIC script": "Афсуски, бу саволга жавоб бера олмаймиз.",
+}
+NO_ANSWER_DEFAULT = "Afsuski, bu savolga javob bera olmaymiz."
+
+# Twenty-four hours, no reply. Said once. Silence after "I've sent it" would be
+# worse than the refusal the customer would otherwise have had.
+NO_REPLY_YET = {
+    "Russian": "Ответа пока нет. Пожалуйста, свяжитесь с нами напрямую.",
+    "Uzbek, in CYRILLIC script": "Ҳозирча жавоб йўқ. Илтимос, биз билан "
+                                 "бевосита боғланинг.",
+}
+NO_REPLY_YET_DEFAULT = ("Hozircha javob yoʻq. Iltimos, biz bilan bevosita "
+                        "bogʻlaning.")
+
+# Prefix on the owner's own words, so a customer knows a person answered rather
+# than the agent having suddenly learned something.
+FROM_OWNER = {
+    "Russian": "Вам ответили:",
+    "Uzbek, in CYRILLIC script": "Сизга жавоб беришди:",
+}
+FROM_OWNER_DEFAULT = "Sizga javob berishdi:"
+
+
 def _say(table: dict, default: str, question: str) -> str:
     return table.get(detect_language(question), default)
 
@@ -293,7 +387,17 @@ PENDING: dict[str, dict] = {}
 # Which callback actions a CUSTOMER may tap. Everything absent from this set is
 # owner-only. See the reasoning in handle_callback: allowlist, so forgetting to
 # classify a new action fails closed.
-CUSTOMER_ACTIONS = frozenset({"order", "who", "shot"})
+# "esc" is the customer tapping "send this to them" on a refusal. It belongs
+# here for the same reason "order" does: the person tapping is the customer, and
+# the allowlist is what keeps every unclassified action owner-only by default.
+CUSTOMER_ACTIONS = frozenset({"order", "who", "shot", "esc"})
+
+# Owner-only, and like ORDER_ACTIONS they carry the escalation id in
+# callback_data rather than a PENDING token -- the owner may open the message
+# an hour later, after a restart. reply_to_message was the alternative and was
+# rejected: it depends on the owner long-pressing the right message, and a
+# mis-targeted reply sends one customer's answer to another.
+ESCALATION_ACTIONS = frozenset({"ans", "skip"})
 
 # Owner-only, and they carry the order id in callback_data instead of a PENDING
 # token so they keep working across a restart -- the owner may confirm a day
@@ -303,7 +407,8 @@ ORDER_ACTIONS = frozenset({"conf", "rej", "rejr"})
 # Which PENDING shape each action expects. A token from the wrong flow is
 # refused rather than misread.
 _KIND_FOR = {"drop": "fact", "pick": "fact", "save": "fact",
-             "order": "offer", "who": "offer", "shot": "shot"}
+             "order": "offer", "who": "offer", "shot": "shot",
+             "esc": "escalate"}
 
 
 def is_owner_id(user_id) -> bool:
@@ -449,6 +554,32 @@ def handle_callback(conn, cq):
         answer_callback(cq["id"], "Faqat biznes egasi uchun.")
         return
 
+    # ---- takeover: the owner's two buttons carry the escalation id -----------
+    # Handled here, before the PENDING lookup, for the same reason ORDER_ACTIONS
+    # are: the owner may open this an hour later, after a restart, and PENDING
+    # dies with the process. The customer's "esc" is NOT here -- it is a token
+    # action and lives with drop/pick/save below, where _KIND_FOR refuses a
+    # token from the wrong flow.
+    if action in ESCALATION_ACTIONS:
+        row = escalation.get(conn, token)
+        if row is None or row["status"] in ("answered", "expired"):
+            answer_callback(cq["id"])
+            edit_here("Bu savol allaqachon yopilgan.")
+            return
+        if action == "skip":
+            closed = escalation.close_without_answer(conn, token)
+            answer_callback(cq["id"])
+            edit_here(f"Yopildi: {row['question']}")
+            for waiting_chat in closed["chat_ids"]:
+                send(waiting_chat, _say(NO_ANSWER, NO_ANSWER_DEFAULT,
+                                        row["question"]))
+            return
+        picked = escalation.start_answering(conn, token)
+        answer_callback(cq["id"])
+        edit_here(f"{row['question']}\n\n"
+                  "Javobingizni yozing — keyingi xabaringiz mijozga yuboriladi.")
+        return
+
     # ---- orders: the id travels in callback_data, so these survive a restart.
     # Handled BEFORE the PENDING lookup, because they deliberately do not use
     # it. The owner may tap Confirm a day after the process last started.
@@ -520,6 +651,23 @@ def handle_callback(conn, cq):
     if pending.get("kind") != _KIND_FOR.get(action):
         answer_callback(cq["id"])
         edit_here(EXPIRED)
+        return
+
+    if action == "esc":
+        # The customer said yes. `pending` is already proven to be an
+        # "escalate" shape by the _KIND_FOR guard above.
+        PENDING.pop(token, None)
+        escalation_id, joined = escalation.open_or_join(
+            conn, chat_id, pending["question"], pending["context"])
+        answer_callback(cq["id"])
+        edit_here(_say(SENT_ON, SENT_ON_DEFAULT, pending["question"]))
+        # Only ping for a NEW question. A join means the owner already has this
+        # one, and pinging per customer is what makes a useful feature one
+        # people mute.
+        if not joined:
+            notify_owner_escalation(escalation.get(conn, escalation_id))
+        log({"chat_id": chat_id, "question": pending["question"],
+             "outcome": "escalated", "joined": joined})
         return
 
     if action == "drop":
@@ -812,6 +960,182 @@ def owner_review(order: dict) -> None:
         send_kb(int(OWNER_ID), caption, markup)
 
 
+# console.suggestions() labels each question with the language it is phrased in.
+# detect_language() returns the label; this turns it into the same code.
+_SUGGESTION_CODE = {
+    "Russian": "ru",
+    "Uzbek, in CYRILLIC script": "uz-cyrl",
+}
+
+
+def suggestions_for(conn, language: str) -> list[str]:
+    """Up to two questions this business can actually answer.
+
+    NEVER INVENTED. console.suggestions() generates them from CONFIRMED facts
+    and verifies each one resolves back through the exact tier, so a suggestion
+    that then refuses is not a thing that can happen -- which would be worse
+    than offering none at all.
+
+    Free: it uses find(), the deterministic path, with no model call. Cached per
+    process because the facts change rarely and this sits on the refusal path,
+    which has already cost a generation by the time it is reached.
+    """
+    global _SUGGESTIONS, _SUGGESTIONS_AT
+    now = time.monotonic()
+    if _SUGGESTIONS is not None and now - _SUGGESTIONS_AT < SUGGESTION_TTL:
+        return _SUGGESTIONS
+    try:
+        # More than two, because they are then filtered by language and the
+        # point is to have some left in the customer's own.
+        _SUGGESTIONS = console.suggestions(conn, limit=6)
+    except Exception as exc:  # noqa: BLE001 - a refusal must still be sent
+        print(f"suggestions failed (not fatal): {exc!r}", flush=True)
+        _SUGGESTIONS = []
+    _SUGGESTIONS_AT = now
+    return _pick(_SUGGESTIONS, language)
+
+
+def _pick(suggestions: list, language: str) -> list[str]:
+    """Two questions, in the customer's own language where possible.
+
+    THIS WAS THE BUG RENDERING THE COPY FOUND. The first version took whatever
+    the first two happened to be, so a Russian speaker got Russian framing --
+    "Могу ответить, например, на такое:" -- followed by two questions in Uzbek.
+    Each string was correct on its own; only seeing them in one message showed
+    it.
+
+    Falls back to any language rather than to nothing: a suggestion the customer
+    has to read in the other alphabet is still a question this business can
+    answer, and offering none is worse.
+    """
+    code = _SUGGESTION_CODE.get(language, "uz-latn")
+    same = [s["question"] for s in suggestions if s.get("language") == code]
+    if same:
+        return same[:2]
+    return [s["question"] for s in suggestions][:2]
+
+
+def with_takeover(conn, chat_id: int, text: str,
+                  result: dict) -> tuple[str, bool]:
+    """(message, offer_the_button). Both halves of what follows a refusal.
+
+    The button is offered only when the business has a LINKED OWNER. Without
+    owner_telegram_id there is nobody to send the question to, and "shall I pass
+    this on?" with nothing behind it is an affordance that cannot work -- the
+    rule this project applies to every control.
+
+    And only when the customer has none outstanding. Someone who gets three
+    refusals in a row should be asked once, not three times; the same row that
+    makes "ping the owner once" true makes this true for free.
+    """
+    offer = bool(OWNER_ID) and not escalation.waiting_for_chat(conn, chat_id)
+
+    if result.get("answer"):
+        # The model's own refusal, in the customer's language. Not ours to
+        # rewrite, and it does not say "contact us directly" anyway.
+        reply = result["answer"]
+    elif offer:
+        reply = _say(DONT_KNOW_SHORT, DONT_KNOW_SHORT_DEFAULT, text)
+    else:
+        reply = _say(DONT_KNOW, DONT_KNOW_DEFAULT, text)
+
+    lines = [reply]
+    picks = suggestions_for(conn, detect_language(text))
+    if picks:
+        lines.append("")
+        lines.append(_say(TRY_ASKING, TRY_ASKING_DEFAULT, text))
+        lines.extend(f"\u2022 {q}" for q in picks)
+
+    return "\n".join(lines), offer
+
+
+def deliver_owner_answer(conn, owner_chat: int, row: dict, text: str) -> None:
+    """Send the owner's words to everyone waiting, then try to learn from them.
+
+    DELIVERY FIRST, AND THE ORDER IS THE DECISION. parse_fact() is a model call
+    and it can fail -- an owner writing two sentences, or something that is not
+    fact-shaped, produces no clean subject/attribute/value. If the write came
+    first, a parse failure would leave a customer who was told "I've sent it"
+    with nothing at all. Losing the fact is recoverable: the owner can type
+    /fact later, and the question is still in gaps.jsonl. Not answering the
+    waiting customer is not.
+    """
+    sent = 0
+    for waiting_chat in row["chat_ids"]:
+        prefix = _say(FROM_OWNER, FROM_OWNER_DEFAULT, row["question"])
+        if send(waiting_chat, f"{prefix}\n{text}"):
+            sent += 1
+
+    # Now the half the landing page promises: "your answer is saved so it knows
+    # next time." Without it this is a relay and the owner answers the same
+    # question again next month.
+    fact_id = None
+    note = ""
+    try:
+        with typing(owner_chat):
+            parsed = parse_fact(conn, f"{row['question']} {text}")
+        if parsed.get("error") or not parsed.get("parsed"):
+            note = ("\n\nBilimlar bazasiga saqlay olmadim \u2014 "
+                    "/fact bilan qoʻlda yozishingiz mumkin.")
+        else:
+            # UNCONFIRMED. The site promises the answer is saved; it does not
+            # promise it is trusted. A one-handed reply at 9pm goes to the
+            # review queue like an extracted fact, and the owner confirms it
+            # there with the one tap that already exists.
+            fact_id = str(store_fact(conn, parsed["parsed"], confirmed=False))
+            note = ("\n\nBilimlar bazasiga qoʻshildi \u2014 tasdiqlash uchun "
+                    "Review boʻlimiga qarang.")
+    except Exception as exc:  # noqa: BLE001 - the customer already has the answer
+        print(f"escalation fact-write failed: {exc!r}", flush=True)
+        note = ("\n\nBilimlar bazasiga saqlay olmadim \u2014 "
+                "/fact bilan qoʻlda yozishingiz mumkin.")
+
+    escalation.record_answer(conn, row["id"], text, fact_id)
+    send(owner_chat, f"Yuborildi ({sent} ta mijozga).{note}")
+    log({"chat_id": owner_chat, "is_owner": True, "question": row["question"],
+         "outcome": "escalation_answered", "delivered": sent,
+         "fact_written": fact_id is not None})
+
+
+def notify_owner_escalation(row: dict) -> None:
+    """Send the owner the question with enough context to answer it.
+
+    A BARE QUESTION IS UNANSWERABLE, which is the whole reason `context` is a
+    snapshot rather than a lookup. "Bolalarga chegirma bormi?" cannot be
+    answered without knowing they were asking about haircuts a moment earlier.
+
+    The score is included because a 0.41 miss and a 0.02 miss are different
+    problems -- one is "you told me and I could not find it", the other is "you
+    never told me this" -- and only the first is worth re-wording a fact over.
+    """
+    if not OWNER_ID:
+        return
+    ctx = row.get("context") or {}
+    lines = [f"{BUSINESS_NAME or 'Agent'} — javob bera olmadim",
+             "", f"\u00ab{row['question']}\u00bb"]
+
+    turns = ctx.get("turns") or []
+    if turns:
+        lines.append("")
+        lines.append("Bundan oldin:")
+        for asked, answered in turns:
+            lines.append(f"  \u2014 {asked}")
+            if answered:
+                lines.append(f"    \u2192 {answered[:110]}")
+
+    lines.append("")
+    best = ctx.get("best_similarity")
+    if best and ctx.get("nearest"):
+        lines.append(f"Eng yaqini: {ctx['nearest']} ({best}) \u2014 "
+                     "chegaradan past.")
+    else:
+        lines.append("Bunga yaqin hech narsa topilmadi.")
+
+    markup = keyboard([[("Javob berish", f"ans:{row['id']}"),
+                        ("Bizga tegishli emas", f"skip:{row['id']}")]])
+    send_kb(int(OWNER_ID), "\n".join(lines), markup)
+
+
 def file_id_of(message: dict) -> str | None:
     """The screenshot, whichever way it was sent.
 
@@ -890,6 +1214,19 @@ def handle(conn, message: dict, last_seen: dict) -> None:
         handle_fact_command(conn, chat_id, is_owner,
                             text[len("/fact"):].strip())
         return
+
+    # THE OWNER IS ANSWERING AN ESCALATION. Checked before /start, before the
+    # social short-circuit, before the throttle -- their next message is the
+    # reply, and every path below would otherwise treat it as a question.
+    #
+    # The state is in the row, not in PENDING: PENDING dies with the process and
+    # the supervisor restarts bots routinely, so an owner who tapped Answer and
+    # came back after a restart would otherwise have their reply land nowhere.
+    if is_owner and not text.startswith("/"):
+        pending_escalation = escalation.answering(conn)
+        if pending_escalation is not None:
+            deliver_owner_answer(conn, chat_id, pending_escalation, text)
+            return
 
     if text.startswith("/start"):
         # THE PAYLOAD IS NOT DECORATION. `/start <code>` from the Settings
@@ -1038,8 +1375,36 @@ def handle(conn, message: dict, last_seen: dict) -> None:
                  "outcome": "error", "error": repr(exc)[:300]})
             return
 
-        reply = result["answer"] or _say(DONT_KNOW, DONT_KNOW_DEFAULT, text)
-        send(chat_id, reply)
+        # THE ADMISSION OF NOT KNOWING IS THE HONEST PART, and it is in every
+        # branch. What varies is what follows it: suggestions for someone who
+        # asked something adjacent to what this business has, and the offer to
+        # pass it on for someone who asked something it genuinely does not.
+        offered = False
+        if result["status"] != "ok" and not is_owner:
+            reply, offered = with_takeover(conn, chat_id, text, result)
+        else:
+            reply = result["answer"] or _say(DONT_KNOW, DONT_KNOW_DEFAULT, text)
+
+        if offered:
+            token = secrets.token_urlsafe(8)
+            PENDING[token] = {
+                "kind": "escalate", "question": asked,
+                # Snapshotted HERE, while it is still true. history_for() is
+                # in-memory and idles out, and the supervisor restarts bots
+                # routinely -- resolving this when the owner opens the message
+                # would find nothing.
+                # detect_language(text), NOT result["language"] -- answer()
+                # does not return one, so that .get() would have quietly said
+                # "uz-latn" for every Russian speaker and the owner would have
+                # been told the wrong thing about every one of them.
+                "context": escalation.snapshot(
+                    history_for(chat_id), result, detect_language(text)),
+            }
+            send_kb(chat_id, reply,
+                    keyboard([[(_say(OFFER, OFFER_DEFAULT, text),
+                                f"esc:{token}")]]))
+        else:
+            send(chat_id, reply)
         remember(chat_id, text, reply)
 
         # Same shape as results.json, so the real questions can be graded the same
@@ -1147,6 +1512,40 @@ def _stop(signum, frame) -> None:  # noqa: ARG001
     global _stopping
     _stopping = True
     print("stopping after this update.", flush=True)
+
+
+# How often stale escalations are swept. Nothing is waiting on a fast answer
+# here -- the threshold is 24 hours -- so this is deliberately lazy.
+SWEEP_SECONDS = 300
+_last_sweep = 0.0
+
+
+def sweep_escalations(force: bool = False) -> None:
+    """Time out anything the owner never answered, and tell the customer.
+
+    THE POINT IS THE TELLING. Expiring silently would leave someone who was told
+    "I've sent it" waiting forever -- worse than the plain refusal they would
+    have had if they had never tapped the button. After this it is an ordinary
+    gap, which is already the rule for a question nobody could answer.
+
+    Never fatal, like the heartbeat: a bot that stopped answering customers
+    because a sweep failed would be the housekeeping breaking the product.
+    """
+    global _last_sweep
+    now = time.monotonic()
+    if not force and now - _last_sweep < SWEEP_SECONDS:
+        return
+    _last_sweep = now
+    try:
+        with connection(BUSINESS_ID) as conn:
+            for row in escalation.expire_stale(conn):
+                for waiting_chat in row["chat_ids"]:
+                    send(waiting_chat, _say(NO_REPLY_YET, NO_REPLY_YET_DEFAULT,
+                                            row["question"]))
+                print(f"escalation expired unanswered: {row['question'][:60]!r}",
+                      flush=True)
+    except Exception as exc:  # noqa: BLE001 - see the docstring
+        print(f"escalation sweep failed (not fatal): {exc!r}", flush=True)
 
 
 def resolve_identity() -> tuple[str, str]:
@@ -1280,6 +1679,7 @@ def main() -> None:
             # getting network errors from Telegram is still running, and
             # reporting it as dead would send the owner to fix the wrong thing.
             heartbeat()
+            sweep_escalations()
             try:
                 params = {"timeout": POLL_TIMEOUT}
                 if offset is not None:

@@ -70,13 +70,19 @@ ast.parse(SOURCE)
 # and missing the second is how this check first reported `rejr` as unhandled
 # when it works fine. A check that reads only one shape of the code is a check
 # that is about a different program.
+# THREE shapes now, not two. ESCALATION_ACTIONS joined orders as a family whose
+# members carry an id in callback_data rather than a PENDING token -- and when
+# it was added, this check reported `skip` as unhandled while `ans` vanished
+# entirely, because both are dispatched by `action in ESCALATION_ACTIONS` and
+# only one also happens to appear in an `action == "..."` literal.
+ID_ACTIONS = set(bot.ORDER_ACTIONS) | set(bot.ESCALATION_ACTIONS)
 HANDLED = (set(re.findall(r'if action == "(\w+)"', SOURCE))
-           | set(bot.ORDER_ACTIONS))
+           | ID_ACTIONS)
 
 # Named here so the check states what it believes rather than deriving it from
 # the thing under test. If orders ever become owner-initiated, this line is
 # what should fail.
-OWNER_ONLY = {"drop", "pick", "save", "conf", "rej", "rejr"}
+OWNER_ONLY = {"drop", "pick", "save", "conf", "rej", "rejr", "ans", "skip"}
 
 print("\nthe callback permission model")
 
@@ -86,17 +92,21 @@ check("some actions are actually handled", len(HANDLED) > 0, True)
 # asserted rather than assumed, because an order action that quietly acquired a
 # PENDING entry would stop surviving restarts, which is the whole reason they
 # are built this way.
-check("every handled action is either classified or an order action",
-      sorted(HANDLED - set(bot._KIND_FOR) - bot.ORDER_ACTIONS), [])
-check("no order action is in _KIND_FOR",
-      sorted(bot.ORDER_ACTIONS & set(bot._KIND_FOR)), [])
+check("every handled action is either classified or carries an id",
+      sorted(HANDLED - set(bot._KIND_FOR) - ID_ACTIONS), [])
+# The exemption is asserted, not assumed: an id-carrying action that quietly
+# acquired a PENDING entry would stop surviving restarts, which is the whole
+# reason both families are built this way -- the owner may tap Confirm, or open
+# an escalation, a day after the process last started.
+check("no id-carrying action is in _KIND_FOR",
+      sorted(ID_ACTIONS & set(bot._KIND_FOR)), [])
 check("nothing is classified that is not handled",
       sorted(set(bot._KIND_FOR) - HANDLED), [])
 # ORDER_ACTIONS is a declaration, so membership proves nothing on its own --
 # a typo there would name an action no button ever sends. Each one must also
 # appear in the source, in a callback_data string or a branch.
-check("every order action actually appears in the code",
-      sorted(a for a in bot.ORDER_ACTIONS if f'"{a}' not in SOURCE), [])
+check("every id-carrying action actually appears in the code",
+      sorted(a for a in ID_ACTIONS if f'"{a}' not in SOURCE), [])
 check("every customer action is a handled action",
       sorted(bot.CUSTOMER_ACTIONS - HANDLED), [])
 check("no owner action is customer-tappable",

@@ -120,9 +120,21 @@ def conflicts(conn: Connection, parsed: dict) -> list[dict]:
     return [{"subject": s, "attribute": a, "value": v} for s, a, v in rows]
 
 
-def store(conn: Connection, parsed: dict) -> str:
-    """Write one confirmed, owner-typed fact. Embedded so it is reachable by
-    vector search immediately, not only by exact match."""
+def store(conn: Connection, parsed: dict, confirmed: bool = True) -> str:
+    """Write one owner-typed fact. Confirmed by default, because the only caller
+    for a long time was /fact, where the owner taps approve before this runs.
+
+    `confirmed=False` exists for takeover: the owner's Telegram reply to an
+    escalated question becomes a fact, and the landing page promises exactly
+    that -- but a reply typed one-handed at 9pm is precisely the input that
+    should not skip review. onboard.py refuses to auto-confirm for the same
+    reason: confirming is the human judgement the product is built on.
+
+    An unconfirmed fact is NOT embedded here, matching the extraction path:
+    app/review.py's confirm() embeds when it is approved, so doing it now would
+    spend a call on a row nothing can retrieve yet -- and spend it twice if it
+    is approved later.
+    """
     # Confirmed on write, so it is retrievable immediately -- which makes this
     # one of the three doors a dangerous subject can come through.
     check_subject(parsed["subject"])
@@ -133,14 +145,15 @@ def store(conn: Connection, parsed: dict) -> str:
     # branch is the policy; the constraint is the floor that catches it going
     # missing. check_subject() above means we only reach here via a caller that
     # passed allow_reserved, so this is reachable but rare.
-    vector = (None if normalize(parsed["subject"]) == PAYMENT_SUBJECT_KEY
+    vector = (None
+              if not confirmed or normalize(parsed["subject"]) == PAYMENT_SUBJECT_KEY
               else str(embed_document(text)))
     return conn.execute(
         "insert into fact (subject, subject_key, attribute, attribute_key,"
         " value, value_key, confirmed, embedding, embedding_model)"
-        " values (%s, %s, %s, %s, %s, %s, true, %s, %s) returning id",
+        " values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning id",
         (parsed["subject"], normalize(parsed["subject"]),
          parsed["attribute"], normalize(parsed["attribute"]),
-         parsed["value"], normalize(parsed["value"]),
+         parsed["value"], normalize(parsed["value"]), confirmed,
          vector, f"{MODEL}@{DIMENSIONS}" if vector else None),
     ).fetchone()[0]

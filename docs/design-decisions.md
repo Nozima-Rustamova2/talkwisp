@@ -1866,6 +1866,14 @@ The third is the nastiest, because it *did* go red — for a reason that had
 nothing to do with the thing under test. Red is not evidence either; **a control
 has to fail for the stated reason.**
 
+**It recurred while this section was being written.** The very next command after
+saving these paragraphs was a probe of `app/escalation.py` that used
+`load_dotenv()` from stdin, died before reaching the code under test, and proved
+nothing — a fourth instance, inside the hour, by the person writing the rule
+about it. That is better evidence than the three cases above: the failure is not
+carelessness that more attention would fix, it is structural. The setup is not
+where anyone is looking.
+
 ### What this looks like in practice
 
 ```python
