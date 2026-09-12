@@ -219,10 +219,18 @@ admin.execute(
     " values ('CheckTenancy', 'checktenancy', 'holat', 'holat',"
     " 'faqat B uchun', 'faqat b uchun', true, %s)", (BUSINESS_B,))
 
+# retrievable_fact, NOT fact. /stats counts what the agent can actually answer
+# with, which excludes the reserved payment subject and anything expired.
+# Counting `fact` here made the check read a different object than the endpoint
+# -- it failed by exactly nine, the payment rows, on a correct change.
+#
+# Still a real tenancy assertion: this side filters by business_id explicitly as
+# the admin role, the endpoint gets there through RLS. An endpoint that lost its
+# tenant scoping would still diverge.
 a_confirmed, a_waiting = admin.execute(
     "select count(*) filter (where confirmed),"
-    " count(*) filter (where not confirmed) from fact where business_id = %s",
-    (BUSINESS_A,)).fetchone()
+    " count(*) filter (where not confirmed) from retrievable_fact"
+    " where business_id = %s", (BUSINESS_A,)).fetchone()
 a_sources = admin.execute(
     "select count(*) from source where business_id = %s",
     (BUSINESS_A,)).fetchone()[0]

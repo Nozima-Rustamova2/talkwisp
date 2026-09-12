@@ -153,11 +153,23 @@ def stats(business: Business) -> dict:
 
     Note what these counts do NOT say any more, and did not need editing to stop
     saying: they are this business's, because the rows the query can see are.
+
+    COUNTED FROM THE VIEW, not from `fact`, for the reason the paragraph above
+    already gives. An expired fact is not one the agent will answer with, so
+    counting it would make this number mean "rows we have" rather than "things
+    it knows" -- which is the exact distinction the confirmed/unconfirmed split
+    exists to preserve.
+
+    That also drops the reserved payment row from the count, which was always
+    true of it and never reflected here: it is excluded from retrieval by
+    design, so the agent has never been able to answer with it either. One fewer
+    than yesterday on a business that stores card details, and the smaller
+    number is the honest one.
     """
     with connection(business) as conn:
         confirmed, waiting = conn.execute(
             "select count(*) filter (where confirmed),"
-            "       count(*) filter (where not confirmed) from fact"
+            "       count(*) filter (where not confirmed) from retrievable_fact"
         ).fetchone()
         source_count = conn.execute("select count(*) from source").fetchone()[0]
         last = conn.execute(

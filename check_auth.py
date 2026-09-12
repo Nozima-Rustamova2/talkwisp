@@ -158,7 +158,9 @@ me = client.get("/auth/me").json()
 check("/auth/me names the business", me["email"], EMAIL)
 check("and it is the session's business, not a default",
       client.get("/stats").json()["facts"],
-      admin.execute("select count(*) from fact where business_id = %s"
+      # retrievable_fact: /stats counts what the agent can answer with,
+        # not every row. See the note in check_tenancy.
+        admin.execute("select count(*) from retrievable_fact where business_id = %s"
                     " and confirmed", (BUSINESS,)).fetchone()[0])
 
 # ---------------------------------------------------------------------------

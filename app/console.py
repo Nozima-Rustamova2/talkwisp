@@ -257,8 +257,19 @@ def suggestions(conn: Connection, limit: int = 3) -> list[dict]:
     promises these have answers, so a suggestion that fails would make the
     product lie on the first screen the owner sees.
     """
+    # FROM THE VIEW, NOT FROM `fact`, and this is the one place in the codebase
+    # where that distinction had to be made by hand.
+    #
+    # Every retrieval path selects from retrievable_fact and therefore inherits
+    # the payment exclusion and now the expiry filter. This query does not --
+    # it reads `fact` directly, so an expired promotion would still be turned
+    # into a suggested question, the customer would tap it, and the answer path
+    # would refuse. That breaks the one promise this screen makes: the strings
+    # above say these have answers in what the owner added.
+    #
+    # A suggestion that then refuses is worse than offering none.
     rows = conn.execute(
-        "select subject, attribute, attribute_key from fact"
+        "select subject, attribute, attribute_key from retrievable_fact"
         " where confirmed order by created_at"
     ).fetchall()
 

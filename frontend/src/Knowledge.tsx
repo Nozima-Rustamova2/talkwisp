@@ -202,8 +202,17 @@ export default function Knowledge() {
         {disputed > 0 && (
           <>
             {" · "}
-            <span style={{ color: "var(--danger, #a4362f)", fontWeight: 600 }}>
-              {disputed} contradict each other
+            {/* "TWO VALUES RECORDED", NOT "CONFLICT".
+                The check is "same subject and attribute, different values",
+                which catches a stale price and a legitimate early-bird price
+                identically -- and it cannot tell them apart. On the seeded
+                clinic it flags both a genuinely stale opening-hours pair AND
+                "1 200 000 so'm" beside "950 000 so'm (10 days before the group
+                starts)", where both are true under different conditions.
+                Wording it as a conflict would teach an owner to delete the
+                second one. */}
+            <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>
+              {disputed} have more than one value
             </span>
           </>
         )}
@@ -257,8 +266,15 @@ export default function Knowledge() {
                 {group.subject}
               </span>
               {group.disputes > 0 && (
-                <span className="tag tag-caution">
-                  {group.disputes} disagree
+                <span
+                  className="tag"
+                  title={
+                    "Two or more facts answer the same thing differently. " +
+                    "That may be out of date, or deliberate — a price that " +
+                    "depends on when you book, for instance."
+                  }
+                >
+                  {group.disputes} values recorded
                 </span>
               )}
             </div>
@@ -272,8 +288,11 @@ export default function Knowledge() {
                   /* The disagreement is marked on the row, not only counted on
                      the subject -- the count tells you there is a problem, the
                      stripe tells you which two rows it is between. */
+                  /* A marker, not an alarm. Neutral rather than red, because
+                     the screen does not know which of the two is wrong -- or
+                     whether either is. */
                   borderLeft: fact.disputed
-                    ? "3px solid var(--danger, #a4362f)"
+                    ? "3px solid var(--accent-pressed, #2f6f4f)"
                     : undefined,
                   paddingLeft: fact.disputed ? 10 : undefined,
                   marginLeft: fact.disputed ? -13 : undefined,
