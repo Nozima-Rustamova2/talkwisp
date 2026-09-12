@@ -32,7 +32,9 @@ EXCERPT_CHARS = 400
 _ALL = """
 select f.id, f.subject, f.subject_key, f.attribute, f.attribute_key, f.value,
        f.confirmed, f.source_id, s.label, s.filename, s.kind,
-       left(s.content, %(chars)s), f.created_at, f.updated_at
+       left(s.content, %(chars)s), f.created_at, f.updated_at,
+       f.expires_at, f.expires_at is not null and f.expires_at <= now(),
+       f.expected_multiple
   from fact f
   left join source s on s.id = f.source_id
  order by f.subject, f.attribute
@@ -69,13 +71,23 @@ def everything(conn: Connection) -> list[dict]:
     # answer is a fact about this result set, and asking the database again
     # would be asking a question this data already answers.
     values: dict[tuple, set] = {}
+    dismissed: set = set()
     for r in rows:
-        values.setdefault((r[2], r[4]), set()).add(r[5])
-    disputed = {k for k, v in values.items() if len(v) > 1}
+        pair = (r[2], r[4])
+        # An EXPIRED fact does not disagree with a live one -- it used to be
+        # true and now is not, which is the ordinary way a price changes rather
+        # than a contradiction to resolve. Counting it would mean every
+        # correctly-expired promotion raised a flag forever.
+        if not r[15]:
+            values.setdefault(pair, set()).add(r[5])
+        if r[16]:
+            dismissed.add(pair)
+    disputed = {k for k, v in values.items() if len(v) > 1} - dismissed
 
     groups: dict[str, dict] = {}
     for (fid, subject, subject_key, attribute, attribute_key, value, confirmed,
-         source_id, label, filename, kind, excerpt, created, updated) in rows:
+         source_id, label, filename, kind, excerpt, created, updated,
+         expires_at, expired, expected_multiple) in rows:
         group = groups.setdefault(subject_key, {"subject": subject,
                                                 "subject_key": subject_key,
                                                 "facts": []})
@@ -97,6 +109,12 @@ def everything(conn: Connection) -> list[dict]:
                         "excerpt": excerpt} if source_id else None),
             "created_at": created.isoformat() if created else None,
             "updated_at": updated.isoformat() if updated else None,
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            # EXPIRED FACTS ARE STILL LISTED, marked. The whole point of not
+            # deleting them is that the owner can see what happened and why the
+            # agent stopped saying it -- filtering them out of the owner's own
+            # view would recreate the invisibility this screen exists to fix.
+            "expired": expired,
         })
     for group in groups.values():
         group["disputes"] = sum(1 for f in group["facts"] if f["disputed"])
@@ -159,6 +177,65 @@ def edit_confirmed(conn: Connection, fact_id: str, subject: str | None = None,
     return {"id": fact_id, "subject": subject, "attribute": attribute,
             "value": value, "confirmed": confirmed,
             "reembedded": vector is not None}
+
+
+def set_expiry(conn: Connection, fact_id: str, expires_at: str | None) -> dict | None:
+    """Give a fact an end date, move it, or take it away entirely.
+
+    None clears it, which is how "reactivate" works: an expired fact is not
+    deleted, so putting it back in service is removing the date rather than
+    retyping the fact.
+
+    Clears expiry_notified_at at the same time, and that matters. Extending a
+    promotion whose warning already went out must arm the warning again, or the
+    second expiry passes in silence -- the owner would be told once, ever, about
+    a fact they kept extending.
+    """
+    row = conn.execute(
+        "update fact set expires_at = %s::timestamptz, expiry_notified_at = null,"
+        " updated_at = now() where id = %s"
+        " returning id, expires_at", (expires_at, fact_id)).fetchone()
+    if row is None:
+        return None
+    return {"id": str(row[0]),
+            "expires_at": row[1].isoformat() if row[1] else None}
+
+
+def set_expected_multiple(conn: Connection, subject_key: str,
+                          attribute_key: str, expected: bool) -> int:
+    """Mark a subject+attribute as deliberately holding several values.
+
+    Set on EVERY row of the pair, because the property belongs to the pair
+    rather than to either fact. "1 200 000 so'm" and "950 000 so'm (10 days
+    before the group starts)" are both true, and neither one is the one that is
+    intentional.
+    """
+    rows = conn.execute(
+        "update fact set expected_multiple = %s"
+        " where subject_key = %s and attribute_key = %s returning id",
+        (expected, subject_key, attribute_key)).fetchall()
+    return len(rows)
+
+
+def expiring_soon(conn: Connection, within_hours: int) -> list[dict]:
+    """Facts about to lapse that the owner has not been warned about.
+
+    Claims them as it returns them -- expiry_notified_at is stamped in the same
+    statement -- so a sweep that runs every five minutes tells the owner once
+    rather than 576 times. The same reasoning as pinging once per escalation
+    rather than once per waiting customer.
+    """
+    rows = conn.execute(
+        "update fact set expiry_notified_at = now()"
+        " where id in ("
+        "   select id from fact"
+        "    where expires_at is not null and expiry_notified_at is null"
+        "      and expires_at > now()"
+        "      and expires_at <= now() + make_interval(hours => %s))"
+        " returning id, subject, attribute, value, expires_at",
+        (within_hours,)).fetchall()
+    return [{"id": str(r[0]), "subject": r[1], "attribute": r[2],
+             "value": r[3], "expires_at": r[4]} for r in rows]
 
 
 def remove(conn: Connection, fact_id: str) -> bool:

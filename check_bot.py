@@ -75,14 +75,20 @@ ast.parse(SOURCE)
 # it was added, this check reported `skip` as unhandled while `ans` vanished
 # entirely, because both are dispatched by `action in ESCALATION_ACTIONS` and
 # only one also happens to appear in an `action == "..."` literal.
-ID_ACTIONS = set(bot.ORDER_ACTIONS) | set(bot.ESCALATION_ACTIONS)
+# Three families now. Each time one is added this check goes red with the
+# new action named, which is the behaviour worth having -- an unclassified
+# action is owner-only by default, and that default should be a decision
+# rather than an accident.
+ID_ACTIONS = (set(bot.ORDER_ACTIONS) | set(bot.ESCALATION_ACTIONS)
+              | set(bot.EXPIRY_ACTIONS))
 HANDLED = (set(re.findall(r'if action == "(\w+)"', SOURCE))
            | ID_ACTIONS)
 
 # Named here so the check states what it believes rather than deriving it from
 # the thing under test. If orders ever become owner-initiated, this line is
 # what should fail.
-OWNER_ONLY = {"drop", "pick", "save", "conf", "rej", "rejr", "ans", "skip"}
+OWNER_ONLY = {"drop", "pick", "save", "conf", "rej", "rejr", "ans", "skip",
+              "ext", "letexp"}
 
 print("\nthe callback permission model")
 

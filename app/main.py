@@ -407,6 +407,46 @@ def edit_confirmed_fact(business: Business, fact_id: str,
     return result
 
 
+@app.put("/fact/{fact_id}/expiry")
+def set_fact_expiry(business: Business, fact_id: str,
+                    expires_at: str | None = None) -> dict:
+    """Give a fact an end date, change it, or clear it.
+
+    DASHBOARD ONLY, deliberately. The Telegram /fact path keeps writing facts
+    with no expiry, because getting a date out of free text means either a
+    fourth field for the parser to extract -- "20% chegirma martgacha" -- or
+    command syntax an owner has to remember. A misparsed date silently expires
+    a fact early or never, and neither failure announces itself. A date picker
+    on a screen is the right place for something set deliberately and rarely.
+
+    Omitting expires_at clears it, which is how reactivating works: an expired
+    fact was never deleted, so putting it back in service is removing the date.
+    """
+    with connection(business) as conn:
+        result = knowledge.set_expiry(conn, fact_id, expires_at)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No such fact.")
+    return result
+
+
+@app.put("/knowledge/expected-multiple")
+def mark_expected_multiple(business: Business, subject_key: str,
+                           attribute_key: str, expected: bool = True) -> dict:
+    """Say that a subject+attribute is meant to hold several values.
+
+    The knowledge base flags "same subject and attribute, different values",
+    which cannot tell a stale price from a conditional one -- "1 200 000 so'm"
+    beside "950 000 so'm (10 days before the group starts)" are both true. This
+    is how an owner says so, and it applies to the pair rather than to a fact.
+    """
+    with connection(business) as conn:
+        touched = knowledge.set_expected_multiple(conn, subject_key,
+                                                  attribute_key, expected)
+    if not touched:
+        raise HTTPException(status_code=404, detail="No facts match that.")
+    return {"facts": touched, "expected_multiple": expected}
+
+
 @app.delete("/fact/{fact_id}")
 def delete_fact(business: Business, fact_id: str) -> dict:
     """Remove a fact outright. A real delete, not a soft one."""

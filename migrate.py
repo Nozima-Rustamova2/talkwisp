@@ -130,6 +130,88 @@ def link_env_to_business(conn: psycopg.Connection) -> None:
     print("  linked TELEGRAM_BOT_TOKEN to the single business row")
 
 
+# Objects the app role is DELIBERATELY unable to read. 0008 grants it nothing on
+# these two -- they hold session ids and magic-link hashes, and access goes
+# exclusively through SECURITY DEFINER functions. Protection by absence of
+# privilege, which is stronger than a policy.
+UNGRANTED = {"session", "login_token", "schema_migrations"}
+
+
+def smoke_test(admin) -> None:
+    """After migrating, prove the APP can still read what it reads.
+
+    WHY THIS EXISTS. 0015 dropped and recreated retrievable_fact to add the
+    expiry clause. A dropped view takes its privileges with it, so the recreated
+    one was a new object talkwisp_app could not read -- every retrieval path in
+    the product dead, in production, while this script printed "applied
+    0015_expiry.sql" and exited zero.
+
+    It was caught by a probe afterwards, not by anything here. That is a class
+    rather than an instance: any migration that drops and recreates an object,
+    or revokes, or renames, can succeed as the owner and break the application.
+
+    > Green from the tool that performed the change is not evidence the change
+    > worked.
+
+    So this connects AS THE APP ROLE -- the whole point, since the migration ran
+    as the owner and the owner could read it fine -- and checks two things.
+
+    DERIVED, NOT LISTED. It asks the database which tables and views exist and
+    asserts the app role can select from each, except the handful it is
+    deliberately barred from. A seventh table added without a grant fails here
+    on the day it is written, rather than on the day a customer notices.
+    """
+    app_url = os.getenv("DATABASE_URL")
+    if not app_url:
+        print("  (no DATABASE_URL, skipping the smoke test)")
+        return
+
+    objects = [
+        (r[0], r[1]) for r in admin.execute(
+            "select c.relname, c.relkind from pg_class c"
+            " join pg_namespace n on n.oid = c.relnamespace"
+            " where n.nspname = 'public' and c.relkind in ('r', 'v')"
+            " order by c.relname").fetchall()
+    ]
+    missing = [
+        name for name, _ in objects
+        if name not in UNGRANTED
+        and not admin.execute(
+            "select has_table_privilege(%s, %s, 'SELECT')",
+            (os.environ.get("TALKWISP_APP_ROLE", "talkwisp_app"), name)
+        ).fetchone()[0]
+    ]
+    if missing:
+        raise SystemExit(
+            f"\nMIGRATION APPLIED BUT THE APP CANNOT READ: {', '.join(missing)}\n"
+            "  The schema changed and a grant did not survive it. A dropped view\n"
+            "  or table loses its privileges; the recreated one is a new object.\n"
+            "  Add the grant to the migration that created it, then re-run.\n")
+
+    # And one real read, through the app role, with a tenant bound -- because a
+    # grant proves the privilege exists and not that the query still works. RLS
+    # needs app.business_id set, which is exactly how the application reads.
+    biz = admin.execute("select id from business limit 1").fetchone()
+    if biz is None:
+        print(f"  smoke: {len(objects) - len(UNGRANTED & {o for o, _ in objects})}"
+              " object(s) readable by the app role (no business yet, so no read)")
+        return
+    with psycopg.connect(app_url, autocommit=True) as app:
+        app.execute("select set_config('app.business_id', %s, false)",
+                    (str(biz[0]),))
+        for name, kind in objects:
+            if name in UNGRANTED:
+                continue
+            try:
+                app.execute(f"select 1 from {name} limit 1")
+            except Exception as exc:  # noqa: BLE001
+                raise SystemExit(
+                    f"\nMIGRATION APPLIED BUT `select from {name}` FAILS AS THE "
+                    f"APP ROLE:\n  {exc}\n") from None
+    print(f"  smoke: the app role can read all "
+          f"{len([o for o, _ in objects if o not in UNGRANTED])} objects")
+
+
 def main() -> None:
     user, password = app_credentials()
 
@@ -154,6 +236,7 @@ def main() -> None:
             print(f"  applied {path.name}")
 
         link_env_to_business(conn)
+        smoke_test(conn)
 
 
 if __name__ == "__main__":

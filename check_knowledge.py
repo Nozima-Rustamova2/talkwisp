@@ -15,6 +15,7 @@ Without the negative half, "the embedding changed" is a fact about one update
 statement rather than about the bug it fixes.
 """
 
+import datetime
 import os
 import sys
 
@@ -188,6 +189,88 @@ def run(admin, biz: str) -> None:
                         (priced,)).fetchone()[0], 0)
     check("deleting it again is a 404",
           client.delete(f"/fact/{priced}").status_code, 404)
+
+    print("\n5b. EXPIRY: not retrieved, not deleted, and warned about once")
+    with connection(biz) as conn:
+        promo = seed(conn, "Kurs", "chegirma", "20% chegirma")
+
+    def retrievable(fid):
+        with connection(biz) as conn:
+            return conn.execute(
+                "select count(*) from retrievable_fact where id = %s",
+                (fid,)).fetchone()[0]
+
+    check("a fact with no expiry is retrievable", retrievable(promo), 1)
+
+    # The rule, both halves.
+    client.put(f"/fact/{promo}/expiry",
+               params={"expires_at": "2020-01-01T00:00:00+00:00"})
+    check("an expired fact is NOT retrievable", retrievable(promo), 0)
+    check("but the row is still there -- the owner can see what happened",
+          admin.execute("select count(*) from fact where id = %s",
+                        (promo,)).fetchone()[0], 1)
+    shown = [f for g in client.get("/knowledge").json() for f in g["facts"]
+             if f["id"] == promo]
+    check("and the knowledge base still lists it", len(shown), 1)
+    check("marked expired", shown[0]["expired"], True)
+
+    # Reactivating is clearing the date, not retyping the fact.
+    client.put(f"/fact/{promo}/expiry")
+    check("clearing the expiry puts it back in service", retrievable(promo), 1)
+
+    print("\n5c. The owner is warned ONCE, and extending re-arms the warning")
+    with connection(biz) as conn:
+        conn.execute("update fact set expires_at = now() + interval '20 hours',"
+                     " expiry_notified_at = null where id = %s", (promo,))
+        first = knowledge.expiring_soon(conn, 48)
+        second = knowledge.expiring_soon(conn, 48)
+    check("the first sweep finds it", [f["id"] for f in first], [promo])
+    # Without this, a five-minute sweep would tell the owner 576 times a day.
+    check("the second finds nothing -- it was claimed as it was read",
+          second, [])
+
+    with connection(biz) as conn:
+        knowledge.set_expiry(
+            conn, promo,
+            (datetime.datetime.now(datetime.UTC)
+             + datetime.timedelta(hours=20)).isoformat())
+        third = knowledge.expiring_soon(conn, 48)
+    # Extending a promotion whose warning already went out must arm it again,
+    # or the second expiry passes in silence.
+    check("extending re-arms the warning", [f["id"] for f in third], [promo])
+
+    print("\n5d. An expired fact does not count as disagreeing with a live one")
+    with connection(biz) as conn:
+        rival2 = seed(conn, "Kurs", "chegirma", "10% chegirma")
+        conn.execute("update fact set expires_at = null where id = %s", (promo,))
+    kurs = next(g for g in client.get("/knowledge").json()
+                if g["subject"] == "Kurs")
+    check("two live values disagree", kurs["disputes"], 2)
+    with connection(biz) as conn:
+        conn.execute("update fact set expires_at = now() - interval '1 day'"
+                     " where id = %s", (rival2,))
+    kurs = next(g for g in client.get("/knowledge").json()
+                if g["subject"] == "Kurs")
+    # A price that correctly expired is the ordinary way a price changes, not a
+    # contradiction to resolve -- flagging it would mean every expired promotion
+    # raised a flag forever.
+    check("once one expires, they do not", kurs["disputes"], 0)
+
+    print("\n5e. A pair can be marked as deliberately multi-valued")
+    with connection(biz) as conn:
+        conn.execute("update fact set expires_at = null where id = %s", (rival2,))
+    check("disagreeing again",
+          next(g for g in client.get("/knowledge").json()
+               if g["subject"] == "Kurs")["disputes"], 2)
+    marked = client.put("/knowledge/expected-multiple",
+                        params={"subject_key": "kurs",
+                                "attribute_key": "chegirma"})
+    check("marking applies to the whole pair", marked.json()["facts"], 2)
+    check("and the flag clears",
+          next(g for g in client.get("/knowledge").json()
+               if g["subject"] == "Kurs")["disputes"], 0)
+    with connection(biz) as conn:
+        conn.execute("delete from fact where id in (%s, %s)", (promo, rival2))
 
     print("\n6. Aliases, which nothing in the product could create before")
     check("none to start", client.get("/alias").json(), [])

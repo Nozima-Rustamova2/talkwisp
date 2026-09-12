@@ -34,7 +34,7 @@ import httpx
 import psycopg
 from dotenv import load_dotenv
 
-from app import buy, console, escalation, orders, payment
+from app import buy, console, escalation, knowledge, orders, payment
 from app.answer import answer, detect_language
 from app.followup import rewrite
 from app.db import (assert_app_role, business_by_name,
@@ -399,6 +399,11 @@ CUSTOMER_ACTIONS = frozenset({"order", "who", "shot", "esc"})
 # mis-targeted reply sends one customer's answer to another.
 ESCALATION_ACTIONS = frozenset({"ans", "skip"})
 
+# The expiry warning's two buttons. Owner-only by default -- they are not in
+# CUSTOMER_ACTIONS, and the allowlist above makes anything unclassified
+# owner-only rather than public.
+EXPIRY_ACTIONS = frozenset({"ext", "letexp"})
+
 # Owner-only, and they carry the order id in callback_data instead of a PENDING
 # token so they keep working across a restart -- the owner may confirm a day
 # later, and a Confirm button that died with the process would strand money.
@@ -560,6 +565,30 @@ def handle_callback(conn, cq):
     # dies with the process. The customer's "esc" is NOT here -- it is a token
     # action and lives with drop/pick/save below, where _KIND_FOR refuses a
     # token from the wrong flow.
+    if action in EXPIRY_ACTIONS:
+        # Same family as the escalation buttons: the fact id travels in
+        # callback_data, so the owner can act on a warning an hour later, after
+        # a restart, and PENDING dying with the process costs nothing.
+        if action == "ext":
+            with connection(BUSINESS_ID) as conn:
+                row = conn.execute(
+                    "update fact set expires_at = greatest(expires_at, now())"
+                    " + interval '30 days', expiry_notified_at = null,"
+                    " updated_at = now() where id = %s"
+                    " returning expires_at", (token,)).fetchone()
+            answer_callback(cq["id"])
+            if row is None:
+                edit_here("Bu maʼlumot endi yoʻq.")
+            else:
+                edit_here(f"Uzaytirildi: {row[0]:%d.%m.%Y} gacha.")
+            return
+        with connection(BUSINESS_ID) as conn:
+            conn.execute("update fact set expiry_notified_at = now()"
+                         " where id = %s", (token,))
+        answer_callback(cq["id"])
+        edit_here("Yaxshi \u2014 oʻz vaqtida tugaydi.")
+        return
+
     if action in ESCALATION_ACTIONS:
         row = escalation.get(conn, token)
         if row is None or row["status"] in ("answered", "expired"):
@@ -1546,6 +1575,54 @@ SWEEP_SECONDS = 300
 _last_sweep = 0.0
 
 
+# How far ahead the owner is warned. Two days, once.
+#
+# A promotion expiring at midnight silently changes what customers are told, and
+# the owner finds out when someone quotes the old price back at them. Two days
+# is enough to decide and act without being so early it is forgotten.
+EXPIRY_WARN_HOURS = 48
+
+
+_last_expiry_sweep = 0.0
+
+
+def sweep_expiring(force: bool = False) -> None:
+    """Tell the owner about facts that lapse soon. Once each.
+
+    Shares the escalation sweep's cadence and its rules: never fatal, because a
+    bot that stopped answering customers over a housekeeping failure would be
+    the reporting breaking the thing it reports on.
+
+    expiring_soon() stamps expiry_notified_at as it selects, in one statement,
+    so a five-minute sweep tells the owner once rather than 576 times.
+    """
+    global _last_expiry_sweep
+    if not OWNER_ID:
+        return
+    now = time.monotonic()
+    if not force and now - _last_expiry_sweep < SWEEP_SECONDS:
+        return
+    _last_expiry_sweep = now
+    try:
+        with connection(BUSINESS_ID) as conn:
+            due = knowledge.expiring_soon(conn, EXPIRY_WARN_HOURS)
+        for fact in due:
+            when = fact["expires_at"].strftime("%d.%m %H:%M")
+            send_kb(
+                int(OWNER_ID),
+                f"{BUSINESS_NAME or 'Agent'} \u2014 bu maʼlumot tugaydi\n\n"
+                f"\u00ab{fact['subject']} / {fact['attribute']} / "
+                f"{fact['value']}\u00bb\n\n"
+                f"Tugash vaqti: {when}\n"
+                "Shundan keyin agent buni aytmaydi.",
+                keyboard([[("Yana 30 kun", f"ext:{fact['id']}"),
+                           ("Tugasin", f"letexp:{fact['id']}")]]))
+            print(f"warned owner: {fact['subject']} / {fact['attribute']}",
+                  flush=True)
+    except Exception as exc:  # noqa: BLE001 - housekeeping is never fatal
+        print(f"expiry sweep failed (not fatal): {exc!r}", flush=True)
+
+
 def sweep_escalations(force: bool = False) -> None:
     """Time out anything the owner never answered, and tell the customer.
 
@@ -1706,6 +1783,7 @@ def main() -> None:
             # reporting it as dead would send the owner to fix the wrong thing.
             heartbeat()
             sweep_escalations()
+            sweep_expiring()
             try:
                 params = {"timeout": POLL_TIMEOUT}
                 if offset is not None:
