@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
+import Knowledge from "./Knowledge";
 import Review from "./Review";
 import Settings from "./Settings";
 import SignIn from "./SignIn";
@@ -18,7 +19,7 @@ import { getMe, logout, setSpendingAllowed, type Me } from "./api";
  *
  * No router library for two screens. */
 
-type Route = "add" | "review" | "test" | "settings";
+type Route = "add" | "review" | "knowledge" | "test" | "settings";
 
 /* FOUR ITEMS, NOT SEVEN.
  *
@@ -35,6 +36,7 @@ type Route = "add" | "review" | "test" | "settings";
 function routeFromHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
   if (hash === "review") return "review";
+  if (hash === "knowledge") return "knowledge";
   if (hash === "test") return "test";
   if (hash === "settings") return "settings";
   return "add";
@@ -85,11 +87,13 @@ export default function App() {
         ? "Sign in — Talkwisp"
         : route === "review"
           ? "Review — Talkwisp"
-          : route === "test"
-            ? "Test — Talkwisp"
-            : route === "settings"
-              ? "Settings — Talkwisp"
-              : "Add knowledge — Talkwisp";
+          : route === "knowledge"
+            ? "Knowledge — Talkwisp"
+            : route === "test"
+              ? "Test — Talkwisp"
+              : route === "settings"
+                ? "Settings — Talkwisp"
+                : "Add — Talkwisp";
   }, [route, me]);
 
   /* EVERY HOOK ABOVE THIS LINE, EVERY RETURN BELOW IT.
@@ -196,8 +200,14 @@ export default function App() {
             rail in the prototype points at five of those, and an inert nav is
             the dishonesty the design docs argue against. */}
         <nav style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-          {tab("add", "Add knowledge")}
+          {/* "Add knowledge" became "Add" when "Knowledge" arrived beside it.
+              Two items both saying knowledge is the kind of thing that reads
+              fine to whoever wrote it and is a coin-flip for everyone else --
+              and these two are genuinely different places: one is where you
+              feed the agent, the other is where you see and fix what it knows. */}
+          {tab("add", "Add")}
           {tab("review", "Review")}
+          {tab("knowledge", "Knowledge")}
           {tab("test", "Test")}
           {tab("settings", "Settings")}
           {/* The signed-in address, and a way out. Shown because a session that
@@ -235,6 +245,8 @@ export default function App() {
       {waiting}
       {route === "review" ? (
         <Review />
+      ) : route === "knowledge" ? (
+        <Knowledge />
       ) : route === "test" ? (
         <TestConsole />
       ) : route === "settings" ? (

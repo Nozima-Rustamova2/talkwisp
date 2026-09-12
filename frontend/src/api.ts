@@ -374,6 +374,102 @@ export const consoleFeedback = (
     { method: "POST" },
   );
 
+/* --- the knowledge base --------------------------------------------------
+ *
+ * /review serves `where not confirmed`, so until these existed a fact became
+ * invisible to the whole API the moment it was confirmed. This is the other
+ * half: what the agent actually knows.
+ */
+
+export type KnowledgeFact = {
+  id: string;
+  attribute: string;
+  value: string;
+  confirmed: boolean;
+  /* Another fact answers this same subject and attribute differently. BOTH
+   * sides carry it, because neither is knowably the wrong one -- the screen
+   * shows them together and the owner decides. */
+  disputed: boolean;
+  /* The same two-case vocabulary as Review and the test console. A typed fact
+   * has no source BY DESIGN; that is not missing data. */
+  origin: "typed" | "extracted";
+  source: {
+    id: string;
+    label: string | null;
+    filename: string | null;
+    kind: string;
+    excerpt: string | null;
+  } | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type KnowledgeGroup = {
+  subject: string;
+  subject_key: string;
+  facts: KnowledgeFact[];
+  /* How many facts under this subject are contradicted. The server sorts
+   * groups with disputes first. */
+  disputes: number;
+};
+
+export type Alias = {
+  id: string;
+  subject: string | null;
+  subject_key: string;
+  alias: string;
+  confirmed: boolean;
+  origin: "typed" | "extracted";
+  created_at: string | null;
+};
+
+/* Everything, in one response. No pagination and no server-side search: the
+ * largest live business is 140 facts across 25 subjects, and filtering in the
+ * browser is instant. app/knowledge.py states the size at which that stops
+ * being true. */
+export const getKnowledge = () => request<KnowledgeGroup[]>("/knowledge");
+
+/* SPENDS an embedding when the fact is confirmed. Editing the text without
+ * moving the vector would leave the agent matching on the old wording forever
+ * -- the row would show the new price and still be found by a question about
+ * the old one. Nothing errors when that happens, which is why it is worth the
+ * call. */
+/* NOT editFact -- that name is taken by Review's proposal edit above, and the
+ * two are deliberately different actions. review.reject() states the same
+ * distinction for deletion: correcting a proposal and changing what the business
+ * says is true do not share an endpoint. They should not share a name either. */
+export const editConfirmedFact = (
+  id: string,
+  fields: { subject?: string; attribute?: string; value?: string },
+) =>
+  request<{ id: string; confirmed: boolean; reembedded: boolean }>(
+    `/fact/${id}?${q(fields as Record<string, string>)}`,
+    { method: "PATCH" },
+  );
+
+/* A real delete, not a soft one. Expiry is the soft option and it is a separate
+ * feature; having both would make "gone" ambiguous. */
+export const deleteFact = (id: string) =>
+  request<{ id: string; deleted: boolean }>(`/fact/${id}`, {
+    method: "DELETE",
+  });
+
+export const getAliases = () => request<Alias[]>("/alias");
+
+/* Refused with a 400 if the subject has no facts, because an alias for a
+ * subject that does not exist could never match anything and creating one
+ * silently would look like it worked. */
+export const addAlias = (subjectKey: string, alias: string) =>
+  request<{ id: string | null; alias: string; already: boolean }>(
+    `/alias?${q({ subject_key: subjectKey, alias })}`,
+    { method: "POST" },
+  );
+
+export const deleteAlias = (id: string) =>
+  request<{ id: string; deleted: boolean }>(`/alias/${id}`, {
+    method: "DELETE",
+  });
+
 /* --- the Telegram channel ------------------------------------------------ */
 
 export type Channel = {
