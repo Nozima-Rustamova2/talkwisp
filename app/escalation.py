@@ -24,6 +24,7 @@ import json
 
 from psycopg import Connection
 
+from app.answer import SIMILARITY_FLOOR
 from app.normalize import normalize
 
 # After this, an escalation stops being an escalation. The customer hears once
@@ -58,6 +59,13 @@ def snapshot(turns: list, result: dict, language: str) -> dict:
         nearest = f"{top['subject']} / {top['attribute']}"
     return {
         "language": language,
+        # CAPTURED, so the message can COMPARE rather than assert. The first
+        # version printed the score followed by a hardcoded "below the
+        # threshold" -- and against real data the score was 0.724 against a 0.55
+        # floor, so the one line meant to tell the owner which problem they had
+        # told them the wrong one. An owner reading it would have gone and added
+        # a fact they already have.
+        "floor": SIMILARITY_FLOOR,
         # Newest last, and only the last two: the turn before the question is
         # what makes "is there a discount for kids" answerable, and a long
         # history is noise in a phone notification.

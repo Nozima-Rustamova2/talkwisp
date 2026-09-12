@@ -1030,12 +1030,20 @@ def with_takeover(conn, chat_id: int, text: str,
     """
     offer = bool(OWNER_ID) and not escalation.waiting_for_chat(conn, chat_id)
 
-    if result.get("answer"):
-        # The model's own refusal, in the customer's language. Not ours to
-        # rewrite, and it does not say "contact us directly" anyway.
-        reply = result["answer"]
-    elif offer:
+    if offer:
+        # SHORT, WHATEVER THE SOURCE. The previous version kept the model's own
+        # refusal on the grounds that it "does not say contact us directly
+        # anyway" -- a premise written as a comment and never checked. Against
+        # real data the model said exactly that: "Iltimos, qoʻshimcha maʼlumot
+        # olish uchun biz bilan bevosita bogʻlaning", directly above a button
+        # offering to pass the question on.
+        #
+        # The model's sentence is not sacred when it contradicts the control
+        # underneath it. The admission of not knowing is what matters and it is
+        # in both.
         reply = _say(DONT_KNOW_SHORT, DONT_KNOW_SHORT_DEFAULT, text)
+    elif result.get("answer"):
+        reply = result["answer"]
     else:
         reply = _say(DONT_KNOW, DONT_KNOW_DEFAULT, text)
 
@@ -1125,9 +1133,27 @@ def notify_owner_escalation(row: dict) -> None:
 
     lines.append("")
     best = ctx.get("best_similarity")
+    floor = ctx.get("floor")
     if best and ctx.get("nearest"):
-        lines.append(f"Eng yaqini: {ctx['nearest']} ({best}) \u2014 "
-                     "chegaradan past.")
+        # TWO DIFFERENT PROBLEMS, and the owner acts differently on each.
+        #
+        # Below the floor: nothing came close, so this is knowledge that is
+        # missing -- add it.
+        #
+        # ABOVE the floor: something retrieved perfectly well and the agent
+        # still would not answer from it. The knowledge is adjacent rather than
+        # absent, and adding another fact is the wrong move; the existing one
+        # needs re-wording, or the question is asking for something the fact
+        # does not actually contain.
+        #
+        # The first version asserted "below the threshold" for both, and against
+        # real data it was the second case: 0.724 against a 0.55 floor.
+        if floor is not None and best > floor:
+            lines.append(f"Eng yaqini: {ctx['nearest']} ({best}) \u2014 "
+                         "topildi, lekin shundan javob bera olmadim.")
+        else:
+            lines.append(f"Eng yaqini: {ctx['nearest']} ({best}) \u2014 "
+                         "chegaradan past.")
     else:
         lines.append("Bunga yaqin hech narsa topilmadi.")
 
