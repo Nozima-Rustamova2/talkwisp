@@ -204,8 +204,12 @@ def reconcile(children: dict[str, Child]) -> None:
 
 
 def main() -> None:
-    assert_app_role()
+    # POOL FIRST. assert_app_role() asks the database who it is connected as,
+    # so it needs a connection -- calling it first raised PoolClosed and the
+    # supervisor never started. app/main.py's lifespan has the same two lines in
+    # the opposite order, which is the order that works.
     pool.open()
+    assert_app_role()
     children: dict[str, Child] = {}
     stopping = collections.deque(maxlen=1)
 
