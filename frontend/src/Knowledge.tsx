@@ -33,6 +33,42 @@ import {
  * while typing. app/knowledge.py records the size at which that stops being
  * true, as a number, so whoever hits it knows it was a decision. */
 
+/* MASKED HERE, AND DELIBERATELY NOT ON THE PAYMENT DETAILS SCREEN.
+ *
+ * That screen removed masking on purpose: the card number is broadcast to every
+ * customer who asks to pay, so hiding it from the owner protects nothing, and a
+ * reveal tap costs something every time on a screen you visit precisely to
+ * check the number against your bank app.
+ *
+ * Both of those are still true. The difference is what this screen is for. You
+ * come here scanning for something else -- one of a hundred and sixty-seven
+ * facts -- and the card number appearing in that list is incidental. It ends up
+ * in the DOM, in a screenshot of a support conversation, on a shared screen,
+ * every time an owner looks for their opening hours.
+ *
+ * So: masked with a reveal, one tap, only on the row that is actually a card
+ * number. Matched on the value's shape rather than the attribute name, because
+ * the attribute is owner-written text -- "Karta raqami", "Card", "карта" -- and
+ * a list of names to match would miss the one somebody typed differently. */
+/* FOURTEEN DIGITS, not twelve, and the number matters. An Uzbek phone number
+ * with its country code is exactly twelve -- +998901234567 -- so a twelve-digit
+ * floor masked every clinic phone number on the screen, which are facts
+ * customers ask for and the owner needs to read at a glance. Cards here are
+ * sixteen (UZCARD, HUMO, Visa, Mastercard) or fifteen (Amex). Fourteen sits
+ * cleanly between the two.
+ *
+ * The trade: a thirteen-digit Visa, which exists and is rare and nearly extinct
+ * in Uzbekistan, would not be masked. Better than masking every phone number. */
+const CARD_LIKE = /(?:\d[ -]?){14,19}/;
+
+function maskCard(value: string): string {
+  return value.replace(CARD_LIKE, (run) => {
+    const digits = run.replace(/\D/g, "");
+    if (digits.length < 14) return run;
+    return `${digits.slice(0, 4)} •••• •••• ${digits.slice(-4)}`;
+  });
+}
+
 const BLOCKED =
   "Your account is not approved yet, so this is switched off. " +
   "We will email you when it is ready.";
@@ -49,6 +85,7 @@ export default function Knowledge() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [aliasFor, setAliasFor] = useState<string | null>(null);
   const [aliasText, setAliasText] = useState("");
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [dating, setDating] = useState<string | null>(null);
   const [dateText, setDateText] = useState("");
 
@@ -405,7 +442,23 @@ export default function Knowledge() {
                       <strong style={{ fontWeight: 600 }}>
                         {fact.attribute}
                       </strong>{" "}
-                      · {fact.value}
+                      ·{" "}
+                      {CARD_LIKE.test(fact.value) && !revealed[fact.id] ? (
+                        <>
+                          {maskCard(fact.value)}{" "}
+                          <button
+                            className="control control-quiet"
+                            style={{ fontSize: 12, padding: "0 6px" }}
+                            onClick={() =>
+                              setRevealed((r) => ({ ...r, [fact.id]: true }))
+                            }
+                          >
+                            show
+                          </button>
+                        </>
+                      ) : (
+                        fact.value
+                      )}
                       {!fact.confirmed && (
                         <span className="tag" style={{ marginLeft: 8 }}>
                           awaiting review
