@@ -7,6 +7,8 @@ import {
   editConfirmedFact,
   getAliases,
   getKnowledge,
+  markExpectedMultiple,
+  setExpiry,
   spendingAllowed,
   type Alias,
   type KnowledgeFact,
@@ -47,6 +49,8 @@ export default function Knowledge() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [aliasFor, setAliasFor] = useState<string | null>(null);
   const [aliasText, setAliasText] = useState("");
+  const [dating, setDating] = useState<string | null>(null);
+  const [dateText, setDateText] = useState("");
 
   async function load() {
     try {
@@ -138,6 +142,40 @@ export default function Knowledge() {
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't delete.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyExpiry(id: string, value: string | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      await setExpiry(id, value);
+      setDating(null);
+      setDateText("");
+      setNote(
+        value
+          ? "Set. The agent stops saying it after that date."
+          : "Expiry removed — the agent can use it again.",
+      );
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't set that.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markIntentional(subjectKey: string, attributeKey: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await markExpectedMultiple(subjectKey, attributeKey, true);
+      setNote("Noted — we won't flag those again.");
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't save that.");
     } finally {
       setBusy(false);
     }
@@ -277,6 +315,29 @@ export default function Knowledge() {
                   {group.disputes} values recorded
                 </span>
               )}
+              {group.disputes > 0 && (() => {
+                /* One button per disputed ATTRIBUTE, because the dismissal is
+                   about a subject+attribute pair rather than the subject. A
+                   salon whose prices are conditional and whose hours are stale
+                   should be able to say so about one and not the other. */
+                const keys = [
+                  ...new Set(
+                    group.facts.filter((f) => f.disputed).map((f) => f.attribute_key),
+                  ),
+                ];
+                return keys.map((key) => (
+                  <button
+                    key={key}
+                    className="control control-quiet"
+                    style={{ fontSize: 12 }}
+                    disabled={busy}
+                    title="Stop flagging this one — both values are meant to be here"
+                    onClick={() => void markIntentional(group.subject_key, key)}
+                  >
+                    “{key}” is meant to have both
+                  </button>
+                ));
+              })()}
             </div>
 
             {group.facts.map((fact) => (
@@ -351,6 +412,21 @@ export default function Knowledge() {
                         </span>
                       )}
                     </span>
+                    {/* EXPIRY, shown on the row it belongs to. An expired
+                        fact is still listed -- that is the whole reason it is
+                        not deleted -- so the row has to say plainly that the
+                        agent has stopped using it, or the owner sees a fact
+                        that looks live and wonders why customers are not
+                        being told it. */}
+                    {fact.expires_at && (
+                      <span
+                        className={fact.expired ? "tag tag-caution" : "tag"}
+                        style={{ fontSize: 12 }}
+                      >
+                        {fact.expired ? "expired " : "until "}
+                        {new Date(fact.expires_at).toLocaleDateString()}
+                      </span>
+                    )}
                     <span
                       style={{ fontSize: 13, color: "var(--text-faint)" }}
                       title={fact.source?.excerpt ?? undefined}
@@ -378,6 +454,58 @@ export default function Knowledge() {
                     >
                       Edit
                     </button>
+                    {dating === fact.id ? (
+                      <>
+                        <input
+                          className="field"
+                          type="date"
+                          autoFocus
+                          value={dateText}
+                          onChange={(e) => setDateText(e.target.value)}
+                          style={{ fontSize: 13, width: 150 }}
+                        />
+                        <button
+                          className="control control-secondary"
+                          style={{ fontSize: 13 }}
+                          disabled={busy || !dateText}
+                          onClick={() => void applyExpiry(fact.id, dateText)}
+                        >
+                          Set
+                        </button>
+                        {fact.expires_at && (
+                          <button
+                            className="control control-quiet"
+                            style={{ fontSize: 13 }}
+                            disabled={busy}
+                            /* Clearing is how an expired fact comes back. The
+                               row was never deleted, so this is the whole of
+                               "reactivate". */
+                            onClick={() => void applyExpiry(fact.id, null)}
+                          >
+                            {fact.expired ? "Reactivate" : "No end date"}
+                          </button>
+                        )}
+                        <button
+                          className="control control-quiet"
+                          style={{ fontSize: 13 }}
+                          onClick={() => setDating(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="control control-quiet"
+                        style={{ fontSize: 13 }}
+                        onClick={() => {
+                          setDating(fact.id);
+                          setDateText(fact.expires_at?.slice(0, 10) ?? "");
+                          setNote(null);
+                        }}
+                      >
+                        {fact.expires_at ? "Change end date" : "Set end date"}
+                      </button>
+                    )}
                     {confirmDelete === fact.id ? (
                       <>
                         <button

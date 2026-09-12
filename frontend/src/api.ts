@@ -384,6 +384,10 @@ export const consoleFeedback = (
 export type KnowledgeFact = {
   id: string;
   attribute: string;
+  /* Normalized. Marking a pair as intentionally multi-valued addresses it by
+   * key, and re-normalizing in TypeScript would be a second implementation of
+   * app/normalize.py waiting to drift from the first. */
+  attribute_key: string;
   value: string;
   confirmed: boolean;
   /* Another fact answers this same subject and attribute differently. BOTH
@@ -402,6 +406,13 @@ export type KnowledgeFact = {
   } | null;
   created_at: string | null;
   updated_at: string | null;
+  /* null means no expiry, which is the default and what every existing fact
+   * has. Expiry is opt-in per fact. */
+  expires_at: string | null;
+  /* Past its date. STILL LISTED, because not deleting it is the point -- an
+   * owner has to be able to see what happened and why the agent stopped saying
+   * it. It is simply no longer retrievable. */
+  expired: boolean;
 };
 
 export type KnowledgeGroup = {
@@ -453,6 +464,37 @@ export const deleteFact = (id: string) =>
   request<{ id: string; deleted: boolean }>(`/fact/${id}`, {
     method: "DELETE",
   });
+
+/* Set, move, or clear an end date. Omitting the date CLEARS it, which is how
+ * reactivation works -- an expired fact was never deleted, so putting it back
+ * in service is removing the date rather than retyping the fact.
+ *
+ * Dashboard only. The Telegram /fact path writes facts with no expiry, because
+ * getting a date out of free text means a parser that can misread one -- and a
+ * misparsed date expires a fact early or never, neither of which announces
+ * itself. */
+export const setExpiry = (id: string, expiresAt: string | null) =>
+  request<{ id: string; expires_at: string | null }>(
+    `/fact/${id}/expiry${expiresAt ? `?${q({ expires_at: expiresAt })}` : ""}`,
+    { method: "PUT" },
+  );
+
+/* Says a subject+attribute is MEANT to hold several values. Applies to the
+ * pair, not to either fact: "1 200 000 so'm" and "950 000 so'm (10 days before
+ * the group starts)" are both true and neither is the intentional one. */
+export const markExpectedMultiple = (
+  subjectKey: string,
+  attributeKey: string,
+  expected = true,
+) =>
+  request<{ facts: number; expected_multiple: boolean }>(
+    `/knowledge/expected-multiple?${q({
+      subject_key: subjectKey,
+      attribute_key: attributeKey,
+      expected,
+    })}`,
+    { method: "PUT" },
+  );
 
 export const getAliases = () => request<Alias[]>("/alias");
 

@@ -94,6 +94,11 @@ def everything(conn: Connection) -> list[dict]:
         group["facts"].append({
             "id": str(fid),
             "attribute": attribute,
+            # The normalized form, because marking a pair as intentionally
+            # multi-valued addresses it by key. Without this the screen would
+            # have to re-normalize in TypeScript and the two implementations
+            # would drift the first time app/normalize.py changed.
+            "attribute_key": attribute_key,
             "value": value,
             "confirmed": confirmed,
             # True when another fact answers this same subject and attribute
