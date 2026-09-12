@@ -1073,6 +1073,38 @@ def check_database() -> None:
         ) from None
 
 
+# How often the poller records that it is alive, and how long a recorded
+# heartbeat is trusted for. The loop wakes at least every POLL_TIMEOUT seconds,
+# so 60 is comfortably more often than the 180 the API treats as "alive" -- two
+# missed beats before anything reports the bot as down, which absorbs a restart
+# and a slow poll without ever claiming a dead process is running.
+HEARTBEAT_SECONDS = 60
+_last_beat = 0.0
+
+
+def heartbeat(force: bool = False) -> None:
+    """Record that a poller is alive for this business.
+
+    Throttled, because the loop ticks every 30 seconds and a write per tick
+    buys nothing -- the reader's threshold is three minutes.
+
+    NEVER FATAL. A bot that stopped answering customers because it could not
+    write a status column would be the status reporting breaking the thing it
+    reports on. A missed beat costs one screen saying "not switched on yet"
+    slightly too early, which is recoverable; a crashed poller is not.
+    """
+    global _last_beat
+    now = time.monotonic()
+    if not force and now - _last_beat < HEARTBEAT_SECONDS:
+        return
+    try:
+        with connection(BUSINESS_ID) as conn:
+            conn.execute("select app_business_touch_bot(%s)", (BUSINESS_ID,))
+        _last_beat = now
+    except Exception as exc:  # noqa: BLE001 - see the docstring
+        print(f"heartbeat failed (not fatal): {exc!r}", flush=True)
+
+
 def resolve_identity() -> tuple[str, str]:
     """(business_id, token). --business wins; the env token is the fallback.
 
@@ -1162,7 +1194,17 @@ def main() -> None:
             print("business.owner_telegram_id is not set -- /fact will refuse "
                   "everyone, including you.")
         print(f"@{me['result']['username']} polling. Ctrl-C to stop.")
+        # Once before the loop, so a freshly started bot is visible to the
+        # Settings screen immediately rather than up to a minute later -- that
+        # first minute is exactly when the owner is sitting on the screen
+        # waiting to be told they can press Start.
+        heartbeat(force=True)
+
         while True:
+            # Top of the loop, not after a successful poll: a bot that is up but
+            # getting network errors from Telegram is still running, and
+            # reporting it as dead would send the owner to fix the wrong thing.
+            heartbeat()
             try:
                 params = {"timeout": POLL_TIMEOUT}
                 if offset is not None:

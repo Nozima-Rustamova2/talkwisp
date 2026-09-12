@@ -386,9 +386,15 @@ export type Channel = {
   live: boolean | null;
   detail?: string | null;
   owner_linked: boolean;
+  /* OBSERVED, not assumed: the poller writes a heartbeat about once a minute
+   * and this is whether the server saw one in the last three. It is the only
+   * honest answer to "is my agent on", and the screen had been guessing. */
+  polling: boolean;
   /* A t.me deep link carrying a signed, short-lived claim code. Null once an
-   * owner is linked, and null when there is no bot -- a claim link for a bot
-   * that does not exist is a control that cannot work. */
+   * owner is linked, null when there is no bot, and null while nothing is
+   * polling -- a claim link is a control that cannot work unless a process is
+   * there to receive the /start. That last condition is why this field exists
+   * as a server decision rather than a frontend one. */
   claim_link: string | null;
 };
 

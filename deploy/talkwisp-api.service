@@ -6,6 +6,11 @@
 #   journalctl -u talkwisp-api -f     <- the magic links print here
 
 [Unit]
+# StartLimit* belong in [Unit]. They sat in [Service], where systemd ignores
+# them with 'Unknown key name' in the journal -- so the restart-storm guard
+# this file thought it had was never in force.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 Description=Talkwisp API and owner screens
 # Postgres is a hard dependency, not a soft one: app/db.py opens the pool and
 # runs assert_app_role() during startup, so a boot before Postgres is a boot
@@ -82,8 +87,6 @@ RestartSec=5
 # ... but do not spin forever on a configuration error. Five failures inside a
 # minute means the problem is not transient, and a tight restart loop hides the
 # real error in a wall of identical journal entries.
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # Unbuffered, so journalctl shows startup lines as they happen rather than in a
 # block once the buffer fills. The bot's startup prints are the known case.

@@ -35,7 +35,7 @@ export default function Settings() {
     } catch {
       setState({
         connected: false, bot_username: null, live: null,
-        owner_linked: false, claim_link: null,
+        owner_linked: false, polling: false, claim_link: null,
       });
     }
   }
@@ -126,42 +126,66 @@ export default function Settings() {
               )}
             </p>
 
-            {/* THE STEP THAT IS STILL MANUAL, named rather than hidden.
-                
-                THIS WORDING STATES A POLICY, NOT A STATE, and the first draft
-                got that wrong: it said "your bot is saved, but it isn't
-                answering yet", which this screen cannot possibly know. Nothing
-                registers a running poller, so the server cannot tell us, and
-                the claim was simply hardcoded -- so a business whose bot IS
-                running would be told it was not. Caught by looking at the
-                screen signed in as a business that is polling in production.
+            {/* WHAT THE SERVER OBSERVED, not what this screen assumes.
 
-                Exactly the mistake SignIn.tsx already carries a warning about:
-                it announced that email sending was off, which was true when
-                written and false the day Resend was wired, and went on telling
-                people their link was never coming. A frontend cannot state a
-                fact about the backend's configuration. It can state a policy,
-                which is true regardless. */}
-            <div
-              style={{
-                background: "var(--accent-tint, #eef4f0)",
-                borderRadius: "var(--radius-inner, 8px)",
-                padding: "12px 14px",
-                fontSize: 14,
-                lineHeight: 1.6,
-                marginBottom: 16,
-              }}
-            >
-              While we're in early access we start each bot by hand, so there
-              may be a wait between saving a token and the bot replying — we'll
-              email you when yours is on. Everything else works meanwhile: add
-              knowledge, review it, and try it on the Test screen.
-            </div>
+                Two wrong versions preceded this one. The first said "your bot
+                is saved, but it isn't answering yet", which the screen could
+                not know -- a business whose bot WAS running was told it was
+                not. The second stated a policy instead, always true but unable
+                to say anything specific.
+
+                Neither could gate the claim step below, and that was the real
+                cost: "open your bot and press Start" was offered the moment a
+                token was saved, which is exactly when no poller is running.
+                Telegram queued the /start, nobody read it, and the owner
+                pressed "I've done it" against a button that could not work.
+                The poller now writes a heartbeat and this reports it. */}
+            {state.polling ? (
+              <div
+                style={{
+                  background: "var(--accent-tint, #eef4f0)",
+                  borderRadius: "var(--radius-inner, 8px)",
+                  padding: "12px 14px",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  marginBottom: 16,
+                }}
+              >
+                Your agent is on and answering messages.
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "var(--surface-sunken, #f4f6f9)",
+                  border: "1px solid var(--rule)",
+                  borderRadius: "var(--radius-inner, 8px)",
+                  padding: "12px 14px",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  marginBottom: 16,
+                }}
+              >
+                Saved, but not switched on yet — we start each bot by hand while
+                we're in early access, and we'll email you when yours is
+                running. Everything else works meanwhile: add knowledge, review
+                it, and try it on the Test screen.
+              </div>
+            )}
 
             {state.owner_linked ? (
               <p style={{ margin: 0, fontSize: 14, color: "var(--text-faint)" }}>
                 Your Telegram account is linked, so you can use owner commands
                 in the chat.
+              </p>
+            ) : !state.polling ? (
+              /* The step exists, and saying nothing would be its own kind of
+                 dishonesty -- the owner would meet it later with no warning.
+                 So it is named and explicitly deferred, rather than offered as
+                 a link that drops the press on the floor. */
+              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--text-faint)" }}>
+                There will be one more step once your bot is running: opening it
+                and pressing Start, so it knows which Telegram account is yours.
+                We'll show you the link here when it can work.
               </p>
             ) : state.claim_link ? (
               <>

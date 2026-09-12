@@ -170,7 +170,49 @@ def run(admin, scratch: str) -> None:
     check("and no claim link is offered",
           client.get("/channel").json()["claim_link"], None)
 
-    print("\n7. The endpoints refuse without a session")
+    print("\n7. THE BUG THAT STARTED THIS: no heartbeat, no claim link")
+    # An owner saved a token, was told to open their bot and press Start, and
+    # pressed it -- into a bot nobody was polling. Telegram queued the update,
+    # nothing read it, ownership was never claimed, and "I've done it" correctly
+    # reported that nothing had changed. The step was offered at exactly the
+    # moment it could not work.
+    #
+    # `polling` is the observation that replaced that guess, and these are its
+    # three states. The scratch business is given a SHAPE-VALID BUT DEAD token:
+    # enough for `connected`, and the polling flag is read from the column
+    # rather than from Telegram, so all three transitions are real.
+    admin.execute(
+        "update business set bot_token = %s, owner_telegram_id = null, "
+        "bot_last_seen_at = null where id = %s",
+        ("999999999:AAEcheckchannelscratchtokennotreal01", scratch))
+
+    check("never seen: polling is false",
+          client.get("/channel").json()["polling"], False)
+
+    # The crashed-poller case, and the reason the column is touched on a timer
+    # instead of once at startup: a value written at boot would read "alive"
+    # forever after the process died.
+    admin.execute("update business set bot_last_seen_at = "
+                  "now() - interval '10 minutes' where id = %s", (scratch,))
+    check("a stale heartbeat does not count as alive",
+          client.get("/channel").json()["polling"], False)
+
+    admin.execute("update business set bot_last_seen_at = now() "
+                  "where id = %s", (scratch,))
+    check("a fresh heartbeat reports polling",
+          client.get("/channel").json()["polling"], True)
+
+    # WHAT THIS SECTION DOES NOT PROVE, said rather than glossed: that a claim
+    # link APPEARS once polling is true. The link also requires Telegram to have
+    # confirmed the token, and the only live token on this database belongs to a
+    # real business -- borrowing it would mean nulling it there first, and a
+    # check that can strand production's bot token if it dies halfway is not
+    # worth the coverage. The link's other two conditions are asserted above and
+    # in section 6; this one is exercised by hand.
+    check("with a dead token there is still no link, whatever the heartbeat",
+          client.get("/channel").json()["claim_link"], None)
+
+    print("\n8. The endpoints refuse without a session")
     anon = TestClient(api.app)
     check("GET /channel is 401 logged out", anon.get("/channel").status_code, 401)
     check("POST /channel/telegram is 401 logged out",

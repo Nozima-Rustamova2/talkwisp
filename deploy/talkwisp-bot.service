@@ -14,6 +14,11 @@
 # extra processes and are worth doing before the tenth customer, not after.
 
 [Unit]
+# StartLimit* belong in [Unit]. They sat in [Service], where systemd ignores
+# them with 'Unknown key name' in the journal -- so the restart-storm guard
+# this file thought it had was never in force.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 Description=Talkwisp Telegram agent bot
 After=network-online.target postgresql.service
 Wants=network-online.target
@@ -65,8 +70,6 @@ ExecStart=/home/talkwisp/talkwisp/.venv/bin/python -u bot.py
 
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 Environment=PYTHONUNBUFFERED=1
 

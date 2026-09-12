@@ -417,8 +417,16 @@ def channel_state(business: Business) -> dict:
     """
     with connection(business) as conn:
         row = conn.execute(
-            "select bot_token, owner_telegram_id from business").fetchone()
+            "select bot_token, owner_telegram_id,"
+            " bot_last_seen_at > now() - interval '3 minutes'"
+            " from business").fetchone()
     token = row[0] if row else None
+    # OBSERVED, not assumed. The poller writes bot_last_seen_at about once a
+    # minute (bot.py:heartbeat), so three minutes is two missed beats -- enough
+    # to ride out a restart or a slow poll without ever reporting a dead process
+    # as running. NULL means never seen, which SQL makes false here, which is
+    # the right answer.
+    polling = bool(row[2]) if row else False
     if not token:
         # owner_linked is READ here, not assumed false. The first version
         # hardcoded it, which was wrong for a business that had linked its
@@ -428,7 +436,7 @@ def channel_state(business: Business) -> dict:
         # object than the behaviour uses -- it just fails in the UI instead.
         return {"connected": False, "bot_username": None, "live": None,
                 "owner_linked": row is not None and row[1] is not None,
-                "claim_link": None}
+                "polling": False, "claim_link": None}
 
     ok, detail = channel.verify_token(token)
     return {
@@ -440,9 +448,18 @@ def channel_state(business: Business) -> dict:
         "live": ok if ok else (False if "rejected" in detail else None),
         "detail": None if ok else detail,
         "owner_linked": row[1] is not None,
-        # Regenerated per request and short-lived, so the page can be left open
-        # without the link going stale in a way anyone has to think about.
-        "claim_link": (None if row[1] is not None or not ok else
+        "polling": polling,
+        # ONLY WHEN SOMETHING IS LISTENING, and that condition is the whole
+        # point of this change. The link was previously offered the moment a
+        # token was saved -- which, by the policy the same screen states, is
+        # exactly when no poller is running yet. Telegram queued the /start,
+        # nobody read it, ownership was never claimed, and the owner was left
+        # clicking a button that could not work while the screen told them why
+        # it could not, two paragraphs above.
+        #
+        # Regenerated per request and short-lived, so a page left open does not
+        # go stale in a way anyone has to think about.
+        "claim_link": (None if row[1] is not None or not ok or not polling else
                        f"https://t.me/{detail}?start="
                        f"{channel.claim_code(business, token)}"),
     }
