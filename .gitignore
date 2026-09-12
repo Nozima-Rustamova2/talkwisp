@@ -21,3 +21,5 @@ graphify-out/
 baseline_87.json
 question_vectors.json
 retrieval_snapshot.json
+# Per-tenant bot logs, written by supervise.py.
+logs/

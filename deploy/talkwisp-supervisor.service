@@ -1,0 +1,51 @@
+# One process that keeps a Telegram poller running for every business that has
+# a token and is approved.
+#
+# IT REPLACES talkwisp-bot.service AND talkwisp-bot@.service. Do not run those
+# alongside it. Two processes polling one token means Telegram hands each update
+# to whichever asks first, so a customer sees replies arrive out of order, twice,
+# or not at all -- and nothing errors to say why.
+#
+# See supervise.py for why children are spawned directly rather than through
+# systemctl: starting a unit needs root, the web app deliberately cannot have
+# root, and the whole point of this is that connecting a bot in Settings works
+# without a human on SSH.
+
+[Unit]
+Description=Talkwisp bot supervisor
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=talkwisp-svc
+Group=talkwisp-svc
+WorkingDirectory=/home/talkwisp/talkwisp
+EnvironmentFile=/home/talkwisp/talkwisp/.env
+ExecStart=/home/talkwisp/talkwisp/.venv/bin/python -u supervise.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+# KillMode=mixed sends SIGTERM to THIS process only, not the whole cgroup --
+# which is what we want, because supervise.py stops its children itself and in
+# order. Killing the group would signal every bot at once and race that
+# teardown, turning a clean handover back into the abandoned generation this
+# change exists to remove.
+KillMode=mixed
+# Long enough for the supervisor to SIGTERM each child and wait out a model call
+# in flight. Shorter than the sum of its waits is fine; systemd escalates only
+# after this, and the supervisor has already killed anything stuck by then.
+TimeoutStopSec=90
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/talkwisp/talkwisp
+
+[Install]
+WantedBy=multi-user.target

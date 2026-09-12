@@ -1,3 +1,10 @@
+# RETIRED. supervise.py replaces this file.
+#
+# This was the single-tenant unit, serving whichever business TELEGRAM_BOT_TOKEN
+# or --business named. The supervisor covers every business with a token,
+# including this one, so running both means two pollers on one token. See
+# deploy/talkwisp-supervisor.service.
+#
 # /etc/systemd/system/talkwisp-bot.service
 #
 #   sudo systemctl daemon-reload

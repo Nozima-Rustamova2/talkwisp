@@ -1,3 +1,15 @@
+# RETIRED. supervise.py replaces this file.
+#
+# It is kept only so an existing `talkwisp-bot@Name` instance can still be
+# stopped and disabled on a box that predates the supervisor. Do not enable a
+# new one: the supervisor spawns bot.py directly, and a template instance
+# running alongside it means TWO processes polling one token -- Telegram hands
+# each update to whichever asks first, so a customer sees replies doubled,
+# reordered, or missing, and nothing errors to say why.
+#
+# Retire an instance with:
+#   sudo systemctl disable --now talkwisp-bot@Name
+#
 # /etc/systemd/system/talkwisp-bot@.service
 #
 # A TEMPLATE, one instance per business:

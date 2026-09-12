@@ -25,6 +25,7 @@ import json
 import os
 import pathlib
 import secrets
+import signal
 import sys
 import threading
 import time
@@ -1105,6 +1106,31 @@ def heartbeat(force: bool = False) -> None:
         print(f"heartbeat failed (not fatal): {exc!r}", flush=True)
 
 
+# Set by the SIGTERM handler, read at the top of each loop iteration.
+#
+# WHY THIS EXISTS AT ALL. There was no signal handling here, so the default
+# applied: SIGTERM killed the process instantly, mid-anything. That dropped an
+# in-flight generation with the money already spent, and left the typing
+# indicator running in a customer's chat until a replacement answered.
+#
+# It did not lose the message, which is the part that surprised me: `offset` is
+# a local variable and is only transmitted on the NEXT getUpdates, so Telegram
+# never saw the batch confirmed and redelivers it. The real cost was DUPLICATE
+# answers -- kill a process on update three of three and the restart re-answers
+# one and two.
+#
+# Finishing the current update and exiting between iterations turns that
+# duplicate into a clean handover, which matters now that a supervisor stops and
+# starts these routinely rather than only when a human runs systemctl.
+_stopping = False
+
+
+def _stop(signum, frame) -> None:  # noqa: ARG001
+    global _stopping
+    _stopping = True
+    print("stopping after this update.", flush=True)
+
+
 def resolve_identity() -> tuple[str, str]:
     """(business_id, token). --business wins; the env token is the fallback.
 
@@ -1117,7 +1143,25 @@ def resolve_identity() -> tuple[str, str]:
     ap = argparse.ArgumentParser(description="Talkwisp Telegram agent bot.")
     ap.add_argument("--business",
                     help="business name; its bot_token is read from the row")
+    # BY ID, FOR ANYTHING AUTOMATED. business.name is NOT unique and self-serve
+    # signup lets a stranger type their own, so two rows can be called "Avisena
+    # Med" -- the same collision onboard.py --approve refuses to guess at.
+    # Resolving a name inside the supervisor could start a poller for the wrong
+    # tenant WITH THAT TENANT'S TOKEN, answering that tenant's customers. The
+    # name stays for humans typing it; machines pass an id.
+    ap.add_argument("--business-id", dest="business_id",
+                    help="business id; what the supervisor passes")
     args = ap.parse_args()
+
+    if args.business_id:
+        business_id = args.business_id
+        with connection(business_id) as conn:
+            row = conn.execute("select bot_token, name from business").fetchone()
+        if not row:
+            raise RuntimeError(f"No business with id {business_id!r}.")
+        if not row[0]:
+            raise RuntimeError(f"{row[1]!r} has no bot_token.")
+        return business_id, row[0]
 
     if args.business:
         business_id = business_by_name(args.business)
@@ -1194,13 +1238,25 @@ def main() -> None:
             print("business.owner_telegram_id is not set -- /fact will refuse "
                   "everyone, including you.")
         print(f"@{me['result']['username']} polling. Ctrl-C to stop.")
+        signal.signal(signal.SIGTERM, _stop)
+        signal.signal(signal.SIGINT, _stop)
+
         # Once before the loop, so a freshly started bot is visible to the
         # Settings screen immediately rather than up to a minute later -- that
         # first minute is exactly when the owner is sitting on the screen
         # waiting to be told they can press Start.
         heartbeat(force=True)
 
-        while True:
+        # A bot answers one update at a time in this single-threaded loop, so it
+        # can never hold more than one connection -- max_size 5 was a ceiling it
+        # could not reach and a share of a budget it did not need. The real
+        # ceiling on tenants is Postgres connections, not memory: max_connections
+        # is 40 on this box, so five per bot allowed about six bots under load,
+        # and exhausting it takes the API down for everyone with "too many
+        # clients", not just the newest bot.
+        pool.resize(min_size=1, max_size=2)
+
+        while not _stopping:
             # Top of the loop, not after a successful poll: a bot that is up but
             # getting network errors from Telegram is still running, and
             # reporting it as dead would send the owner to fix the wrong thing.
@@ -1219,6 +1275,10 @@ def main() -> None:
                 continue
 
             for update in updates:
+                if _stopping:
+                    # Mid-batch. The remaining updates were never confirmed to
+                    # Telegram, so the replacement process receives them.
+                    break
                 offset = update["update_id"] + 1
                 if "callback_query" in update:
                     with connection(BUSINESS_ID) as conn:
