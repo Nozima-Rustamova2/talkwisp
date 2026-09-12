@@ -66,6 +66,25 @@ BACKOFF_START = 5
 BACKOFF_MAX = 300
 HEALTHY_SECONDS = 120
 
+# How many reconciles in a row may fail before the supervisor gives up and exits
+# non-zero.
+#
+# WHY GIVE UP AT ALL. Catching and retrying is right for a database blip and
+# WRONG AS A SIGNAL: it means a permissions problem looks like health. When
+# logs/ did not exist, every reconcile failed with PermissionError, no bot ever
+# started, and `systemctl is-active` said `active` -- the one state where
+# nothing is polling and nothing says so.
+#
+# Exiting hands the judgement to systemd, which is better at it than a loop:
+# Restart=always brings us back for a transient fault, and StartLimitBurst=5 in
+# 60s puts the unit into `failed` for a persistent one. That guard only started
+# working yesterday -- it had been in [Service], where systemd ignores it.
+#
+# Eight ticks is two minutes at TICK_SECONDS=15: long enough that a postgres
+# restart rides through, short enough that a broken box is visible before anyone
+# would have noticed by other means.
+MAX_CONSECUTIVE_FAILURES = 8
+
 
 class Child:
     __slots__ = ("process", "name", "started", "failures", "next_try", "log")
@@ -221,16 +240,29 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle)
 
     print(f"supervisor up. tick={TICK_SECONDS}s cap={MAX_CHILDREN}", flush=True)
+    consecutive = 0
     try:
         while not stopping:
             try:
                 reconcile(children)
+                consecutive = 0
             except Exception as exc:  # noqa: BLE001
                 # A database blip must not take the supervisor down and every
                 # bot with it. Children keep running while this retries; the
                 # reconcile is idempotent, so the next tick catches up.
-                print(f"reconcile failed, retrying next tick: {exc!r}",
-                      flush=True)
+                consecutive += 1
+                print(f"reconcile failed ({consecutive}/"
+                      f"{MAX_CONSECUTIVE_FAILURES}), retrying next tick: "
+                      f"{exc!r}", flush=True)
+                if consecutive >= MAX_CONSECUTIVE_FAILURES:
+                    # Loud, and then out. Staying up here would be the failure
+                    # mode this exists to remove: a unit reporting `active`
+                    # while no bot has ever started.
+                    print(f"GIVING UP after {consecutive} consecutive failed "
+                          f"reconciles. Exiting non-zero so this shows as "
+                          f"failed rather than active-but-doing-nothing. Last "
+                          f"error: {exc!r}", flush=True)
+                    raise SystemExit(1)
             for _ in range(TICK_SECONDS):
                 if stopping:
                     break

@@ -73,6 +73,53 @@ this account deliberately does not have. `console._log` does not catch, so a
 missing `feedback.jsonl` is a 500 on the first Right/Wrong click and nowhere
 else.
 
+## 1b-2. WHAT THE SERVICE ACCOUNT CAN AND CANNOT WRITE
+
+Read this before adding anything that writes a file. It has already cost two
+incidents, and they were the same incident twice.
+
+The modes below were read off the live box with `stat`, not written from
+memory — the first draft of this table had two of them wrong.
+
+`talkwisp-svc` owns nothing in the repo. It can traverse and read, and it can
+write exactly the paths granted to it below. **It cannot create files**, because
+creating a file needs write permission on the *directory*, which it deliberately
+does not have — that is most of what the split buys.
+
+| Path | Mode | Who | Why it needs it |
+|---|---|---|---|
+| `/home/talkwisp` | `751` | `talkwisp` | traverse only — `x` for other |
+| `.env` | `640` | `talkwisp:talkwisp-svc` | read: database URL, Gemini key, bot tokens |
+| `gaps.jsonl` | `660` | `talkwisp:talkwisp-svc` | append, `app/answer.py` |
+| `messages.jsonl` | `660` | `talkwisp:talkwisp-svc` | append, `bot.py` |
+| `feedback.jsonl` | `660` | `talkwisp:talkwisp-svc` | append, `app/console.py` |
+| `logs/` | `2770` | `talkwisp:talkwisp-svc` | per-tenant bot logs, `supervise.py` |
+| the repo directory | `775` | `talkwisp` | **not writable by the service — no new files.** Group-writable, but the group is `talkwisp`, and `talkwisp-svc` is not in it; `other` is `r-x` |
+
+**The rule: a new file the app writes is a provisioning step that must land
+BEFORE the code that wants it.** Not after, and not "it'll create itself".
+
+Both incidents so far had the same shape and neither looked like a permissions
+problem at the time:
+
+- **`feedback.jsonl` did not exist.** All three JSONL logs open in append mode,
+  which creates the file — a directory write, on the first call only.
+  `console._log` does not catch, so the first Right or Wrong click on the test
+  console, deployed an hour earlier, would have been a 500. Caught by listing
+  what the app writes before switching the unit.
+- **`logs/` did not exist.** Every reconcile failed with `PermissionError(13)`
+  and no bot started.
+
+**The second one is the dangerous shape: A PERMISSIONS PROBLEM LOOKS LIKE
+HEALTH.** `reconcile()` catches and retries, which is right for a database blip
+and wrong as a signal — so `systemctl is-active` said `active` while nothing was
+polling. Check the journal, not the unit state.
+
+An append-mode log is a directory write **the first time it runs and only the
+first time**, which is the worst possible schedule for discovering it: it works
+in every test where the file already exists, and fails on a fresh box, in
+production, on the first real use.
+
 ## 1c. The supervisor's log directory
 
 `supervise.py` writes one log per tenant into `logs/`, and `talkwisp-svc`

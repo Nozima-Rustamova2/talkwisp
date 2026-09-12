@@ -182,7 +182,7 @@ def run(admin, ids: list[str]) -> None:
     check("the cap is not so long a bot stays down all day",
           supervise.BACKOFF_MAX <= 600, True)
 
-    print("\n6. The cap refuses rather than exhausting Postgres")
+    print("\n7. The cap refuses rather than exhausting Postgres")
     # The failure this prevents is global: connection exhaustion returns "too
     # many clients" to the API as well, so one tenant's bots would take the web
     # app down for every tenant.
@@ -198,6 +198,60 @@ def run(admin, ids: list[str]) -> None:
     running = len([c for c in children.values() if c.process])
     check("with a cap of 1, only one child starts", running, 1)
     supervise.MAX_CHILDREN = saved
+
+
+    print("\n8. A broken reconcile eventually SURFACES instead of retrying forever")
+    # The shape this removes: when logs/ did not exist, every reconcile failed
+    # with PermissionError, no bot ever started, and `systemctl is-active` said
+    # `active`. A permissions problem looked like health. Catching and retrying
+    # is right for a database blip and wrong as a signal.
+    #
+    # Driven through main()'s real loop, with desired() raising, because the
+    # counter and the give-up live there -- and main() is the function that had
+    # NO coverage at all when its pool.open() ordering was wrong.
+    import threading
+
+    real_desired = supervise.desired
+    real_tick = supervise.TICK_SECONDS
+    real_max = supervise.MAX_CONSECUTIVE_FAILURES
+    supervise.TICK_SECONDS = 1
+    supervise.MAX_CONSECUTIVE_FAILURES = 3
+
+    def always_fails():
+        raise PermissionError(13, "Permission denied")
+
+    supervise.desired = always_fails
+    # signal.signal() only works in the main thread, and main() installs two
+    # handlers before its loop. Without this the thread dies on THAT, not on the
+    # give-up -- and the first assertion below would pass for the wrong reason,
+    # which is how the previous version of this section read green while
+    # proving nothing.
+    real_signal = supervise.signal.signal
+    supervise.signal.signal = lambda *a, **k: None
+    outcome: list = []
+
+    def run_main():
+        try:
+            supervise.main()
+        except SystemExit as exc:
+            outcome.append(exc.code)
+        except BaseException as exc:  # noqa: BLE001
+            outcome.append(repr(exc))
+
+    t = threading.Thread(target=run_main, daemon=True)
+    t.start()
+    t.join(timeout=25)
+
+    check("it gave up rather than looping forever", t.is_alive(), False)
+    check("and exited NON-ZERO, so systemd shows failed not active",
+          outcome[:1], [1])
+
+    supervise.signal.signal = real_signal
+    supervise.desired = real_desired
+    supervise.TICK_SECONDS = real_tick
+    supervise.MAX_CONSECUTIVE_FAILURES = real_max
+    # NOTHING BELOW THIS LINE. main() closed the pool on its way out and a
+    # psycopg pool cannot be reopened, so this section has to be the last one.
 
 
 if __name__ == "__main__":
