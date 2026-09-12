@@ -293,6 +293,13 @@ stranger messaging a clinic has no business being told about the clinic's
 account status. The operator gets a distinct log line instead. Worth revisiting
 only if a business ever connects its own bot before approval.
 
+**Payment providers (Payme / Click) are designed and blocked**, not undecided.
+The shape is settled — see the section below — and the gate is legal entity
+registration, which also holds up our own subscription billing, Meta business
+verification and larger Google Cloud credits. Manual confirmation stays as the
+fallback regardless, because a seller with no entity can never have a merchant
+account.
+
 ## Vision — measured, not assumed
 
 Tested 2026-08-30 on a real phone photo of a printed cafe menu: angled, glare,
@@ -1844,6 +1851,128 @@ once rather than at seven call sites where six would have been right.
 tested by a person tapping them. The smoke test is `docs/smoke-test.md`, and it
 deliberately provokes the paths nobody designed: a double-tapped Confirm, a
 screenshot sent before any order exists, and two screenshots for one order.
+
+## Payment providers — Payme / Click — designed, blocked, nothing built — 2026-09-12
+
+**Status: coming soon, and blocked on legal entity registration.** No code
+exists. This is written down so the shape is settled before the gate lifts, and
+so nobody rediscovers it from scratch.
+
+**Manual payment confirmation is the shipped flow and stays.** Screenshot to the
+owner, owner checks their banking app, owner taps Confirm. It remains the
+fallback for every seller with no merchant account, which is most of them.
+
+### What a provider would replace
+
+Today the bot sends the owner's card number, the customer transfers, the
+customer sends a screenshot, and the owner confirms. **The system never verifies
+a payment** — the state is `owner_confirmed`, not `paid`, and that naming is
+deliberate: the only thing the system knows is that a human said so.
+
+With a provider the system *knows* the money landed, because the provider calls
+a webhook. Delivery becomes automatic. No screenshot, no tap.
+
+```
+customer wants to buy
+  -> our code calls Payme/Click with THAT BUSINESS's merchant credentials
+  -> provider returns a payment link
+  -> bot sends the link
+  -> customer pays in their app
+  -> provider calls OUR webhook
+  -> we verify the signature, mark the order paid
+  -> delivery fires automatically
+```
+
+Talkwisp is in the middle of every step. The integration is built once; each
+business supplies its own credentials.
+
+### What the business gives us, and what we never touch
+
+A merchant ID and a key, obtained when they register with Payme or Click. They
+go in Settings, stored against the business row — **the same shape as
+`bot_token`**, which is the precedent to follow rather than invent around.
+
+**We never handle money or bank account details.** The provider settles directly
+to the merchant. We create invoices on their behalf and receive notifications;
+that is the whole of our involvement, and it is worth stating plainly because
+the alternative reading is what would require a payment licence.
+
+**Credentials are verified on save with a test call**, the way `bot_token` is
+verified with `getMe`. A well-formed key belonging to the wrong account is
+invisible otherwise — the same class of failure as the wrong-bot incident, where
+seven landing-page links pointed at a stranger's bot because a username was
+"corrected" into somebody else's.
+
+### What would be built
+
+- Settings fields per provider: merchant ID, key. Verified on save.
+- Invoice creation against the business's own credentials.
+- **One webhook endpoint with per-tenant routing.** The provider calls a single
+  URL, so the order ID has to carry which business it belongs to. This is the
+  interesting part and the one most likely to be got wrong.
+- **Signature verification. Never trust a redirect** — the webhook is the only
+  source of truth and it must be verified.
+- **Idempotency.** Callbacks fire more than once. Key on our own order ID and
+  make a second call a no-op, or we double-deliver.
+- **A sandbox phase.** Both providers have test environments. Prove the whole
+  loop there before any real money moves.
+
+### What stays unchanged
+
+`purchase` and its state machine. A provider webhook replaces the owner's
+Confirm tap as the trigger; everything before and after is the same model. That
+was the point of building the order flow first.
+
+`owner_confirmed` probably wants a sibling state for provider-verified payments,
+because those genuinely *are* verified and the distinction is exactly the one
+the current name was chosen to preserve.
+
+### The gate, and what else it holds up
+
+**Legal entity registration.** Both providers require ИП or ООО with an ИНН and
+a bank account. A course seller with no entity cannot get a merchant account,
+and for them the manual flow is the only option — which is why it stays.
+
+That one registration currently gates four separate things:
+
+1. Payme/Click for our customers
+2. Payme/Click for our own subscription billing
+3. Meta business verification
+4. Larger Google Cloud credits
+
+### Research notes, and how much to trust them
+
+**These figures come from a third-party agency blog and one provider's own docs.
+Verify against the providers directly before relying on any of them.** They are
+recorded because they narrow the search, not because they are established.
+
+- **Click** — approval ~3–5 days. REST API, base
+  `https://api.click.uz/v2/merchant/`. Often covers Visa/Mastercard as well as
+  UZCARD and HUMO. Two schemes: SHOP-API, where we implement Prepare/Complete
+  and they call us, and Merchant API, where we create invoices.
+  `invoice/create` takes `merchant_trans_id` — our own order ID, and the
+  mechanism by which callbacks match back to a purchase.
+- **Payme** — JSON-RPC 2.0 Merchant API, sandbox available, approval ~5–7 days.
+- **Uzum** — often supports instalments, which matters for higher-priced
+  courses.
+- **Python SDKs exist**: `paylinker` (Click + Payme) and `tolov` (adds Uzum,
+  Paynet, Octo behind one interface). Worth using rather than hand-rolling
+  JSON-RPC.
+- **Moderation asks for a licence in regulated niches, with medicine named
+  explicitly.** Directly relevant, given the reference customer is a clinic.
+
+### Telegram Payments — a separate option, same gate
+
+CLICK publishes Telegram Payments docs and Payme has provider tokens, so a bot
+can charge a card without the customer leaving Telegram. It needs a dedicated
+"bot kassa" from Payme — their other kassa types do not work with Telegram — and
+the provider token is obtained by logging into the business through the Telegram
+bot itself rather than copied from a dashboard.
+
+Same entity gate. Worth revisiting the moment it lifts, because it is the
+closest thing to true one-tap payment in chat, and **it is something ManyChat
+cannot offer here at all**: their in-DM buy button is Stripe-gated, and Stripe
+does not operate in Uzbekistan.
 
 ## A negative control must prove the bug was introduced — 2026-09-12
 
