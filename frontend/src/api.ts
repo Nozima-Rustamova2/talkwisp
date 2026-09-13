@@ -632,3 +632,48 @@ export function signUp(email: string, name: string): Promise<{ message: string }
 export function logout(): Promise<{ signed_out: boolean }> {
   return request<{ signed_out: boolean }>("/auth/logout", { method: "POST" });
 }
+
+
+/* --- customers -------------------------------------------------------------
+ *
+ * No reply endpoint, and there is not going to be one here: takeover lives in
+ * Telegram, where the owner actually is at 9pm. */
+
+export type Customer = {
+  chat_id: number;
+  first_name: string | null;
+  username: string | null;
+  messages: number;
+  conversations: number;
+  first_at: string | null;
+  last_at: string | null;
+  last_question: string | null;
+};
+
+export type Customers = {
+  people: number;
+  conversations: number;
+  last_at: string | null;
+  /* Lines written before the bot stamped a business id. Shown as a count and
+     never as rows -- they cannot be attributed now, and guessing would put one
+     business's customers on another's screen. */
+  unattributed: number;
+  malformed: number;
+  customers: Customer[];
+};
+
+export type Turn = {
+  at: string | null;
+  question: string | null;
+  answer: string | null;
+  outcome: string | null;
+  status: string | null;
+};
+
+export function getCustomers(): Promise<Customers> {
+  return request<Customers>("/conversations");
+}
+
+export function getExchange(chatId: number): Promise<Turn[]> {
+  return request<Turn[]>(`/conversations/${chatId}`);
+}

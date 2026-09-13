@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
+import Conversations from "./Conversations";
 import Knowledge from "./Knowledge";
 import Review from "./Review";
 import Settings from "./Settings";
@@ -19,7 +20,7 @@ import { getMe, logout, setSpendingAllowed, type Me } from "./api";
  *
  * No router library for two screens. */
 
-type Route = "add" | "review" | "knowledge" | "test" | "settings";
+type Route = "add" | "review" | "knowledge" | "customers" | "test" | "settings";
 
 /* FOUR ITEMS, NOT SEVEN.
  *
@@ -37,6 +38,7 @@ function routeFromHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
   if (hash === "review") return "review";
   if (hash === "knowledge") return "knowledge";
+  if (hash === "customers") return "customers";
   if (hash === "test") return "test";
   if (hash === "settings") return "settings";
   return "add";
@@ -89,6 +91,8 @@ export default function App() {
           ? "Review — Talkwisp"
           : route === "knowledge"
             ? "Knowledge — Talkwisp"
+            : route === "customers"
+            ? "Customers — Talkwisp"
             : route === "test"
               ? "Test — Talkwisp"
               : route === "settings"
@@ -208,6 +212,11 @@ export default function App() {
           {tab("add", "Add")}
           {tab("review", "Review")}
           {tab("knowledge", "Knowledge")}
+          {/* "Customers", not "Conversations". The screen is a contacts
+              list -- who talked to you, how often, how to reach them -- and
+              naming it after the log would promise a log viewer, which is
+              the thing it deliberately is not. */}
+          {tab("customers", "Customers")}
           {tab("test", "Test")}
           {tab("settings", "Settings")}
           {/* The signed-in address, and a way out. Shown because a session that
@@ -247,6 +256,8 @@ export default function App() {
         <Review />
       ) : route === "knowledge" ? (
         <Knowledge />
+      ) : route === "customers" ? (
+        <Conversations />
       ) : route === "test" ? (
         <TestConsole />
       ) : route === "settings" ? (

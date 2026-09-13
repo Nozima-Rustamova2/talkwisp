@@ -7,7 +7,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
-from app import auth, channel, console, extract, knowledge, review, sources, vision
+from app import (auth, channel, console, conversations, extract, knowledge,
+                 review, sources, vision)
 from app.approval import NotApproved
 from app.db import assert_app_role, connection, pool
 from app.llm import check_configured, check_reachable
@@ -360,6 +361,33 @@ def reject_fact(business: Business, fact_id: str) -> dict:
                        "elsewhere -- rejecting means the extraction was wrong, "
                        "not that the thing stopped being true.")
         return {"id": fact_id, "rejected": True}
+
+
+# --- customers --------------------------------------------------------------
+#
+# READ-ONLY, AND THAT IS THE DESIGN. There is no reply endpoint here and there
+# should not be: takeover lives in Telegram, where the owner actually is at 9pm,
+# and the landing page promises it there in three languages.
+
+
+@app.get("/conversations")
+def customer_list(business: Business) -> dict:
+    """Everyone who has written to this business's bot.
+
+    connection() is what binds the tenant, and conversations.read_lines() reads
+    it back from the same ContextVar rather than taking it as an argument -- so
+    this endpoint has no way to ask for another business's customers even by
+    mistake. It is the only structural defence a file gets; a file has no RLS.
+    """
+    with connection(business):
+        return conversations.overview()
+
+
+@app.get("/conversations/{chat_id}")
+def customer_exchange(business: Business, chat_id: int) -> list[dict]:
+    """One customer's messages, oldest first."""
+    with connection(business):
+        return conversations.exchange(chat_id)
 
 
 # --- the knowledge base -----------------------------------------------------

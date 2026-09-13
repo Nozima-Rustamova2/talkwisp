@@ -2802,3 +2802,82 @@ UTF-8 — the two failures it can actually have. 88/88.
 - **A rate limit on extraction.** Auth turns an anonymous Gemini-token burn into
   an attributable one, which is enough for v1 and is not the same as fixing it.
 - **`escalation`**, still deferred. See the Open list.
+
+
+## The customers screen, and the name nobody noticed was missing — 2026-09-13
+
+The brief was a Conversations tab, framed deliberately: not a log viewer --
+reading what the agent said is better served by the test console, which shows
+provenance and scores for a question you choose -- but SEEING YOUR CUSTOMERS.
+For a course seller that is closer to a contacts list than a log, and nothing
+covered it.
+
+The stated blocker was that messages.jsonl had no business_id. It already did,
+and had since 716ad17: `log()` stamps it on every line, and its own comment
+makes the argument -- attribution has to be written at the time or not at all.
+
+THE REAL BLOCKER WAS THE NAME. Telegram hands us `first_name` and `username` on
+every update, in `message["from"]`, and bot.py took `id` and dropped both. They
+are not on `purchase` either -- that table has `chat_id` and nothing else about
+the person. So the contacts list rendered as ten-digit numbers:
+
+    346883024    20 questions   last wrote 2 Sep
+    5217012586   19 questions   last wrote 28 Aug
+
+A contacts list of numbers is not a contacts list. The framing was right and the
+screen was two capture fixes away rather than none. With `username` it becomes
+a name and a `t.me/` link, which is the actual capability: see who talked to
+you, then go talk to them.
+
+**The name is stamped by a module global, not passed as an argument.** handle()
+logs from nine places -- social, throttled, offer, llm_error, not_approved,
+database_error, the answer itself -- and a customer whose only message was a
+greeting must still appear with a name. Threading a parameter through nine call
+sites means the tenth added next month silently has none, and nothing fails.
+The global is guarded: it stamps ONLY when the entry's chat_id matches the
+sender's, because the order-expiry sweep and the owner's escalation replies log
+a different chat than the update last handled, and stamping those would put one
+person's name on another person's row.
+
+**THE LINES ALREADY WRITTEN GET NOTHING, and are skipped rather than guessed.**
+36 of 84 local lines predate the business_id stamp. Backfilling them to "the
+only business that existed then" is defensible and unverified, and the failure
+it risks -- showing one business another business's customers -- is silent and
+is the worst failure this screen can have. The downside is asymmetric: skipping
+loses historical rows in a screen that is mostly empty anyway. The screen says
+"N earlier messages are not shown" out loud.
+
+**First reader of any .jsonl in this system.** gaps, feedback and messages were
+all opened "a" and never read back. A file has no RLS, so the tenant filter is
+an `if` in Python rather than a policy in Postgres. So `read_lines()` takes no
+business argument -- it asks `current_business_id()` itself, the same shape as
+the approval gate. The honest limit, kept in the module docstring: that
+constrains THIS reader, not a second one written later.
+
+The file stays a file, because the rule holds -- append-only observation, no
+mutable state anyone waits on. THE DECISION IS DATED TO THE FIRST JOIN rather
+than called permanent: "asked about the price and never ordered" is a real sales
+question, `purchase` is a table, and you cannot join a file to one.
+
+**The header is the screen at twelve conversations.** Today the real data is one
+customer and three conversations. A grid of column headings above two rows reads
+as a broken product, so three numbers carry it -- people, conversations, last
+activity -- and they are true at twelve and at five hundred. No "coming soon",
+nothing promising volume that does not exist.
+
+No reply box, and there is not going to be one: takeover lives in Telegram,
+where the owner actually is at 9pm, and the landing page promises it there in
+three languages.
+
+What is NOT derivable and was not faked: what a customer asked ABOUT.
+`matched_on` is null on all but exact-tier hits and the route names no subject,
+so the column shows the last question verbatim. Clustering would cost a model
+call per customer to fill one column.
+
+### OPEN: the log now holds personal data it did not before
+
+`first_name`, `username` and Telegram's `language_code` are personal data. The
+site footer already links to /privacy, /terms and /data-deletion and all three
+are 404. Names belong in that policy's list of what is stored, alongside message
+content and Telegram IDs, and the pages still do not exist. Noted here rather
+than discovered later.

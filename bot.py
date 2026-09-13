@@ -328,12 +328,57 @@ def typing(chat_id: int):
         thread.join(timeout=2)
 
 
+# WHO SENT THE MESSAGE BEING HANDLED, for the same reason business_id exists:
+# attribution has to be written at the time or not at all. Telegram hands us
+# first_name and username on every update and we threw both away, so the
+# message log knows ten-digit chat ids and nothing else -- there is no way to
+# reconstruct a name for a line already written.
+#
+# A MODULE GLOBAL RATHER THAN AN ARGUMENT, and the reason is the same one that
+# put the approval gate below the query layer. handle() logs from nine places
+# -- social, throttled, offer, llm_error, not_approved, database_error and the
+# answer itself -- and a customer whose only message was "assalomu alaykum"
+# must still appear in the contacts list with a name. Threading a parameter
+# through nine call sites means the tenth one added next month silently has no
+# name, and nothing fails.
+#
+# NOTE THIS IS PERSONAL DATA the log did not hold before. The privacy policy
+# needs to say so, and those pages do not exist yet.
+_SENDER: dict = {}
+
+
+def remember_sender(message: dict) -> None:
+    """Called once per update, before anything logs."""
+    frm = message.get("from") or {}
+    _SENDER.clear()
+    _SENDER.update({
+        "chat_id": (message.get("chat") or {}).get("id"),
+        "first_name": frm.get("first_name"),
+        "username": frm.get("username"),
+        # Telegram's own guess at their language, which is NOT what
+        # detect_language() decides from the text -- a customer with a Russian
+        # phone writing Uzbek is common here. Logged as the weaker signal it
+        # is, under its own name, so the two are never confused.
+        "telegram_language": frm.get("language_code"),
+    })
+
+
 def log(entry: dict) -> None:
     # business_id on every line. Without it these files are one stream with
     # several businesses' customers mixed together, and no way to split them
     # afterwards -- the attribution has to be written at the time or not at
     # all. Same reason gaps.jsonl and feedback.jsonl carry it.
     entry["business_id"] = BUSINESS_ID
+
+    # ONLY WHEN THE CHAT MATCHES, and this guard is the whole safety of the
+    # global. log() is also called from the order-expiry sweep and the owner's
+    # escalation replies, which run with a DIFFERENT chat_id than the last
+    # update handled -- stamping those would attach one person's name to
+    # another person's row, silently, which is precisely the failure this
+    # screen must never have.
+    if _SENDER.get("chat_id") is not None             and entry.get("chat_id") == _SENDER["chat_id"]:
+        for field in ("first_name", "username", "telegram_language"):
+            entry.setdefault(field, _SENDER[field])
     entry["at"] = datetime.datetime.now(datetime.UTC).isoformat()
     with MESSAGE_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -1253,6 +1298,7 @@ def handle_screenshot(conn, chat_id: int, file_id: str) -> None:
 
 
 def handle(conn, message: dict, last_seen: dict) -> None:
+    remember_sender(message)
     chat_id = message["chat"]["id"]
     user_id = message.get("from", {}).get("id")
     text = (message.get("text") or "").strip()
