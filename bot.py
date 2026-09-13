@@ -1057,6 +1057,13 @@ def with_takeover(conn, chat_id: int, text: str,
     refusals in a row should be asked once, not three times; the same row that
     makes "ping the owner once" true makes this true for free.
     """
+    # A META ANSWER IS AN ANSWER. "Who are you" was not refused, so there is
+    # nothing to pass on and nothing to suggest instead -- offering either
+    # would be the affordance-that-does-nothing rule, and waking an owner for
+    # it would train them to ignore the next one.
+    if (result.get("source") or "").startswith("meta-"):
+        return result["answer"], False
+
     offer = bool(OWNER_ID) and not escalation.waiting_for_chat(conn, chat_id)
 
     if offer:

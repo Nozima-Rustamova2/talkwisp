@@ -27,6 +27,7 @@ from app.embeddings import embed_query
 from app.llm import complete
 from app import payment
 from app.retrieval import _fact_row, find
+from app import meta
 from app.triage import medical_lead
 from app.triage import reply as triage_reply
 from app.triage import triage
@@ -524,6 +525,46 @@ def _answer(conn: Connection, question: str) -> dict:
         "chunks": [],
         "answer": None,
     }
+
+    # --- questions about the AGENT, not the business -------------------------
+    #
+    # HERE, AND THE POSITION TOOK THREE TRIES TO GET RIGHT.
+    #
+    # Not before retrieval, which is where triage sits: triage short-circuits
+    # early because a symptom must never reach the fact table, and doing the
+    # same here would let "nima qila oladi bu dori" -- what can this medicine do
+    # -- be answered with a capability blurb.
+    #
+    # Not after everything either, which is where this started. Two problems
+    # showed up the moment it ran end to end. "Siz kimsiz?" reaches a DIFFERENT
+    # `unknown` branch than the final one -- the model was called, declined, and
+    # returned its own refusal -- so the hook was simply never reached. And
+    # "nima qila olasiz" came back status=ok: vector search matched it to
+    # "Kontent audit" and answered a question about the agent with a content-
+    # audit blurb. That is the exact failure this feature exists to remove,
+    # arriving from retrieval rather than from a refusal.
+    #
+    # So: after the EXACT tier has found nothing, before vector search and
+    # before any model call. The exact tier only matches strings literally
+    # present in the question, so a customer who named a real subject is never
+    # hijacked -- and a question no subject matches, whose words are in the
+    # marker list, is one nothing else was going to answer well anyway.
+    #
+    # It also saves a generation on every one of these.
+    if retrieval["status"] == "not_found":
+        asked_about_me = meta.classify(question)
+        if asked_about_me:
+            category, detail = asked_about_me
+            name = conn.execute("select name from business").fetchone()
+            result["status"] = "ok"
+            # A distinct source so callers can tell this from a real answer.
+            # bot.py reads it to suppress the takeover offer -- "who are you" is
+            # not worth waking an owner for.
+            result["source"] = f"meta-{category}"
+            result["answer"] = meta.reply(conn, category, detail,
+                                          detect_language(question),
+                                          name[0] if name else None)
+            return result
 
     if retrieval["status"] == "ambiguous":
         # The candidate names ARE the context. The model phrases the question in
