@@ -2881,3 +2881,94 @@ site footer already links to /privacy, /terms and /data-deletion and all three
 are 404. Names belong in that policy's list of what is stored, alongside message
 content and Telegram IDs, and the pages still do not exist. Noted here rather
 than discovered later.
+
+
+## Payment details had no writer at all — 2026-09-13
+
+A real business signed up, connected a bot, and a customer tried to pay. The
+transcript:
+
+    17:12  customer   tolov qanaqa qilaman
+    17:12  agent      Aniq nimani toʻlamoqchisiz?
+    17:14  customer   tolov qanaqa qilaman
+    17:14  agent      OCTOBER INTENSIVE — Narxi
+    17:14  agent      Toʻlovni rasmiylashtirib boʻlmadi. Iltimos, biz bilan bogʻlaning.
+
+THE MESSAGE ORDER IS WHAT IDENTIFIES THE BRANCH. "OCTOBER INTENSIVE — Narxi" is
+the `edit_here()` at the top of the order handler, which only runs AFTER
+`orders.create()` has succeeded. So the order was not refused -- it was created,
+and then `payment.order_message()` returned None. A purchase row exists for
+money that can never arrive.
+
+**The cause was not a missing screen. There was no writer.**
+`triage.check_subject()` refuses the reserved payment subject unless
+`allow_reserved=True` is passed, and NOTHING IN THE CODEBASE PASSED IT. The
+parameter had been sitting there since the exclusion was built, documented as
+"passed by the one writer that is supposed to use that subject", with no such
+writer. The only thing that ever wrote a payment fact was seed.py, by raw SQL,
+for the reference clinic. So no owner could set payment details through /fact,
+through Add knowledge, or anywhere else -- and every self-serve business would
+have hit this the first time a customer tapped buy.
+
+`prototype/Payment Details.dc.html` exists, which is how this looked like a
+visibility problem. It is a mockup. So is the Dashboard whose live check was
+going to carry the warning. THAT IS THREE TIMES IN ONE DAY that a design
+artefact was mistaken for a built feature -- the same class as a check that
+asserts against one database while the behaviour runs on another. The question
+to ask of any screen is not "does it exist" but "does it exist in
+frontend/src".
+
+### What was built
+
+**A whitelisted writer.** `payment.set_detail()` is the caller `allow_reserved`
+was waiting for. It takes an attribute from a fixed list -- card, holder, bank,
+and the instruction and exact-amount lines per language -- because
+`check_subject()` stops another SUBJECT being claimed but nothing stopped this
+writer being a side door for arbitrary ATTRIBUTES, and a business fact stored
+under this subject is invisible to retrieval forever. It never embeds, and the
+constraint `fact_payment_not_embedded` remains the floor under that. An empty
+value deletes the row rather than storing "", because two ways to be unset is
+how a screen starts disagreeing with the bot.
+
+**The guard, asked before the customer sees a button.** The readiness question
+used to be answered inside `order_message()`, after a purchase row had been
+written. It is now asked in bot.py before the offer is shown, and when the
+answer is no the offer is simply withheld -- the customer's price question
+falls through to `answer()` and they get the figure they asked for. They lose
+the button, not the answer.
+
+**Per language, because that is how the data is shaped.** The card is shared;
+the instruction and exact-amount lines are the owner's own words in each
+language. A business with Uzbek filled in and Russian blank works perfectly for
+Uzbek customers and dead-ends every Russian one -- the same failure, much harder
+to spot, and invisible to any single done/not-done tick.
+
+**The notification, once per business per day.** Claimed by an UPDATE's own
+WHERE clause in `app_business_claim_payment_gap()`, not by a read-then-write in
+Python: the supervisor runs up to fourteen bots and two must not both send. Once
+per order would fire all afternoon and the owner would mute the bot, which would
+cost them the escalation pings too.
+
+### The reason the notification and the banner are not decoration
+
+The guard REMOVES THE SYMPTOM. Before it, a customer hit a dead end and
+something visibly broke. After it, the customer is served correctly and the
+owner sees nothing at all -- silence where a sale would have been, which nobody
+notices. The daily message and the conditional banner are the only two signals
+left that money is being left on the table.
+
+The banner is conditional on confirmed exact prices AND no ready language,
+never on "payment is unset". Payment is optional, most businesses will never
+sell in chat, and telling them they have failed to finish setup is the
+red-incomplete-badge problem wearing a different hat. A business whose prices
+are all ranges cannot dead-end anyone and is told nothing.
+
+### Not masked here, and masked on Knowledge
+
+Both are still right. The card number is broadcast to every customer who asks to
+pay, so hiding it from the owner protects nothing, and a reveal tap costs
+something every time on the one screen you open specifically to check the number
+against your bank app. On Knowledge it appears incidentally while you scan for
+something else, which is a different trade. The field would need masking the day
+it could hold something secret -- a Payme merchant key would qualify, and that
+is a different field on a different screen when it exists.

@@ -1186,6 +1186,47 @@ def deliver_owner_answer(conn, owner_chat: int, row: dict, text: str) -> None:
          "fact_written": fact_id is not None})
 
 
+# The owner's message when a sale is lost this way. Uzbek Latin only, like
+# every other owner-facing string in this file -- the customer-facing tables are
+# per language because customers write in three; the owner is one known person.
+PAYMENT_GAP_OWNER = (
+    "{name} — toʻlov maʼlumotlari toʻldirilmagan\n"
+    "\n"
+    "Mijoz {what} uchun toʻlamoqchi boʻldi, lekin karta raqamingiz "
+    "kiritilmagan — shuning uchun men toʻlovni taklif qilmadim va savoliga "
+    "oddiy javob berdim.\n"
+    "\n"
+    "Talkwisp'da «Toʻlov» boʻlimiga karta raqamingizni kiriting."
+)
+
+
+def notify_owner_payment_gap(conn, subject: str | None) -> None:
+    """Tell the owner a sale was lost because payment details are not set.
+
+    THE ONLY SIGNAL LEFT, once the guard stops the dead end. Before it, the
+    customer was told "contact us" and something at least visibly went wrong.
+    Now they get their price question answered normally -- which is the right
+    behaviour, and it means the owner sees nothing at all. Silence where a sale
+    would have been is not something anyone notices.
+
+    ONCE PER DAY, claimed in the database rather than decided here: the
+    supervisor runs up to fourteen bots, and two of them must not both send. A
+    message per attempt would fire all afternoon and the owner would mute the
+    bot -- which would cost them the escalation pings too, the feature the
+    landing page actually promises.
+    """
+    if not OWNER_ID:
+        return
+    claimed = conn.execute(
+        "select app_business_claim_payment_gap(%s)",
+        (BUSINESS_ID,)).fetchone()[0]
+    if not claimed:
+        return
+    send(int(OWNER_ID), PAYMENT_GAP_OWNER.format(
+        name=BUSINESS_NAME or "Agent",
+        what=f"«{subject}»" if subject else "bir xizmat"))
+
+
 def notify_owner_escalation(row: dict) -> None:
     """Send the owner the question with enough context to answer it.
 
@@ -1427,6 +1468,31 @@ def handle(conn, message: dict, last_seen: dict) -> None:
                 offer = buy.offer(conn, text)
             except LLMError:
                 offer = None  # fall through and answer the question normally
+            # CAN THIS EVEN COMPLETE? Asked HERE, before a button is shown.
+            # It used to be asked inside payment.order_message(), AFTER
+            # orders.create() had already written a purchase row -- so a
+            # customer tapped through the entire flow and was then told
+            # "contact us", with a stranded order behind it. That happened to a
+            # real business on 2026-09-13.
+            #
+            # Per language, because that is how the details are stored: the
+            # card is shared, but the instruction and the exact-amount warning
+            # are the owner's own words in each language. A business with Uzbek
+            # filled in and Russian blank works for Uzbek customers and dead-
+            # ends Russian ones -- the same failure, much harder to spot.
+            #
+            # FALLING THROUGH RATHER THAN REFUSING is the point. `text` is a
+            # price question and the business has the price as a fact, so
+            # answer() below hands the customer the figure they asked for. They
+            # lose the button, not the answer.
+            if offer is not None and not offer.get("refusal") \
+                    and not payment.ready_for(conn, detect_language(text)):
+                notify_owner_payment_gap(conn, offer.get("subject"))
+                log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                     "outcome": "offer_withheld_no_payment_details",
+                     "subject": offer.get("subject")})
+                offer = None
+
             if offer is not None:
                 if offer.get("refusal"):
                     send(chat_id, _say(NOT_ORDERABLE, NOT_ORDERABLE_DEFAULT, text))

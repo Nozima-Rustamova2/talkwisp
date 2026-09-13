@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
 import Conversations from "./Conversations";
+import Payment from "./Payment";
 import Knowledge from "./Knowledge";
 import Review from "./Review";
 import Settings from "./Settings";
 import SignIn from "./SignIn";
 import TestConsole from "./TestConsole";
-import { getMe, logout, setSpendingAllowed, type Me } from "./api";
+import { getMe, getPayment, logout, setSpendingAllowed, type Me } from "./api";
 
 /* The shell: header, the two screens that exist, and the route between them.
  *
@@ -20,7 +21,14 @@ import { getMe, logout, setSpendingAllowed, type Me } from "./api";
  *
  * No router library for two screens. */
 
-type Route = "add" | "review" | "knowledge" | "customers" | "test" | "settings";
+type Route =
+  | "add"
+  | "review"
+  | "knowledge"
+  | "customers"
+  | "payment"
+  | "test"
+  | "settings";
 
 /* FOUR ITEMS, NOT SEVEN.
  *
@@ -39,6 +47,7 @@ function routeFromHash(): Route {
   if (hash === "review") return "review";
   if (hash === "knowledge") return "knowledge";
   if (hash === "customers") return "customers";
+  if (hash === "payment") return "payment";
   if (hash === "test") return "test";
   if (hash === "settings") return "settings";
   return "add";
@@ -93,6 +102,8 @@ export default function App() {
             ? "Knowledge — Talkwisp"
             : route === "customers"
             ? "Customers — Talkwisp"
+            : route === "payment"
+              ? "Payment — Talkwisp"
             : route === "test"
               ? "Test — Talkwisp"
               : route === "settings"
@@ -179,6 +190,25 @@ export default function App() {
     </a>
   );
 
+  /* PRICES BUT NO WAY TO TAKE PAYMENT.
+   *
+   * This belongs in the dashboard's live check, which does not exist yet --
+   * Dashboard.dc.html is a prototype and design-dashboard.md is a design. The
+   * approval band is the only always-visible surface in the built app, so it
+   * carries this too.
+   *
+   * IT IS NOT A SETUP NAG. Payment is optional and most businesses will never
+   * sell in chat, so this appears ONLY when the buy flow can actually fire and
+   * cannot complete -- confirmed exact prices, and no language ready. Every
+   * other combination shows nothing at all.
+   *
+   * It exists because the bot fix made the symptom invisible. Before it, the
+   * customer hit a dead end and at least something visibly broke. Now they get
+   * their price question answered properly, which is right, and the owner sees
+   * nothing -- just silence where a sale would have been. This and the
+   * once-a-day Telegram message are the only two signals left. */
+  const payment = !me.approved ? null : <PaymentGap />;
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--ground)" }}>
       <header
@@ -217,6 +247,7 @@ export default function App() {
               naming it after the log would promise a log viewer, which is
               the thing it deliberately is not. */}
           {tab("customers", "Customers")}
+          {tab("payment", "Payment")}
           {tab("test", "Test")}
           {tab("settings", "Settings")}
           {/* The signed-in address, and a way out. Shown because a session that
@@ -252,12 +283,15 @@ export default function App() {
       </header>
 
       {waiting}
+      {payment}
       {route === "review" ? (
         <Review />
       ) : route === "knowledge" ? (
         <Knowledge />
       ) : route === "customers" ? (
         <Conversations />
+      ) : route === "payment" ? (
+        <Payment />
       ) : route === "test" ? (
         <TestConsole />
       ) : route === "settings" ? (
@@ -265,6 +299,42 @@ export default function App() {
       ) : (
         <AddKnowledge />
       )}
+    </div>
+  );
+}
+
+
+/* Its own component so the fetch does not re-run on every route change, and so
+   a failure here cannot take the app down with it -- a band that cannot load
+   should be absent, never an error screen over a working product. */
+function PaymentGap() {
+  const [gap, setGap] = useState(false);
+
+  useEffect(() => {
+    getPayment()
+      .then((p) => setGap(p.has_prices && p.ready.length === 0))
+      .catch(() => setGap(false));
+  }, []);
+
+  if (!gap) return null;
+  return (
+    <div
+      style={{
+        background: "var(--accent-tint, #eef4f0)",
+        borderBottom: "1px solid var(--rule)",
+        padding: "14px 24px",
+        fontSize: 14,
+        lineHeight: 1.6,
+        color: "var(--text-secondary)",
+      }}
+    >
+      <strong style={{ color: "var(--text-primary, #1c2430)" }}>
+        Customers can't pay through your agent yet.
+      </strong>{" "}
+      You have prices in your knowledge base, so people do ask to buy — but with
+      no card number saved, the agent answers the price question and stops
+      there. <a href="#/payment">Add your card number</a> if you want it to take
+      payment.
     </div>
   );
 }

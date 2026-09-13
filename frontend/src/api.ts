@@ -677,3 +677,46 @@ export function getCustomers(): Promise<Customers> {
 export function getExchange(chatId: number): Promise<Turn[]> {
   return request<Turn[]>(`/conversations/${chatId}`);
 }
+
+/* --- payment details -------------------------------------------------------
+ *
+ * OPTIONAL BY DESIGN. Plenty of businesses never sell in chat. These endpoints
+ * exist because until now there was no route for an owner to set payment
+ * details at all -- the reserved subject was refused everywhere an owner could
+ * reach, and the only writer was the seed script. */
+
+export type PaymentLanguage = {
+  key: string;
+  label: string;
+  instruction: string | null;
+  exact: string | null;
+  ready: boolean;
+  instruction_attribute: string;
+  exact_attribute: string;
+};
+
+export type Payment = {
+  card: string | null;
+  card_attribute: string;
+  optional: { attribute: string; value: string | null }[];
+  languages: PaymentLanguage[];
+  ready: string[];
+  /* Confirmed prices a customer could actually order. The reason the warning
+     is conditional: a business with no exact prices cannot dead-end anyone. */
+  has_prices: boolean;
+};
+
+export function getPayment(): Promise<Payment> {
+  return request<Payment>("/payment");
+}
+
+/* One attribute at a time, like editing a fact. A form that PUT all nine
+   together would overwrite a card number with a stale copy from a tab left
+   open. An empty value clears the field. */
+export function setPaymentDetail(attribute: string, value: string): Promise<Payment> {
+  return request<Payment>("/payment", {
+    method: "PUT",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ attribute, value }).toString(),
+  });
+}

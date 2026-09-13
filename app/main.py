@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
 from app import (auth, channel, console, conversations, extract, knowledge,
-                 review, sources, vision)
+                 payment, review, sources, vision)
 from app.approval import NotApproved
 from app.db import assert_app_role, connection, pool
 from app.llm import check_configured, check_reachable
@@ -361,6 +361,49 @@ def reject_fact(business: Business, fact_id: str) -> dict:
                        "elsewhere -- rejecting means the extraction was wrong, "
                        "not that the thing stopped being true.")
         return {"id": fact_id, "rejected": True}
+
+
+# --- payment details --------------------------------------------------------
+#
+# OPTIONAL BY DESIGN. Plenty of businesses never sell in chat, and an agent with
+# no payment details answers every question perfectly well. These endpoints
+# exist because until now there was NO route for an owner to set them at all:
+# check_subject()'s `allow_reserved` had no caller outside seed.py, so the
+# reserved subject was refused on /fact, on Add knowledge, and everywhere else.
+
+
+@app.get("/payment")
+def payment_details(business: Business) -> dict:
+    """What is filled in, per language, and whether the buy flow can fire.
+
+    Per language rather than done/not-done: the card is shared but the
+    instruction and exact-amount lines are the owner's own words in each
+    language, so a business can be complete for Uzbek and broken for Russian.
+    """
+    with connection(business) as conn:
+        return payment.completeness(conn)
+
+
+@app.put("/payment")
+def set_payment_detail(business: Business, attribute: str = Form(...),
+                       value: str = Form("")) -> dict:
+    """Set or clear one payment detail.
+
+    One attribute at a time, matching /fact/{id}: a form that PUTs nine fields
+    together would overwrite a card number with a stale copy from a tab someone
+    left open.
+
+    An empty value CLEARS the field rather than storing "". A blank instruction
+    line and a missing one must not be different states -- order_message()
+    treats both as unusable, and two ways to be unset is how a screen starts
+    disagreeing with the bot.
+    """
+    with connection(business) as conn:
+        try:
+            payment.set_detail(conn, attribute, value)
+        except payment.NotSettable as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return payment.completeness(conn)
 
 
 # --- customers --------------------------------------------------------------

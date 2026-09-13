@@ -167,3 +167,158 @@ def order_message(conn: Connection, language: str, order: dict) -> str | None:
     if not warning:
         return None
     return f"{base}\n\n{som(order['amount'])}\n{warning}"
+
+
+# --- the owner's side: setting the details, and knowing they are set ---------
+#
+# THE WRITER check_subject()'s `allow_reserved` WAS WAITING FOR. That parameter
+# has existed since the exclusion was built, documented as "passed by the one
+# writer that is supposed to use that subject", and until now it had NO CALLER
+# -- so the reserved subject was refused on every path an owner could reach.
+# Not a screen, not /fact, not Add knowledge. The only thing that ever wrote a
+# payment fact was seed.py, by raw SQL, for the reference clinic.
+#
+# The cost of that was not theoretical. A self-serve business connected a bot,
+# a customer tapped buy, an order was created, and order_message() returned
+# None at the last step -- so the customer was told "contact us" and the owner
+# was never told anything. Every self-serve business would have hit it.
+
+# What may be stored under the reserved subject, and nothing else.
+#
+# A WHITELIST, because the exclusion is total and has no idea what it is
+# hiding: a business fact written under this subject would be invisible to
+# retrieval forever, answering nothing and explaining nothing. check_subject()
+# stops another SUBJECT being claimed; this stops this writer being used as a
+# side door for arbitrary ATTRIBUTES.
+SETTABLE = ((CARD_ATTRIBUTE,)
+            + OPTIONAL_ATTRIBUTES
+            + tuple(INSTRUCTION_ATTRIBUTE.values())
+            + tuple(EXACT_ATTRIBUTE.values()))
+
+# The three languages, in the order the screen shows them, with a label for
+# each. Keyed by what detect_language() returns -- the same strings that key
+# INSTRUCTION_ATTRIBUTE and EXACT_ATTRIBUTE, so a fourth language is added in
+# one place and every dict above fails loudly if it was missed.
+LANGUAGES = (
+    ("the same language the customer wrote in, in LATIN script", "Uzbek (Latin)"),
+    ("Uzbek, in CYRILLIC script", "Uzbek (Cyrillic)"),
+    ("Russian", "Russian"),
+)
+
+
+class NotSettable(ValueError):
+    """An attribute that is not part of the payment details."""
+
+
+def set_detail(conn: Connection, attribute: str, value: str | None) -> None:
+    """Write one payment detail, or clear it when `value` is empty.
+
+    NEVER EMBEDDED, and that is enforced twice: nothing is passed for the
+    vector here, and the constraint fact_payment_not_embedded refuses the row
+    if it ever were. A payment fact carrying an embedding is a card number in
+    a vector search's candidate set.
+
+    Confirmed on write, unlike every other owner-typed fact. Review exists so a
+    fact is read by a human before a customer can be answered from it -- and
+    nothing can ever be answered from this subject. A payment detail sitting
+    unconfirmed would be a card number the owner typed, cannot see, and that
+    silently does not work.
+    """
+    if attribute not in SETTABLE:
+        raise NotSettable(
+            f"{attribute!r} is not a payment detail. Allowed: "
+            f"{', '.join(SETTABLE)}. Anything else stored under "
+            f"{PAYMENT_SUBJECT!r} would be excluded from retrieval and answer "
+            "nothing -- see the exclusion in migrations/0005.")
+    # The one sanctioned use. Refused for every other subject, which is what
+    # keeps an ordinary business fact from being hidden here by accident.
+    #
+    # Imported here, not at module scope: app/triage.py imports this module for
+    # PAYMENT_SUBJECT_KEY, so a top-level import is a cycle.
+    from app.triage import check_subject
+    check_subject(PAYMENT_SUBJECT, allow_reserved=True)
+
+    key = normalize(attribute)
+    conn.execute("delete from fact where subject_key = %s and attribute_key = %s",
+                 (PAYMENT_SUBJECT_KEY, key))
+    if not (value or "").strip():
+        return
+    value = value.strip()
+    conn.execute(
+        "insert into fact (subject, subject_key, attribute, attribute_key,"
+        " value, value_key, confirmed) values (%s, %s, %s, %s, %s, %s, true)",
+        (PAYMENT_SUBJECT, PAYMENT_SUBJECT_KEY, attribute, key,
+         value, normalize(value)))
+
+
+def ready_for(conn: Connection, language: str) -> bool:
+    """Whether order_message() could be assembled for this language.
+
+    THE QUESTION THE BUY OFFER HAS TO ASK BEFORE OFFERING. It was asked after
+    the order was created, which is how a customer reached a dead end with a
+    purchase row behind it.
+
+    Derived from the same three lookups order_message() does rather than from a
+    stored flag, because a flag is a second answer to the question and the two
+    drift the first time an owner clears a field.
+    """
+    stored = details(conn)
+    return bool(stored.get(CARD_ATTRIBUTE)
+                and stored.get(INSTRUCTION_ATTRIBUTE[language])
+                and stored.get(EXACT_ATTRIBUTE[language]))
+
+
+def has_orderable_prices(conn: Connection) -> bool:
+    """Whether the buy flow can fire at all for this business.
+
+    Same definition of a price as orders.price_options() -- a confirmed
+    retrievable fact whose attribute looks like a price and whose value parses
+    to an exact amount. A range or a floor is not orderable, so a business
+    whose prices are all "from 200 000" cannot dead-end anyone and should not
+    be told to fill in payment details.
+    """
+    from app.orders import parse_amount
+
+    rows = conn.execute(
+        "select value from retrievable_fact"
+        " where attribute_key like %s and confirmed", ("%narx%",)).fetchall()
+    return any(parse_amount(v) is not None for (v,) in rows)
+
+
+def completeness(conn: Connection) -> dict:
+    """What is filled in, per language, and what it means.
+
+    PER LANGUAGE, NOT DONE/NOT-DONE, and the partial case is the reason. The
+    card is shared but the instruction and the exact-amount warning are the
+    owner's own words in each language, so a business with Uzbek filled in and
+    Russian blank works perfectly for Uzbek customers and dead-ends Russian
+    ones. A single tick would say "set up" and be wrong for a third of the
+    country.
+    """
+    stored = details(conn)
+    languages = [{
+        "key": key,
+        "label": label,
+        "instruction": stored.get(INSTRUCTION_ATTRIBUTE[key]),
+        "exact": stored.get(EXACT_ATTRIBUTE[key]),
+        # The card is in every language's requirement because order_message()
+        # needs it in every language. A language cannot be ready without it.
+        "ready": bool(stored.get(CARD_ATTRIBUTE)
+                      and stored.get(INSTRUCTION_ATTRIBUTE[key])
+                      and stored.get(EXACT_ATTRIBUTE[key])),
+        "instruction_attribute": INSTRUCTION_ATTRIBUTE[key],
+        "exact_attribute": EXACT_ATTRIBUTE[key],
+    } for key, label in LANGUAGES]
+
+    return {
+        "card": stored.get(CARD_ATTRIBUTE),
+        "card_attribute": CARD_ATTRIBUTE,
+        "optional": [{"attribute": a, "value": stored.get(a)}
+                     for a in OPTIONAL_ATTRIBUTES],
+        "languages": languages,
+        "ready": [lang["label"] for lang in languages if lang["ready"]],
+        # THE STATE WORTH SURFACING: the buy flow can fire and cannot complete.
+        # Not "payment is unset" -- plenty of businesses never sell in chat and
+        # have nothing to fix.
+        "has_prices": has_orderable_prices(conn),
+    }
