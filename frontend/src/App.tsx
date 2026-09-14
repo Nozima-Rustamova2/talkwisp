@@ -99,7 +99,7 @@ export default function App() {
         : route === "review"
           ? "Review — Talkwisp"
           : route === "knowledge"
-            ? "Knowledge — Talkwisp"
+            ? "All facts — Talkwisp"
             : route === "dialogs"
             ? "Dialogs — Talkwisp"
             : route === "payment"
@@ -108,7 +108,7 @@ export default function App() {
               ? "Test — Talkwisp"
               : route === "settings"
                 ? "Settings — Talkwisp"
-                : "Add — Talkwisp";
+                : "Knowledge base — Talkwisp";
   }, [route, me]);
 
   /* EVERY HOOK ABOVE THIS LINE, EVERY RETURN BELOW IT.
@@ -170,7 +170,11 @@ export default function App() {
     </div>
   );
 
-  const tab = (to: Route, label: string) => (
+  /* `owns` rather than a single route, because one rail item can be the home
+     of several. Knowledge base lands on Add and stays lit while the owner is
+     in Review or browsing the list -- those are stages of one task, not three
+     places, which is the whole reason they stopped being three tabs. */
+  const tab = (to: Route, label: string, owns: Route[] = []) => (
     <a
       href={to === "add" ? "#/" : `#/${to}`}
       style={{
@@ -180,9 +184,13 @@ export default function App() {
         padding: "0 14px",
         borderRadius: "var(--radius-inner)",
         fontSize: 15,
-        fontWeight: route === to ? 700 : 600,
-        color: route === to ? "var(--accent-pressed)" : "var(--text-secondary)",
-        background: route === to ? "var(--accent-tint)" : "transparent",
+        fontWeight: route === to || owns.includes(route) ? 700 : 600,
+        color:
+          route === to || owns.includes(route)
+            ? "var(--accent-pressed)"
+            : "var(--text-secondary)",
+        background:
+          route === to || owns.includes(route) ? "var(--accent-tint)" : "transparent",
         textDecoration: "none",
         /* The rail's width is set by its longest string and never truncated --
            design-dashboard.md calls that out because the longest one is
@@ -257,12 +265,17 @@ export default function App() {
           </div>
         </div>
 
-        {/* "Add knowledge" became "Add" when "Knowledge" arrived beside it:
-            two items both saying knowledge reads fine to whoever wrote it and
-            is a coin-flip for everyone else. */}
-        {tab("add", "Add")}
-        {tab("review", "Review")}
-        {tab("knowledge", "Knowledge")}
+        {/* ONE ITEM FOR THREE ROUTES. Add, Review and the browsable list are
+            three stages of a single task -- put something in, check what was
+            read, look at what is there -- and three top-level tabs made an
+            owner navigate between the steps of one job.
+
+            The counter band on the landing screen is the router, which is what
+            the design always showed: "6 waiting for review" was already a link
+            to Review before this merge, and "214 facts" is now a link to the
+            list. Its doors disappear when there is nothing behind them, which
+            a persistent "Review (0)" tab could never do. */}
+        {tab("add", "Knowledge base", ["review", "knowledge"])}
         {/* "Dialogs", not "Customers". Customers was the framing we wanted --
             a contacts list -- and the data does not support it: names exist
             only from the moment the bot started capturing them, so older rows

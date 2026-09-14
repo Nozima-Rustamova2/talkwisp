@@ -242,6 +242,24 @@ export default function Review() {
         maxWidth: 1360,
       }}
     >
+      {/* THE WAY BACK. The counter band routes forward and cannot route back,
+          and the browser's back button is no use to someone who arrived by
+          bookmark -- #/review has been a real URL since before the merge and
+          stays one, which is why the routes were not renamed. */}
+      <a
+        href="#/"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          minHeight: 44,
+          fontSize: 14,
+          fontWeight: 600,
+          color: "var(--text-muted)",
+          textDecoration: "none",
+        }}
+      >
+        ← Knowledge base
+      </a>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <h1
           style={{

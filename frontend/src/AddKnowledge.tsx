@@ -329,11 +329,35 @@ export default function AddKnowledge() {
                 flexWrap: "wrap",
               }}
             >
+              {/* THE BAND IS THE ROUTER, which is what the design always
+                  showed and why Add, Review and the list are now one rail
+                  item. "waiting for review" was already a link; this is the
+                  other door.
+
+                  The number is the link because the number is the reason to
+                  go: an owner opens the list to fix one wrong price, and
+                  "214 facts" is the sentence they are already reading when
+                  they decide to. A separate "Browse" button would be a second
+                  control saying what this one already says.
+
+                  It routes only when there is something to see. At zero facts
+                  the empty state above replaces this band entirely, so the
+                  dead link cannot be reached rather than being disabled. */}
               <span style={{ fontSize: 16, color: "var(--text-secondary)" }}>
                 The agent knows{" "}
-                <strong style={{ fontWeight: 800, fontSize: 19, color: "var(--text)" }}>
+                <a
+                  href="#/knowledge"
+                  style={{
+                    fontWeight: 800,
+                    fontSize: 19,
+                    color: "var(--text)",
+                    textDecoration: "underline",
+                    textUnderlineOffset: 3,
+                    textDecorationColor: "var(--rule)",
+                  }}
+                >
                   {stats.facts} {stats.facts === 1 ? "fact" : "facts"}
-                </strong>{" "}
+                </a>{" "}
                 from{" "}
                 <strong style={{ fontWeight: 800, fontSize: 19, color: "var(--text)" }}>
                   {stats.sources} {stats.sources === 1 ? "source" : "sources"}
