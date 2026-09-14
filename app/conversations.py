@@ -159,25 +159,102 @@ def overview() -> dict:
     }
 
 
+# Routing decisions the bot made about ITS OWN pipeline. They are not things
+# that happened to the customer, and the owner has no use for the words -- a
+# screen that says "buy_prefilter_blocked" is showing its own plumbing.
+#
+# buy_prefilter_blocked is also the reason one message became two rows: it logs
+# and then FALLS THROUGH to answer(), which logs again. The customer sent one
+# message; the log has two lines about it.
+_SILENT = {"buy_prefilter_blocked", "not_approved", "owner_claimed",
+           "owner_claim_refused", "fact_written"}
+
+# Everything else, said the way the owner would say it. An outcome missing from
+# this table is shown as nothing rather than as its key: a gap here should look
+# like a quiet row, never like a leaked identifier.
+_OUTCOMES = {
+    "social": "Greeted them",
+    "throttled": "Asked them to write again in a moment",
+    "escalated": "Sent to you",
+    "escalation_answered": "You answered",
+    "offer": "Offered to take payment",
+    "offer_withheld_no_payment_details":
+        "Answered, but couldn't offer payment — no card number saved",
+    "order_created": "Order placed",
+    "order_no_payment_details": "Order placed, but there was no card to send",
+    "order_refused": "Couldn't place the order",
+    "order_awaiting_payment": "Waiting for payment",
+    "order_owner_confirmed": "You confirmed the payment",
+    "order_owner_rejected": "You rejected the payment",
+    "order_expired": "Order expired",
+    "order_cancelled": "Order cancelled",
+    "screenshot_attached": "Sent a payment screenshot",
+    "screenshot_refused": "Screenshot couldn't be attached",
+    "screenshot_no_order": "Sent a screenshot with no open order",
+    "customer_unreachable": "Couldn't reach them",
+    "llm_error": "Something went wrong on our side",
+    "database_error": "Something went wrong on our side",
+    "fact_write_error": "Something went wrong on our side",
+    "error": "Something went wrong on our side",
+}
+
+# Two log lines about one message are written within a second of each other.
+# A customer who sends the SAME words again two minutes later -- which is
+# exactly what happened in the transcript that started this -- is a second
+# message and must stay a second row.
+SAME_MESSAGE = datetime.timedelta(seconds=10)
+
+
 def exchange(chat_id: int) -> list[dict]:
-    """One customer's messages, oldest first.
+    """One customer's conversation, oldest first, ONE ENTRY PER MESSAGE.
+
+    The log is a record of what the bot DID, and a single customer message can
+    produce more than one line of that -- a routing decision, then an answer.
+    Rendered straight, the screen shows the same question twice and calls the
+    first one buy_prefilter_blocked. So the lines are folded back into the
+    messages they describe.
 
     Read-only on purpose. Replying lives in Telegram: the owner is not at a
     laptop at 9pm, the takeover flow already works there, and the landing page
-    promises exactly that in three languages. A reply box here would duplicate
-    a working feature and contradict a live promise.
+    promises exactly that in three languages.
     """
     rows, _, _ = read_lines()
     mine = [r for r in rows
             if r.get("chat_id") == chat_id and not r.get("is_owner")]
     mine.sort(key=lambda r: r.get("at") or "")
-    return [{
-        "at": r.get("at"),
-        "question": r.get("question"),
-        "answer": r.get("answer"),
-        # What became of it -- escalated, throttled, an order, a refusal. The
-        # answer field is null on most of these, and the outcome is the only
-        # thing that says why.
-        "outcome": r.get("outcome"),
-        "status": r.get("status"),
-    } for r in mine]
+
+    entries: list[dict] = []
+    for row in mine:
+        outcome = row.get("outcome")
+        if outcome in _SILENT:
+            continue
+        entry = {
+            "at": row.get("at"),
+            "question": row.get("question"),
+            "answer": row.get("answer"),
+            "note": _OUTCOMES.get(outcome) if outcome else None,
+        }
+        previous = entries[-1] if entries else None
+        if (previous is not None
+                and entry["question"]
+                and previous["question"] == entry["question"]
+                and not previous["answer"]
+                and _close(previous["at"], entry["at"])):
+            # The second line is the same message, answered. Keep the earlier
+            # timestamp and take whichever half each line carried.
+            previous["answer"] = previous["answer"] or entry["answer"]
+            previous["note"] = previous["note"] or entry["note"]
+            continue
+        entries.append(entry)
+    return entries
+
+
+def _close(first: str | None, second: str | None) -> bool:
+    if not first or not second:
+        return False
+    try:
+        gap = datetime.datetime.fromisoformat(second) - \
+            datetime.datetime.fromisoformat(first)
+    except ValueError:
+        return False
+    return abs(gap) <= SAME_MESSAGE

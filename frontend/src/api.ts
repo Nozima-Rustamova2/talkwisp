@@ -666,8 +666,10 @@ export type Turn = {
   at: string | null;
   question: string | null;
   answer: string | null;
-  outcome: string | null;
-  status: string | null;
+  /* What became of it, in the owner's words -- "Sent to you", "Order placed".
+     Internal routing outcomes are dropped server-side rather than translated
+     here, so a screen can never show buy_prefilter_blocked to a business. */
+  note: string | null;
 };
 
 export function getCustomers(): Promise<Customers> {

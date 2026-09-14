@@ -128,6 +128,22 @@ def run(admin, biz_a: str, biz_b: str, scratch: pathlib.Path) -> None:
         # The owner testing their own bot. Not a customer.
         line(business_id=biz_a, chat_id=999, is_owner=True,
              first_name="Owner", question="test", at=mins(20)),
+        # ONE MESSAGE, TWO LOG LINES. buy_prefilter_blocked logs and then
+        # FALLS THROUGH to answer(), which logs again -- so the log has two
+        # rows about a single thing the customer typed. Seconds apart.
+        line(business_id=biz_a, chat_id=222, first_name="Dilnoza",
+             question="MRT qancha turadi?", outcome="buy_prefilter_blocked",
+             at=mins(12)),
+        line(business_id=biz_a, chat_id=222, first_name="Dilnoza",
+             question="MRT qancha turadi?", answer="400 000 so'm",
+             status="ok", at=mins(12)),
+        # THE SAME WORDS AGAIN, TWO MINUTES LATER. This is a second message and
+        # must stay a second row -- it is exactly what the customer in the
+        # transcript that started this work did when the first reply did not
+        # help.
+        line(business_id=biz_a, chat_id=222, first_name="Dilnoza",
+             question="MRT qancha turadi?", answer="400 000 so'm",
+             status="ok", at=mins(14)),
         # ANOTHER BUSINESS'S CUSTOMER. Section 2 is about this line.
         line(business_id=biz_b, chat_id=333, first_name="Boburmirzo",
              username="bobur", question="Kurs narxi?", at=mins(1)),
@@ -143,6 +159,7 @@ def run(admin, biz_a: str, biz_b: str, scratch: pathlib.Path) -> None:
     check("three conversations across them", view["conversations"], 3)
     by_id = {c["chat_id"]: c for c in view["customers"]}
     check("Anvar's three messages", by_id[111]["messages"], 3)
+    check("and Dilnoza's four log lines", by_id[222]["messages"], 4)
     check("in two conversations, split by the 20-minute gap",
           by_id[111]["conversations"], 2)
     check("the newest username wins", by_id[111]["username"], "anvar_new")
@@ -227,7 +244,35 @@ def run(admin, biz_a: str, biz_b: str, scratch: pathlib.Path) -> None:
     turns = detail.json()
     check("three turns, oldest first", len(turns), 3)
     check("oldest really is first", turns[0]["question"], "Narxi qancha?")
-    check("and the outcome survives", turns[2]["outcome"], "escalated")
+    check("and the outcome is in the owner's words", turns[2]["note"],
+          "Sent to you")
+
+    print("\n7. ONE ENTRY PER MESSAGE, and no internal vocabulary")
+    dilnoza = client.get("/conversations/222").json()
+    # Four log lines: one plain question, then a prefilter line and its answer
+    # for the same message, then the same words again two minutes later.
+    check("four log lines become three entries", len(dilnoza), 3)
+    check("the two lines about one message fold into one",
+          [d["question"] for d in dilnoza],
+          ["MRT narxi?", "MRT qancha turadi?", "MRT qancha turadi?"])
+    check("and the folded entry keeps the answer that arrived second",
+          dilnoza[1]["answer"], "400 000 so'm")
+    check("the repeat two minutes later stays its own entry",
+          dilnoza[2]["answer"], "400 000 so'm")
+
+    # THE ONE THE OWNER MUST NEVER SEE. buy_prefilter_blocked is a decision the
+    # bot made about its own pipeline; rendered straight it reads as an error
+    # the business caused.
+    blob = json.dumps(dilnoza, ensure_ascii=False)
+    for word in ("buy_prefilter_blocked", "not_approved", "outcome", "status"):
+        check(f"{word!r} does not reach the screen", word in blob, False)
+
+    anvar = client.get("/conversations/111").json()
+    # An answered question carries no note -- the answer IS what happened. Only
+    # the lines where something else became of the message get one.
+    check("outcomes read as the owner would say them",
+          [a["note"] for a in anvar],
+          [None, "Greeted them", "Sent to you"])
 
     # A second business's session must not reach the first's customer, even
     # with the chat_id in hand -- the URL is guessable and 111 is a real chat.
@@ -236,7 +281,7 @@ def run(admin, biz_a: str, biz_b: str, scratch: pathlib.Path) -> None:
     check("B asking for A's customer by id gets nothing",
           other.get("/conversations/111").json(), [])
 
-    print("\n7. bot.py stamps the name on the right chat, and only that one")
+    print("\n8. bot.py stamps the name on the right chat, and only that one")
     import bot
     bot.remember_sender({"chat": {"id": 111},
                          "from": {"id": 111, "first_name": "Anvar",

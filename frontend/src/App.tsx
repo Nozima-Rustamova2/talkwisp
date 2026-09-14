@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
-import Conversations from "./Conversations";
+import Dialogs from "./Dialogs";
 import Payment from "./Payment";
 import Knowledge from "./Knowledge";
 import Review from "./Review";
@@ -25,7 +25,7 @@ type Route =
   | "add"
   | "review"
   | "knowledge"
-  | "customers"
+  | "dialogs"
   | "payment"
   | "test"
   | "settings";
@@ -46,7 +46,7 @@ function routeFromHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
   if (hash === "review") return "review";
   if (hash === "knowledge") return "knowledge";
-  if (hash === "customers") return "customers";
+  if (hash === "dialogs") return "dialogs";
   if (hash === "payment") return "payment";
   if (hash === "test") return "test";
   if (hash === "settings") return "settings";
@@ -100,8 +100,8 @@ export default function App() {
           ? "Review — Talkwisp"
           : route === "knowledge"
             ? "Knowledge — Talkwisp"
-            : route === "customers"
-            ? "Customers — Talkwisp"
+            : route === "dialogs"
+            ? "Dialogs — Talkwisp"
             : route === "payment"
               ? "Payment — Talkwisp"
             : route === "test"
@@ -175,15 +175,19 @@ export default function App() {
       href={to === "add" ? "#/" : `#/${to}`}
       style={{
         minHeight: 44,
-        display: "inline-flex",
+        display: "flex",
         alignItems: "center",
-        padding: "0 12px",
+        padding: "0 14px",
         borderRadius: "var(--radius-inner)",
         fontSize: 15,
         fontWeight: route === to ? 700 : 600,
         color: route === to ? "var(--accent-pressed)" : "var(--text-secondary)",
         background: route === to ? "var(--accent-tint)" : "transparent",
         textDecoration: "none",
+        /* The rail's width is set by its longest string and never truncated --
+           design-dashboard.md calls that out because the longest one is
+           Russian, and an ellipsis in a nav item is a label you cannot read. */
+        whiteSpace: "nowrap",
       }}
     >
       {label}
@@ -210,63 +214,80 @@ export default function App() {
   const payment = !me.approved ? null : <PaymentGap />;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--ground)" }}>
-      <header
+    /* THE LEFT RAIL, from design-dashboard.md, and it is only now honest.
+     *
+     * It was a header until today for a stated reason: four of the seven
+     * designed rail items had nothing behind them, and an inert nav pointing at
+     * screens that do not exist is the dishonesty the design docs argue
+     * against. All seven are built now, so the reason expired.
+     *
+     * DASHBOARD AND GAPS ARE NOT HERE AT ALL, rather than greyed. Dashboard is
+     * the first item and where the eye lands; a greyed top of the rail reads as
+     * an unfinished product every time the owner opens the app, which is worse
+     * than an app that simply does not have that screen yet.
+     *
+     * On a narrow screen it wraps above the content rather than pinning to the
+     * side. The bottom bar in the design is a better answer and is not this. */
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--ground)",
+        display: "flex",
+        alignItems: "flex-start",
+        flexWrap: "wrap",
+      }}
+    >
+      <nav
         style={{
+          flex: "0 0 auto",
+          width: 210,
+          minHeight: "100vh",
           background: "var(--surface)",
-          boxShadow: "0 1px 0 var(--rule)",
-          padding: "12px 24px",
+          boxShadow: "1px 0 0 var(--rule)",
+          padding: "18px 12px",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 18,
-          flexWrap: "wrap",
+          flexDirection: "column",
+          gap: 2,
+          boxSizing: "border-box",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em" }}>
+        <div style={{ padding: "0 14px 16px" }}>
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em" }}>
             Talkwisp
-          </span>
-          <span style={{ fontSize: 13, color: "var(--text-faint)" }}>Knowledge base</span>
+          </div>
         </div>
-        {/* Two links, because there are two screens. No business name, no user,
-            no language pills, and no links to screens that do not exist: the
-            rail in the prototype points at five of those, and an inert nav is
-            the dishonesty the design docs argue against. */}
-        <nav style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-          {/* "Add knowledge" became "Add" when "Knowledge" arrived beside it.
-              Two items both saying knowledge is the kind of thing that reads
-              fine to whoever wrote it and is a coin-flip for everyone else --
-              and these two are genuinely different places: one is where you
-              feed the agent, the other is where you see and fix what it knows. */}
-          {tab("add", "Add")}
-          {tab("review", "Review")}
-          {tab("knowledge", "Knowledge")}
-          {/* "Customers", not "Conversations". The screen is a contacts
-              list -- who talked to you, how often, how to reach them -- and
-              naming it after the log would promise a log viewer, which is
-              the thing it deliberately is not. */}
-          {tab("customers", "Customers")}
-          {tab("payment", "Payment")}
-          {tab("test", "Test")}
-          {tab("settings", "Settings")}
-          {/* The signed-in address, and a way out. Shown because a session that
+
+        {/* "Add knowledge" became "Add" when "Knowledge" arrived beside it:
+            two items both saying knowledge reads fine to whoever wrote it and
+            is a coin-flip for everyone else. */}
+        {tab("add", "Add")}
+        {tab("review", "Review")}
+        {tab("knowledge", "Knowledge")}
+        {/* "Dialogs", not "Customers". Customers was the framing we wanted --
+            a contacts list -- and the data does not support it: names exist
+            only from the moment the bot started capturing them, so older rows
+            are chat ids. What the screen shows is conversations. */}
+        {tab("dialogs", "Dialogs")}
+        {tab("payment", "Payment")}
+        {tab("test", "Test")}
+        {tab("settings", "Settings")}
+
+        <div style={{ marginTop: "auto", padding: "16px 14px 0" }}>
+          {/* The signed-in address and a way out. Shown because a session that
               cannot be seen or ended is the one part of auth a person cannot
-              verify for themselves -- and on a shared machine that matters more
+              verify for themselves, and on a shared machine that matters more
               than the space it costs. */}
-          <span
+          <div
             style={{
-              fontSize: 13,
+              fontSize: 12,
               color: "var(--text-faint)",
-              marginLeft: 8,
-              maxWidth: 200,
+              marginBottom: 8,
               overflow: "hidden",
               textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
             }}
           >
             {me.email}
-          </span>
+          </div>
           <button
             className="control control-quiet"
             onClick={async () => {
@@ -279,17 +300,18 @@ export default function App() {
           >
             Sign out
           </button>
-        </nav>
-      </header>
+        </div>
+      </nav>
 
+      <main style={{ flex: "1 1 520px", minWidth: 0 }}>
       {waiting}
       {payment}
       {route === "review" ? (
         <Review />
       ) : route === "knowledge" ? (
         <Knowledge />
-      ) : route === "customers" ? (
-        <Conversations />
+      ) : route === "dialogs" ? (
+        <Dialogs />
       ) : route === "payment" ? (
         <Payment />
       ) : route === "test" ? (
@@ -299,6 +321,7 @@ export default function App() {
       ) : (
         <AddKnowledge />
       )}
+      </main>
     </div>
   );
 }
