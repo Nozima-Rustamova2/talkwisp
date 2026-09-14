@@ -23,3 +23,15 @@ question_vectors.json
 retrieval_snapshot.json
 # Per-tenant bot logs, written by supervise.py.
 logs/
+
+# Crash output. bot.err was TRACKED and empty, which is the dangerous
+# combination: the next unhandled traceback lands in a file git is already
+# watching, and `git add -A` publishes a stack trace with paths, queries and
+# whatever a customer typed to trigger it.
+*.err
+
+# GENERATED FROM REAL CUSTOMER MESSAGES by harvest.py -- its own docstring says
+# "real questions from real people". Nothing imports it, it is regenerable in
+# one command, and in a PUBLIC repo it is other people's words. The stubs are
+# for local triage, not for publication.
+questions_harvested.py
