@@ -1419,8 +1419,23 @@ def handle(conn, message: dict, last_seen: dict) -> None:
                  "outcome": "owner_claim_refused"})
             return
 
-        send(chat_id, "Salom! {name} haqida savolingizni yozing.\n"
-                      "Здравствуйте! Напишите свой вопрос о {name}."
+        # .format() ON THE TEMPLATE, and its absence SHIPPED. This is the
+        # first message every new customer of every business ever sees, and
+        # it read "Salom! {name} haqida savolingizni yozing." -- the
+        # placeholder itself, braces and all.
+        #
+        # social() formats the same placeholder correctly three hundred
+        # lines up; this branch was written separately and never did. The
+        # two greetings are separate because /start is a command and a
+        # typed "salom" is not, which is a real distinction -- but it means
+        # a fix to one has never been a fix to the other.
+        #
+        # Formatted BEFORE the owner suffix is appended. That suffix has no
+        # placeholders, and formatting the whole concatenation would turn
+        # any brace added to it later into a format field by accident.
+        send(chat_id, ("Salom! {name} haqida savolingizni yozing.\n"
+                       "Здравствуйте! Напишите свой вопрос о {name}."
+                       ).format(name=BUSINESS_NAME or "biz")
                       + ("\n\n(Siz egasi sifatida tanildingiz.)" if is_owner else ""))
         return
 

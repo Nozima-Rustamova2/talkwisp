@@ -340,5 +340,60 @@ for _label, _template in (list(_bot.GREETING_REPLY.items())
           "Rangli Salon" in _rendered and "{name}" not in _rendered, True)
 
 
+
+# --- a placeholder nothing ever fills ---------------------------------------
+#
+# THIS SHIPPED, and it was the first message every new customer of every
+# business ever saw: /start replied "Salom! {name} haqida savolingizni yozing."
+# -- the placeholder itself, braces and all. The template carried {name} and
+# .format() was never called on it.
+#
+# Nothing could have caught it. tsc does not read Python, the checks here read
+# tables rather than message text, and the 90-question harness never sends
+# /start. It was found by a customer.
+#
+# The rule is deliberately narrow: a string literal handed DIRECTLY to a
+# sending call, carrying a {placeholder}, with nothing in that same argument
+# formatting anything. Templates kept in module constants -- GREETING_REPLY,
+# PAYMENT_GAP_OWNER -- are formatted at their call sites and are not the bug;
+# a broader rule flagged four of those and would have been turned off.
+_PLACEHOLDER = re.compile(r"\{[a-z_]+\}")
+_SENDERS = {"send", "send_kb", "edit_here", "answer_callback"}
+
+
+def _unformatted(source: str) -> list:
+    tree = ast.parse(source)
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in _SENDERS):
+            continue
+        for arg in node.args:
+            if any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                   and n.func.attr == "format" for n in ast.walk(arg)):
+                continue
+            for inner in ast.walk(arg):
+                if (isinstance(inner, ast.Constant)
+                        and isinstance(inner.value, str)
+                        and _PLACEHOLDER.search(inner.value)):
+                    found.append((inner.lineno, inner.value[:60]))
+    return found
+
+
+leaked = _unformatted(SOURCE)
+check("no sent message carries an unfilled {placeholder}",
+      [f"line {n}: {t}" for n, t in leaked], [])
+
+# THE CONTROL. An empty list is equally true of a working rule and a rule that
+# matches nothing, so plant the bug back and require it to be seen.
+# Removing the .format() call is EXACTLY how it shipped -- the template and
+# the placeholders were already there. The first attempt at this control kept
+# the .format() and merely added to the expression, so nothing was broken and
+# the control correctly refused to pass.
+planted = SOURCE.replace(').format(name=BUSINESS_NAME or "biz")', ')', 1)
+assert planted != SOURCE, "the control planted nothing"
+check("and the rule would catch it coming back",
+      len(_unformatted(planted)) > 0, True)
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
