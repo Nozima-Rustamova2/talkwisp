@@ -206,9 +206,36 @@ def expire_stale(conn: Connection) -> list[dict]:
         "update escalation set status = 'expired'"
         " where status in ('waiting', 'answering')"
         "   and created_at < now() - %s::interval"
-        " returning id", (f"{int(EXPIRE_AFTER.total_seconds())} seconds",)
+        " returning id", (f"{int(sweep_after(conn).total_seconds())} seconds",)
     ).fetchall()
     return [get(conn, str(r[0])) for r in rows]
+
+
+def sweep_after(conn: Connection) -> datetime.timedelta:
+    """How long before a customer is told no answer came.
+
+    max(stated, EXPIRE_AFTER), AND THE FLOOR IS THE POINT. The business's
+    stated window is a claim about the business -- "they usually reply within
+    three hours" -- and this is a backstop, which is a different thing. An
+    owner who types "2 hours" to sound responsive would otherwise make the
+    apology fire after two, so a customer answered on hour three would read
+    "no reply yet, contact us directly" and THEN get their answer. Worse than
+    today, caused by the owner being modest.
+
+    A LONG window moves both: set 48 and the copy says two days and this waits
+    two days, so a business that genuinely takes that long stops apologising
+    after one. That is the direction the field exists for, and it works.
+
+    Not "stated times two". That does the same job and hides a multiplier
+    nobody can see -- in six months someone reads "apology after the stated
+    window", watches it fire at double, and cannot find why.
+    """
+    row = conn.execute(
+        "select reply_window_hours from business").fetchone()
+    stated = row[0] if row and row[0] else None
+    if stated is None:
+        return EXPIRE_AFTER
+    return max(EXPIRE_AFTER, datetime.timedelta(hours=stated))
 
 
 def outstanding(conn: Connection) -> list[dict]:

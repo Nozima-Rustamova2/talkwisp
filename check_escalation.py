@@ -278,5 +278,63 @@ def run(admin, biz: str) -> None:
                            (x,)).fetchone()[0], "waiting")
         conn.execute("delete from escalation")
 
+    print("\nTHE STATED WINDOW, AND THE FLOOR UNDER THE SWEEP")
+    # Two different things share one number and they are not the same thing.
+    # The customer-facing sentence is a CLAIM ABOUT THE BUSINESS; the sweep is
+    # a BACKSTOP deciding when someone told "I've sent it" is told nothing came.
+    import datetime as _dt
+    with connection(biz) as conn:
+        def window(hours):
+            conn.execute("select app_business_set_reply_window(%s, %s::smallint)",
+                         (biz, hours))
+            return escalation.sweep_after(conn)
+
+        # UNSET IS TODAY. No claim, and the sweep at the 24 hours it always used.
+        check("unset sweeps at the old default",
+              window(None), escalation.EXPIRE_AFTER)
+        check("and says nothing about timing",
+              "odatda" in bot.sent_on_text(conn, "narxi qancha").lower(), False)
+
+        # A SHORT WINDOW IS HONEST IN THE COPY AND DOES NOT SHORTEN PATIENCE.
+        # Without the floor, an owner typing 2 to sound responsive would make
+        # the apology fire at two hours -- so a customer answered on hour three
+        # would read "no reply yet, contact us" and THEN get their answer.
+        check("two hours does not drag the sweep down",
+              window(2), escalation.EXPIRE_AFTER)
+        said = bot.sent_on_text(conn, "narxi qancha")
+        check("but the customer IS told two hours", "2 soat" in said, True)
+        check("attributed to the business, not promised by us",
+              "odatda" in said.lower(), True)
+
+        # A LONG WINDOW MOVES BOTH, which is the direction the field exists for:
+        # a business that genuinely takes two days stops apologising after one.
+        check("forty-eight hours moves the sweep", window(48),
+              _dt.timedelta(hours=48))
+        check("and reads as days, not hours",
+              "2 kun" in bot.sent_on_text(conn, "narxi qancha"), True)
+
+        # THE BOUNDARY. Exactly 24 is the floor itself, not above it.
+        check("twenty-four is the floor, not a change",
+              window(24), escalation.EXPIRE_AFTER)
+        window(None)
+
+    # AND THE SWEEP ACTUALLY USES IT. The assertions above read sweep_after();
+    # this plants a row old enough for one window and not the other, so the
+    # number has to reach the UPDATE rather than merely being computed.
+    with connection(biz) as conn:
+        conn.execute("delete from escalation")
+        esc = escalation.open_or_join(conn, 7007, "Kechagi savol", {})[0]
+        conn.execute("update escalation set created_at = now() - interval"
+                     " '30 hours' where id = %s", (esc,))
+        conn.execute("select app_business_set_reply_window(%s, 48::smallint)",
+                     (biz,))
+        check("a 30-hour-old question is NOT expired under a 48-hour window",
+              len(escalation.expire_stale(conn)), 0)
+        conn.execute("select app_business_set_reply_window(%s, NULL::smallint)",
+                     (biz,))
+        check("and IS expired once the window is unset",
+              len(escalation.expire_stale(conn)), 1)
+        conn.execute("delete from escalation")
+
 if __name__ == "__main__":
     main()

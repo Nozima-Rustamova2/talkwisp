@@ -343,6 +343,63 @@ SENT_ON = {
 }
 SENT_ON_DEFAULT = "Yubordim. Javob berilsa, shu yerda koʻrasiz."
 
+# THE SAME SENTENCE WITH A TIME IN IT, used only when the business has stated
+# one. Read the difference carefully, because the honesty of the whole takeover
+# flow rests on it:
+#
+#   "odatda ... javob berishadi"   THEY usually reply within -- a claim about
+#                                  the business, hedged, and theirs to make
+#   "you will get an answer in N"  a promise the system cannot keep, because
+#                                  nothing here makes an owner reply
+#
+# The second half is unchanged and still carries no promise: the answer appears
+# here IF it comes. Stating a typical time does not turn "if" into "when".
+SENT_ON_TIMED = {
+    "Russian": "Отправила. Обычно отвечают в течение {window} — "
+               "ответ придёт сюда.",
+    "Uzbek, in CYRILLIC script": "Юбордим. Одатда {window} ичида жавоб "
+                                 "беришади — жавоб шу ерда кўринади.",
+}
+SENT_ON_TIMED_DEFAULT = ("Yubordim. Odatda {window} ichida javob berishadi — "
+                         "javob shu yerda koʻrinadi.")
+
+# Hours, rendered the way a person says them. Whole days are said as days,
+# because "48 soat" is a number to convert and "2 kun" is a fact.
+_WINDOW_HOURS = {
+    "Russian": "{n} ч.",
+    "Uzbek, in CYRILLIC script": "{n} соат",
+}
+_WINDOW_HOURS_DEFAULT = "{n} soat"
+_WINDOW_DAYS = {
+    "Russian": "{n} дн.",
+    "Uzbek, in CYRILLIC script": "{n} кун",
+}
+_WINDOW_DAYS_DEFAULT = "{n} kun"
+
+
+def window_text(hours: int, language: str) -> str:
+    if hours % 24 == 0:
+        return _WINDOW_DAYS.get(language, _WINDOW_DAYS_DEFAULT).format(
+            n=hours // 24)
+    return _WINDOW_HOURS.get(language, _WINDOW_HOURS_DEFAULT).format(n=hours)
+
+
+def sent_on_text(conn, text: str) -> str:
+    """What the customer is told when their question is forwarded.
+
+    UNSET SAYS NOTHING ABOUT TIME, which is exactly what it said before this
+    field existed. A business that has told us nothing has no claim to relay,
+    and inventing one -- "shortly", "soon" -- would be the system making a
+    promise on their behalf.
+    """
+    row = conn.execute("select reply_window_hours from business").fetchone()
+    hours = row[0] if row and row[0] else None
+    if not hours:
+        return _say(SENT_ON, SENT_ON_DEFAULT, text)
+    language = detect_language(text)
+    return _say(SENT_ON_TIMED, SENT_ON_TIMED_DEFAULT, text).format(
+        window=window_text(hours, language))
+
 # The offer went stale -- the process restarted before they tapped.
 OFFER_GONE = {
     "Russian": "Это предложение устарело. Задайте вопрос ещё раз.",
@@ -927,7 +984,7 @@ def handle_callback(conn, cq):
         escalation_id, joined = escalation.open_or_join(
             conn, chat_id, pending["question"], pending["context"])
         answer_callback(cq["id"])
-        edit_here(_say(SENT_ON, SENT_ON_DEFAULT, pending["question"]))
+        edit_here(sent_on_text(conn, pending["question"]))
         # Only ping for a NEW question. A join means the owner already has this
         # one, and pinging per customer is what makes a useful feature one
         # people mute.

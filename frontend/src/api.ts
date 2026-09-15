@@ -762,8 +762,10 @@ export function getBoard(): Promise<Board> {
  * what heads every escalation. It was typed once at signup and never shown
  * back, which is how a course seller ran for three days called "Klinika". */
 
-export function getBusiness(): Promise<{ name: string }> {
-  return request<{ name: string }>("/business");
+export type BusinessInfo = { name: string; reply_window_hours: number | null };
+
+export function getBusiness(): Promise<BusinessInfo> {
+  return request<BusinessInfo>("/business");
 }
 
 export function renameBusiness(name: string): Promise<{ name: string }> {
@@ -833,5 +835,16 @@ export function getOwners(): Promise<Owner[]> {
 export function removeOwner(telegramId: number): Promise<{ removed: boolean; remaining: number }> {
   return request<{ removed: boolean; remaining: number }>(`/owners/${telegramId}`, {
     method: "DELETE",
+  });
+}
+
+/* How long customers are told to expect to wait, in hours. Null means nothing
+   is stated -- the default, and the only honest answer when a business has
+   told us nothing. */
+export function setReplyWindow(hours: string): Promise<{ hours: number | null }> {
+  return request<{ hours: number | null }>("/business/reply-window", {
+    method: "PUT",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ hours }).toString(),
   });
 }

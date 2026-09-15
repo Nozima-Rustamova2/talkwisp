@@ -7,6 +7,7 @@ import {
   getBusiness,
   getChannel,
   renameBusiness,
+  setReplyWindow,
   type Channel,
 } from "./api";
 
@@ -134,6 +135,122 @@ function BusinessName() {
   );
 }
 
+
+/* How long customers are told to expect to wait.
+ *
+ * THE COPY IS A CLAIM ABOUT THE BUSINESS, NOT A PROMISE BY THE SYSTEM, and the
+ * preview exists so an owner reads the sentence a customer reads before
+ * committing to it. "They usually reply within 3 hours" is theirs to say;
+ * "you'll get an answer in 3 hours" would be ours to break, and nothing here
+ * makes anyone reply -- the expiry apology exists because often they do not.
+ *
+ * EMPTY IS THE DEFAULT AND IS A REAL CHOICE. A business that has said nothing
+ * has no claim to relay, so the customer is told nothing about timing, which is
+ * exactly what happened before this field existed.
+ *
+ * It fetches /business itself rather than taking the value from the card above.
+ * One more request on a settings screen is nothing, and threading one number
+ * between two cards couples them for no gain. */
+function ReplyWindow() {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saved, setSaved] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getBusiness()
+      .then((b) => {
+        setSaved(b.reply_window_hours);
+        setDraft(b.reply_window_hours === null ? "" : String(b.reply_window_hours));
+      })
+      .catch(() => setDraft(null));
+  }, []);
+
+  if (draft === null) return null;
+
+  const hours = Number(draft);
+  const empty = draft.trim() === "";
+  const valid = empty || (Number.isInteger(hours) && hours >= 1 && hours <= 168);
+  const preview = empty
+    ? "Yubordim. Javob berilsa, shu yerda koʻrasiz."
+    : `Yubordim. Odatda ${
+        hours % 24 === 0 ? `${hours / 24} kun` : `${hours} soat`
+      } ichida javob berishadi — javob shu yerda koʻrinadi.`;
+  const dirty = draft.trim() !== (saved === null ? "" : String(saved));
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      setSaved((await setReplyWindow(draft!.trim())).hours);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: 22, marginTop: 16 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
+        Usual reply time
+      </div>
+      <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-faint)", lineHeight: 1.6 }}>
+        Optional. When a question is passed to you, this is what the customer is
+        told to expect. Leave it empty and they're told nothing about timing —
+        which is the right answer if you'd rather not say.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          className="field"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="e.g. 3"
+          inputMode="numeric"
+          style={{ width: 110 }}
+        />
+        <span style={{ fontSize: 14, color: "var(--text-muted)" }}>hours</span>
+        <button
+          className="control control-primary"
+          onClick={save}
+          disabled={busy || !valid || !dirty}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      {!valid ? (
+        <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--danger, #a4362f)" }}>
+          A whole number between 1 and 168 (one week), or empty.
+        </p>
+      ) : (
+        /* THE SENTENCE THE CUSTOMER READS. A number is abstract; the sentence is
+           the thing being committed to, and reading it is what stops an owner
+           typing 1 because it sounds impressive. */
+        <p style={{ margin: "10px 0 0", fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}>
+          Your customer sees: <span style={{ color: "var(--text)" }}>“{preview}”</span>
+        </p>
+      )}
+
+      {/* SAID, because it is surprising and would otherwise be found by
+          accident. The stated time is what the customer hears; the apology is a
+          backstop that never fires sooner than a day, so a short window cannot
+          make us apologise before the answer arrives. */}
+      <p style={{ margin: "10px 0 0", fontSize: 13, color: "var(--text-faint)", lineHeight: 1.6 }}>
+        If nobody answers, we tell the customer so — after your stated time, or
+        after a day, whichever is longer.
+      </p>
+
+      {error ? (
+        <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--danger, #a4362f)" }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [state, setState] = useState<Channel | "loading">("loading");
   const [token, setToken] = useState("");
@@ -185,6 +302,7 @@ export default function Settings() {
       </p>
 
       <BusinessName />
+      <ReplyWindow />
 
       <div className="card" style={{ padding: 22, marginTop: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>

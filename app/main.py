@@ -364,6 +364,39 @@ def reject_fact(business: Business, fact_id: str) -> dict:
         return {"id": fact_id, "rejected": True}
 
 
+# --- how long customers should expect to wait -------------------------------
+
+
+@app.put("/business/reply-window")
+def set_reply_window(business: Business, hours: str = Form("")) -> dict:
+    """Hours the business usually takes, or empty to state nothing.
+
+    EMPTY IS A REAL CHOICE and the default. A business that has told us nothing
+    has no claim to relay, and the customer is told nothing about timing --
+    exactly as before this field existed. Inventing "shortly" would be the
+    system making a promise on their behalf.
+    """
+    value = hours.strip()
+    if value:
+        try:
+            parsed = int(value)
+        except ValueError:
+            raise HTTPException(status_code=400,
+                                detail="Give a whole number of hours.") from None
+        if not 1 <= parsed <= 168:
+            raise HTTPException(
+                status_code=400,
+                detail="Between 1 hour and a week (168 hours).")
+    else:
+        parsed = None
+    with connection(business) as conn:
+        conn.execute("select app_business_set_reply_window(%s, %s::smallint)",
+                     (business, parsed))
+        current = conn.execute(
+            "select reply_window_hours from business").fetchone()[0]
+    return {"hours": current}
+
+
 # --- who owns this bot ------------------------------------------------------
 #
 # REMOVAL LIVES HERE AND NOT IN TELEGRAM, deliberately. The thing being removed
@@ -478,8 +511,9 @@ def business_detail(business: Business) -> dict:
     "Klinika" and sold English courses for three days under that name.
     """
     with connection(business) as conn:
-        name = conn.execute("select name from business").fetchone()[0]
-    return {"name": name}
+        row = conn.execute(
+            "select name, reply_window_hours from business").fetchone()
+    return {"name": row[0], "reply_window_hours": row[1]}
 
 
 @app.put("/business/name")
