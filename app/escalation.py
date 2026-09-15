@@ -130,32 +130,47 @@ def get(conn: Connection, escalation_id: str) -> dict | None:
             "context": row[3], "status": row[4], "answer": row[5]}
 
 
-def start_answering(conn: Connection, escalation_id: str) -> dict | None:
-    """Mark this one as the thing the owner's next message answers.
+def start_answering(conn: Connection, escalation_id: str,
+                    by: int) -> dict | None:
+    """Mark this one as the thing THIS owner's next message answers.
 
-    ONE AT A TIME, and the state lives in the row rather than in memory. The
-    bot's PENDING dict dies with the process and the supervisor restarts bots
-    routinely; an owner who tapped Answer, got distracted, and came back after a
-    restart would otherwise have their reply land nowhere.
+    ONE AT A TIME PER OWNER, and the state lives in the row rather than in
+    memory. The bot's PENDING dict dies with the process and the supervisor
+    restarts bots routinely; an owner who tapped Answer, got distracted, and
+    came back after a restart would otherwise have their reply land nowhere.
 
     Tapping Answer on a second escalation releases the first back to `waiting`,
     because two half-answered questions and no way to tell which the next
     message belongs to is worse than losing a tap.
+
+    `by` IS WHAT MAKES THAT SAFE WITH MORE THAN ONE PERSON. The release used to
+    be per business, so a second owner tapping Answer on their own escalation
+    quietly released the first owner's -- and the first owner's typed reply was
+    then delivered to the second owner's customer. Scoping both the release and
+    the claim to one Telegram id is the whole fix.
     """
-    conn.execute("update escalation set status = 'waiting'"
-                 " where status = 'answering' and id <> %s", (escalation_id,))
+    conn.execute("update escalation set status = 'waiting', answering_by = null"
+                 " where status = 'answering' and answering_by = %s"
+                 " and id <> %s", (by, escalation_id))
     row = conn.execute(
-        "update escalation set status = 'answering'"
-        " where id = %s and status in ('waiting', 'answering')"
-        " returning id", (escalation_id,)).fetchone()
+        "update escalation set status = 'answering', answering_by = %s"
+        " where id = %s and (status = 'waiting'"
+        "                    or (status = 'answering' and answering_by = %s))"
+        " returning id", (by, escalation_id, by)).fetchone()
     return get(conn, escalation_id) if row else None
 
 
-def answering(conn: Connection) -> dict | None:
-    """The one the owner is replying to, if any."""
+def answering(conn: Connection, by: int) -> dict | None:
+    """The one THIS owner is replying to, if any.
+
+    `by` is not optional and has no default. A default would silently restore
+    the bug this column exists to fix -- any caller that forgot to pass it
+    would go back to answering "whichever one someone is working on", which is
+    exactly how one owner's reply reached another owner's customer.
+    """
     row = conn.execute(
-        "select id from escalation where status = 'answering' limit 1"
-    ).fetchone()
+        "select id from escalation where status = 'answering'"
+        " and answering_by = %s limit 1", (by,)).fetchone()
     return get(conn, str(row[0])) if row else None
 
 

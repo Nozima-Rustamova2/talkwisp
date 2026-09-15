@@ -37,6 +37,7 @@ from dotenv import load_dotenv
 from app import (buy, console, escalation, knowledge, orders, payment,
                  style)
 from app.answer import answer, detect_language
+from app import followup
 from app.followup import rewrite
 from app.db import (assert_app_role, business_by_name,
                     business_for_token, connection, pool)
@@ -218,6 +219,51 @@ BROKEN = {
                                  "уриниб кўринг.",
 }
 BROKEN_DEFAULT = ("Uzr, texnik nosozlik. Bir daqiqadan soʻng urinib koʻring.")
+
+# ONE ASK FOR MORE DETAIL, BEFORE THE REFUSAL. Some refusals are the question
+# being underspecified rather than the knowledge being missing: "online mi" is
+# two words with no subject, and the fact was there.
+#
+# TWO FORMS, and the difference matters. When retrieval found nearby subjects we
+# NAME them, because "can you say more?" from something that clearly knows the
+# neighbourhood reads as stalling. When it found none, the fallback says what
+# the extra detail is FOR -- "then I can answer precisely" -- for the same
+# reason: an open-ended ask with no reason attached is the version most likely
+# to feel like a bot playing for time.
+CLARIFY_NAMED = {
+    "Russian": "Уточните, пожалуйста: {options} — о чём именно?",
+    "Uzbek, in CYRILLIC script": "Аниқроқ айтинг: {options} — қайси бири ҳақида?",
+}
+CLARIFY_NAMED_DEFAULT = "Aniqroq ayting: {options} — qaysi biri haqida?"
+
+CLARIFY_OPEN = {
+    "Russian": "Напишите, пожалуйста, чуть подробнее — что именно вас "
+               "интересует? Тогда отвечу точно.",
+    "Uzbek, in CYRILLIC script": "Саволингизни бироз тўлиқроқ ёзинг — нимани "
+                                 "билмоқчисиз? Шунда аниқ жавоб бераман.",
+}
+CLARIFY_OPEN_DEFAULT = ("Savolingizni biroz toʻliqroq yozing — nimani "
+                        "bilmoqchisiz? Shunda aniq javob beraman.")
+
+# Two names is a choice; five is a list to read. The near facts are ordered by
+# similarity, so the first distinct ones are the closest.
+CLARIFY_OPTIONS = 2
+
+
+def clarification(text: str, result: dict) -> str:
+    """The one question we ask back before refusing."""
+    seen: list[str] = []
+    for fact in result.get("near_facts") or []:
+        subject = fact.get("subject")
+        if subject and subject not in seen:
+            seen.append(subject)
+        if len(seen) == CLARIFY_OPTIONS:
+            break
+    if seen:
+        return _say(CLARIFY_NAMED, CLARIFY_NAMED_DEFAULT, text).format(
+            options=", ".join(seen))
+    return _say(CLARIFY_OPEN, CLARIFY_OPEN_DEFAULT, text)
+
 
 DONT_KNOW = {
     "Russian": "К сожалению, у меня нет этой информации. Пожалуйста, свяжитесь "
@@ -707,7 +753,7 @@ def handle_callback(conn, cq):
                 send(waiting_chat, _say(NO_ANSWER, NO_ANSWER_DEFAULT,
                                         row["question"]))
             return
-        picked = escalation.start_answering(conn, token)
+        picked = escalation.start_answering(conn, token, user_id)
         answer_callback(cq["id"])
         edit_here(f"{row['question']}\n\n"
                   "Javobingizni yozing — keyingi xabaringiz mijozga yuboriladi.")
@@ -1431,7 +1477,7 @@ def handle(conn, message: dict, last_seen: dict) -> None:
     # the supervisor restarts bots routinely, so an owner who tapped Answer and
     # came back after a restart would otherwise have their reply land nowhere.
     if is_owner and not text.startswith("/"):
-        pending_escalation = escalation.answering(conn)
+        pending_escalation = escalation.answering(conn, user_id)
         if pending_escalation is not None:
             deliver_owner_answer(conn, chat_id, pending_escalation, text)
             return
@@ -1631,6 +1677,36 @@ def handle(conn, message: dict, last_seen: dict) -> None:
         # branch. What varies is what follows it: suggestions for someone who
         # asked something adjacent to what this business has, and the offer to
         # pass it on for someone who asked something it genuinely does not.
+        # ASK ONCE FOR MORE DETAIL, THEN NEVER AGAIN, and the "never again" is
+        # structural rather than a flag.
+        #
+        # The condition is: refused, the question cannot stand on its own by
+        # followup's own test, and NOTHING WAS SAID BEFORE. That last part is
+        # what makes this fire at most once -- remember() below puts this
+        # exchange into history, so the next message has history and the
+        # condition is false. No column, no flag, nothing to keep in sync.
+        #
+        # It is also why followup.underspecified() is used rather than
+        # needs_rewrite(): with history the rewriter already resolves these, and
+        # needs_rewrite deliberately returns False when there is none. This is
+        # the gap it leaves.
+        #
+        # KNOWN WINDOW: history lives in memory and the supervisor restarts bots,
+        # so a restart between the two messages would ask a second time. It also
+        # idles out after twenty minutes. The cost is one extra question, which
+        # is not worth a table to prevent.
+        if (result["status"] != "ok" and not is_owner
+                and not history_for(chat_id)
+                and followup.underspecified(text)):
+            ask = clarification(text, result)
+            send(chat_id, ask)
+            # REMEMBERED, and this line is the whole mechanism. Without it the
+            # next message still has no history and the customer is asked again.
+            remember(chat_id, text, ask)
+            log({"chat_id": chat_id, "is_owner": is_owner, "question": text,
+                 "outcome": "clarification_asked"})
+            return
+
         offered = False
         if result["status"] != "ok" and not is_owner:
             reply, offered = with_takeover(conn, chat_id, text, result)

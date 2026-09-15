@@ -36,6 +36,10 @@ load_dotenv()
 sys.stdout.reconfigure(encoding="utf-8")
 
 passed = failed = 0
+
+# The single owner the older sections assume. Named rather than a bare
+# literal because start_answering() now scopes its claim to it.
+OWNER = 900900900
 NAME = "check_escalation scratch business"
 ADDR = "check-escalation@example.invalid"
 
@@ -149,7 +153,7 @@ def run(admin, biz: str) -> None:
         "parsed": {"subject": "Rangli Salon", "attribute": "bolalar chegirmasi",
                    "value": "10%"}}
     with connection(biz) as conn:
-        escalation.start_answering(conn, first)
+        escalation.start_answering(conn, first, OWNER)
         bot.deliver_owner_answer(conn, 900900,
                                  escalation.get(conn, first),
                                  "Ha, bolalarga 10% chegirma bor.")
@@ -181,7 +185,7 @@ def run(admin, biz: str) -> None:
     with connection(biz) as conn:
         esc_id, _ = escalation.open_or_join(conn, 333, "Yakshanba ishlaysizmi?",
                                             ctx)
-        escalation.start_answering(conn, esc_id)
+        escalation.start_answering(conn, esc_id, OWNER)
         bot.deliver_owner_answer(conn, 900900, escalation.get(conn, esc_id),
                                  "Ha, lekin faqat ertalab.")
     check("the customer still got the answer",
@@ -232,6 +236,47 @@ def run(admin, biz: str) -> None:
     check("and a customer with one already waiting is not asked again",
           offer_again, False)
 
+
+    print("\nONE OWNER'S CLAIM CANNOT RELEASE ANOTHER'S")
+    # THE BUG THIS COLUMN EXISTS FOR, planted exactly as it happened. The
+    # release used to be per BUSINESS, so a second owner tapping Answer on
+    # their own escalation quietly released the first owner's -- and the first
+    # owner's typed reply was then delivered to the SECOND owner's customer. A
+    # wrong answer to a real person, silently, and harmless with a single owner
+    # only by luck.
+    alice, bob = 111111111, 222222222
+    with connection(biz) as conn:
+        conn.execute("delete from escalation")
+        x = escalation.open_or_join(conn, 5001, "X uchun savol", {})[0]
+        y = escalation.open_or_join(conn, 5002, "Y uchun savol", {})[0]
+        check("two separate escalations", x == y, False)
+
+        escalation.start_answering(conn, x, alice)
+        escalation.start_answering(conn, y, bob)
+
+        mine = escalation.answering(conn, alice)
+        check("Alice is still answering her own",
+              str(mine["id"]) if mine else None, x)
+        theirs = escalation.answering(conn, bob)
+        check("and Bob his", str(theirs["id"]) if theirs else None, y)
+
+        # An owner who has claimed nothing gets nothing -- not "whichever one
+        # somebody is working on", which is what the old `limit 1` returned.
+        check("an owner with no claim is answering nothing",
+              escalation.answering(conn, 333333333), None)
+
+        # ONE AT A TIME PER OWNER still holds: Alice moving releases HERS.
+        z = escalation.open_or_join(conn, 5003, "Z uchun savol", {})[0]
+        escalation.start_answering(conn, z, alice)
+        moved = escalation.answering(conn, alice)
+        check("Alice moved to the new one",
+              str(moved["id"]) if moved else None, z)
+        check("BOB IS UNTOUCHED",
+              str((escalation.answering(conn, bob) or {}).get("id")), y)
+        check("and her old one went back to waiting",
+              conn.execute("select status from escalation where id = %s",
+                           (x,)).fetchone()[0], "waiting")
+        conn.execute("delete from escalation")
 
 if __name__ == "__main__":
     main()
