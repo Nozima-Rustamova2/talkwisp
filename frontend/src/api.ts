@@ -722,3 +722,36 @@ export function setPaymentDetail(attribute: string, value: string): Promise<Paym
     body: new URLSearchParams({ attribute, value }).toString(),
   });
 }
+
+/* --- the board -------------------------------------------------------------
+ *
+ * The plate's three parts are MEASURED server-side, not assembled here: a
+ * screen that decides "answering" from a token being present would be the
+ * ManyChat failure written in TypeScript. */
+
+export type Board = {
+  plate: {
+    answering: boolean;
+    blocker: { says: string; fix: string | null; href: string | null } | null;
+    facts: number;
+    waiting_for_review: number;
+    channel_live: boolean;
+    plan: string;
+  };
+  week: {
+    answered: number;
+    unanswered: number;
+    handed_over: number;
+    /* null below the traffic floor. A percentage from four questions is a
+       number that gets quoted back at you. */
+    share: number | null;
+    counted: number;
+    floor: number;
+    days: number[];
+  };
+  attention: { kind: string; says: string; fix: string; href: string | null }[];
+};
+
+export function getBoard(): Promise<Board> {
+  return request<Board>("/dashboard");
+}

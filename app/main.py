@@ -7,10 +7,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
-from app import (auth, channel, console, conversations, extract, knowledge,
-                 payment, review, sources, vision)
+from app import (auth, channel, console, conversations, dashboard, extract,
+                 knowledge, payment, review, sources, vision)
 from app.approval import NotApproved
-from app.db import assert_app_role, connection, pool
+from app.db import assert_app_role, connection, current_approved, pool
 from app.llm import check_configured, check_reachable
 from app.retrieval import find
 from app.typed import parse as parse_fact, store as store_fact
@@ -361,6 +361,22 @@ def reject_fact(business: Business, fact_id: str) -> dict:
                        "elsewhere -- rejecting means the extraction was wrong, "
                        "not that the thing stopped being true.")
         return {"id": fact_id, "rejected": True}
+
+
+# --- the board --------------------------------------------------------------
+
+
+@app.get("/dashboard")
+def board(business: Business) -> dict:
+    """Are you working, is it worth it, what to do next.
+
+    `approved` is passed in rather than read inside, because it is already
+    decided for this request -- app.db.connection() reads business.approved at
+    the moment it binds the tenant, and asking again here would be a second
+    read that can disagree with the one the spending gate is using.
+    """
+    with connection(business) as conn:
+        return dashboard.board(conn, current_approved())
 
 
 # --- payment details --------------------------------------------------------

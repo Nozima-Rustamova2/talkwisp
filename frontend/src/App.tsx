@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
+import Dashboard from "./Dashboard";
 import Dialogs from "./Dialogs";
 import Payment from "./Payment";
 import Knowledge from "./Knowledge";
@@ -22,6 +23,7 @@ import { getMe, getPayment, logout, setSpendingAllowed, type Me } from "./api";
  * No router library for two screens. */
 
 type Route =
+  | "dashboard"
   | "add"
   | "review"
   | "knowledge"
@@ -46,6 +48,7 @@ function routeFromHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
   if (hash === "review") return "review";
   if (hash === "knowledge") return "knowledge";
+  if (hash === "dashboard") return "dashboard";
   if (hash === "dialogs") return "dialogs";
   if (hash === "payment") return "payment";
   if (hash === "test") return "test";
@@ -96,7 +99,9 @@ export default function App() {
     document.title =
       me === "asking" || !me.business
         ? "Sign in — Talkwisp"
-        : route === "review"
+        : route === "dashboard"
+          ? "Dashboard — Talkwisp"
+          : route === "review"
           ? "Review — Talkwisp"
           : route === "knowledge"
             ? "All facts — Talkwisp"
@@ -265,6 +270,13 @@ export default function App() {
           </div>
         </div>
 
+        {/* FIRST, AND ONLY NOW THAT IT IS WHOLE. It was kept out of the
+            rail while it was a design, because this is where the eye lands and
+            a greyed or half-built first item reads as an unfinished product
+            every time the app opens. Its two columns are one column today --
+            "what it doesn't know yet" needs a gaps.jsonl reader that does not
+            exist -- but what is here is measured and complete, not a shell. */}
+        {tab("dashboard", "Dashboard")}
         {/* ONE ITEM FOR THREE ROUTES. Add, Review and the browsable list are
             three stages of a single task -- put something in, check what was
             read, look at what is there -- and three top-level tabs made an
@@ -319,7 +331,9 @@ export default function App() {
       <main style={{ flex: "1 1 520px", minWidth: 0 }}>
       {waiting}
       {payment}
-      {route === "review" ? (
+      {route === "dashboard" ? (
+        <Dashboard />
+      ) : route === "review" ? (
         <Review />
       ) : route === "knowledge" ? (
         <Knowledge />
