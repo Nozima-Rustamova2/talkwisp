@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { ApiError, connectTelegram, getChannel, type Channel } from "./api";
+import {
+  ApiError,
+  connectTelegram,
+  getBusiness,
+  getChannel,
+  renameBusiness,
+  type Channel,
+} from "./api";
 
 /* Connect your own Telegram bot, without anyone being on SSH.
  *
@@ -21,6 +28,107 @@ import { ApiError, connectTelegram, getChannel, type Channel } from "./api";
  * cannot show it back, and that is deliberate rather than a gap -- the only
  * thing sending a live credential to a browser can do is put it somewhere it
  * can leak. */
+
+
+/* The business name, shown back for the first time.
+ *
+ * IT WAS TYPED ONCE AT SIGNUP AND NEVER DISPLAYED. It is the first word every
+ * customer reads, the name the agent gives when asked who it is, and the head
+ * of every escalation -- and the person who typed it had no way to see it or
+ * change it. A real business ran for three days greeting customers as
+ * "Klinika" while selling English courses.
+ *
+ * The preview is the point, not decoration. A name is abstract until you read
+ * the sentence a stranger reads; "Klinika" looks fine in a text field and wrong
+ * in a greeting. */
+function BusinessName() {
+  const [name, setName] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    getBusiness()
+      .then((b) => {
+        setName(b.name);
+        setDraft(b.name);
+      })
+      .catch(() => setName(null));
+  }, []);
+
+  if (name === null) return null;
+  const dirty = draft.trim() !== name;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await renameBusiness(draft.trim());
+      setName(result.name);
+      setDraft(result.name);
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not save the name.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: 22 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
+        Business name
+      </div>
+      <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-faint)", lineHeight: 1.6 }}>
+        What your customers see. Used in the greeting, when someone asks the
+        agent who it is, and on every message we send you.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          className="field"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setSaved(false);
+          }}
+          style={{ flex: "1 1 240px", minWidth: 0 }}
+        />
+        <button
+          className="control control-primary"
+          onClick={save}
+          disabled={busy || !dirty || !draft.trim()}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      {/* THE SENTENCE A STRANGER READS. */}
+      <p style={{ margin: "12px 0 0", fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}>
+        Your customers will be greeted with:{" "}
+        <span style={{ color: "var(--text)" }}>
+          “Salom! {(draft.trim() || name)} haqida savolingizni yozing.”
+        </span>
+      </p>
+
+      {error ? (
+        <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--danger, #a4362f)" }}>
+          {error}
+        </p>
+      ) : null}
+      {saved ? (
+        /* SAID, because it is true and not obvious: each bot reads its name once
+           when it starts, so a rename reaches customers on the next restart. A
+           change that appears to have worked and has not is worse than one that
+           says when it takes effect. */
+        <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--text-faint)" }}>
+          Saved. Your agent will start using it the next time it restarts.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export default function Settings() {
   const [state, setState] = useState<Channel | "loading">("loading");
@@ -72,7 +180,9 @@ export default function Settings() {
         Where your agent answers.
       </p>
 
-      <div className="card" style={{ padding: 22 }}>
+      <BusinessName />
+
+      <div className="card" style={{ padding: 22, marginTop: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
           Telegram
         </div>

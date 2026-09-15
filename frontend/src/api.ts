@@ -755,3 +755,21 @@ export type Board = {
 export function getBoard(): Promise<Board> {
   return request<Board>("/dashboard");
 }
+
+/* --- the business itself ---------------------------------------------------
+ *
+ * The name is what customers are greeted with, what the agent calls itself, and
+ * what heads every escalation. It was typed once at signup and never shown
+ * back, which is how a course seller ran for three days called "Klinika". */
+
+export function getBusiness(): Promise<{ name: string }> {
+  return request<{ name: string }>("/business");
+}
+
+export function renameBusiness(name: string): Promise<{ name: string }> {
+  return request<{ name: string }>("/business/name", {
+    method: "PUT",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ name }).toString(),
+  });
+}

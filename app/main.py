@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
+import psycopg
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -361,6 +362,49 @@ def reject_fact(business: Business, fact_id: str) -> dict:
                        "elsewhere -- rejecting means the extraction was wrong, "
                        "not that the thing stopped being true.")
         return {"id": fact_id, "rejected": True}
+
+
+# --- the business itself ----------------------------------------------------
+
+
+@app.get("/business")
+def business_detail(business: Business) -> dict:
+    """What this business is called, and what that name is used for.
+
+    SHOWN BACK, which it never was. The name is typed once at signup and then
+    appears in the first message every customer sees, in the agent's answer to
+    "who are you", and at the head of every escalation -- and no screen has ever
+    displayed it to the person who typed it. A real business signed up as
+    "Klinika" and sold English courses for three days under that name.
+    """
+    with connection(business) as conn:
+        name = conn.execute("select name from business").fetchone()[0]
+    return {"name": name}
+
+
+@app.put("/business/name")
+def rename_business(business: Business, name: str = Form(...)) -> dict:
+    """Change the business name.
+
+    Through app_business_rename(), not an UPDATE. talkwisp_app has SELECT on
+    business and nothing else, and that absence is what stops a bug in the web
+    app rewriting a tenant -- so this goes through the same narrow kind of
+    SECURITY DEFINER hole as setting the bot token.
+
+    The bots read the name once at startup, so a rename reaches customers on the
+    next restart rather than immediately. Said here because the screen has to
+    say it: a change that appears to work and does not is worse than one that
+    says when it takes effect.
+    """
+    with connection(business) as conn:
+        try:
+            renamed = conn.execute(
+                "select app_business_rename(%s, %s)", (business, name)).fetchone()[0]
+        except psycopg.errors.RaiseException as exc:
+            # The function's own message, which is written for a person.
+            raise HTTPException(status_code=400,
+                                detail=str(exc).split("\n")[0]) from None
+    return {"name": renamed}
 
 
 # --- the board --------------------------------------------------------------
