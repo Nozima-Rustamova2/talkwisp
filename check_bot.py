@@ -411,5 +411,51 @@ formatted = ('def f():\n    send(chat_id, "Salom! {name} haqida."'
 check("and does NOT flag one that is formatted",
       _unformatted(formatted), [])
 
+# --- three outcomes, not one bool -------------------------------------------
+#
+# send() used to return False for a blocked user, a rate limit and a dropped
+# connection alike, and those need opposite responses: never retry, wait
+# exactly N seconds, try again shortly. The owner was told a customer "MAY
+# have blocked the bot" because the code could not tell.
+#
+# Each case is a real Telegram error body. The last one matters most: a 400
+# caused by OUR bug must be neither blocked nor retryable, or one malformed
+# message would permanently blacklist a customer.
+for _payload, _label, _ok, _blocked, _wait in (
+    ({"ok": True}, "accepted", True, False, None),
+    ({"ok": False, "error_code": 403,
+      "description": "Forbidden: bot was blocked by the user"},
+     "blocked by the user", False, True, None),
+    ({"ok": False, "error_code": 403,
+      "description": "Forbidden: user is deactivated"},
+     "deleted account", False, True, None),
+    ({"ok": False, "error_code": 400, "description": "Bad Request: chat not found"},
+     "chat gone", False, True, None),
+    ({"ok": False, "error_code": 429,
+      "description": "Too Many Requests: retry after 17",
+      "parameters": {"retry_after": 17}},
+     "rate limited", False, False, 17),
+    ({"ok": False, "error_code": 429, "description": "Too Many Requests"},
+     "rate limited with no number", False, False, 5),
+    ({"ok": False, "error_code": 400,
+      "description": "Bad Request: message text is empty"},
+     "our own malformed message", False, False, None),
+):
+    _r = bot._classify(_payload)
+    check(f"{_label}: accepted", bool(_r), _ok)
+    check(f"{_label}: permanent", _r.blocked, _blocked)
+    check(f"{_label}: wait", _r.retry_after, _wait)
+
+# BACKWARD COMPATIBLE ON PURPOSE. Forty-two call sites use send() and most
+# ignore the result; the few that test it write `if not send(...)`. A result
+# object that was not falsy on failure would have broken every one of them
+# silently -- which is precisely what `is not False` did inside notify_owners
+# until it was corrected here.
+check("a failure is falsy", bool(bot.SendResult(False)), False)
+check("and a success is truthy", bool(bot.SendResult(True)), True)
+check("`is not False` would NOT have worked",
+      bot.SendResult(False) is not False, True)
+
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

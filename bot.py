@@ -438,17 +438,81 @@ def _say(table: dict, default: str, question: str) -> str:
     return table.get(detect_language(question), default)
 
 
-def send(chat_id: int, text: str) -> bool:
-    """True if Telegram accepted it. RETURNS a result because some callers must
-    know: a customer who blocked the bot after paying is stranded, and the only
-    person who can rescue them is the owner. See notify_owner_send_failure."""
+class SendResult:
+    """Whether Telegram took it, and WHY IT DID NOT.
+
+    THREE OUTCOMES USED TO COLLAPSE INTO False, and they need opposite
+    responses. A user who blocked the bot is permanently unreachable and must
+    never be retried; a 429 is "wait exactly this long"; a dropped connection
+    is "try again shortly". Returning one bool for all three meant a blocked
+    user was retried forever and looked identical to a network blip, and the
+    owner was told "they MAY have blocked the bot" because the code could not
+    tell.
+
+    Falsy when it failed, so every existing `if not send(...)` keeps working
+    unchanged -- the reason is additional, not a replacement.
+    """
+
+    __slots__ = ("ok", "blocked", "retry_after", "detail")
+
+    def __init__(self, ok, blocked=False, retry_after=None, detail=""):
+        self.ok = ok
+        # PERMANENT. Never send to this chat again -- not now, not tomorrow.
+        self.blocked = blocked
+        # Telegram's own number, in seconds. Honoured rather than guessed: a
+        # guess that is too short earns a longer ban.
+        self.retry_after = retry_after
+        self.detail = detail
+
+    def __bool__(self):
+        return self.ok
+
+    def __repr__(self):
+        if self.ok:
+            return "SendResult(ok)"
+        return (f"SendResult(blocked={self.blocked}, "
+                f"retry_after={self.retry_after}, {self.detail!r})")
+
+
+# 403 is blocked, deactivated, or kicked -- all permanent. A 400 "chat not
+# found" is permanent too: the chat no longer exists, and nothing about waiting
+# changes that.
+_GONE_FOREVER = ("bot was blocked", "user is deactivated", "bot was kicked",
+                 "chat not found", "user not found")
+
+
+def _classify(payload: dict) -> SendResult:
+    """Turn Telegram's error body into the three answers a caller can act on."""
+    if payload.get("ok"):
+        return SendResult(True)
+    code = payload.get("error_code")
+    detail = str(payload.get("description") or "")
+    lowered = detail.lower()
+    if code == 429:
+        # parameters.retry_after is authoritative. Defaulting to a guess when
+        # it is absent is safer than zero, which would hammer straight back.
+        wait = (payload.get("parameters") or {}).get("retry_after") or 5
+        return SendResult(False, retry_after=int(wait), detail=detail)
+    if code == 403 or any(phrase in lowered for phrase in _GONE_FOREVER):
+        return SendResult(False, blocked=True, detail=detail)
+    return SendResult(False, detail=detail)
+
+
+def send(chat_id: int, text: str) -> SendResult:
+    """Send one message. Falsy on failure, with the reason attached.
+
+    Some callers must know which failure it was: a customer who blocked the bot
+    after paying is stranded, and the only person who can rescue them is the
+    owner. See notify_owner_send_failure.
+    """
     try:
         r = httpx.post(f"{API}/sendMessage",
                        json={"chat_id": chat_id, "text": text}, timeout=30)
-        return bool(r.json().get("ok"))
+        return _classify(r.json())
     except (httpx.HTTPError, ValueError) as exc:
+        # A transport failure is not a blocked user. Retryable, and said so.
         print(f"send to {chat_id} failed: {exc!r}", flush=True)
-        return False
+        return SendResult(False, detail=repr(exc))
 
 
 @contextlib.contextmanager
@@ -662,7 +726,13 @@ def notify_owners(send_one) -> int:
     sent = 0
     for owner in OWNERS:
         try:
-            if send_one(owner) is not False:
+            outcome = send_one(owner)
+            # `is not False` was right when send() returned a bool and is a
+            # silent miscount now that it returns a SendResult -- an object is
+            # never the literal False, so every failure counted as delivered.
+            # None still means "the callable reported nothing", which is how
+            # the multi-step senders signal that they handled it themselves.
+            if outcome is None or outcome:
                 sent += 1
         except Exception as exc:  # noqa: BLE001 - see the docstring
             print(f"notifying owner {owner} failed (not fatal): {exc!r}",
@@ -1250,16 +1320,24 @@ def tell_customer(order: dict, text: str, what: str) -> None:
     not looking. So this lands on the payment channel, the one the owner is
     already watching because money is on it.
     """
-    if send(order["chat_id"], text):
+    result = send(order["chat_id"], text)
+    if result:
         return
     log({"chat_id": order["chat_id"], "outcome": "customer_unreachable",
-         "order_id": str(order["id"]), "what": what})
+         "order_id": str(order["id"]), "what": what,
+         "blocked": result.blocked, "detail": result.detail[:200]})
+    # SAYS WHICH, rather than "may have". The copy guessed because send()
+    # returned one bool for every failure; now a block is a fact the owner can
+    # act on and a network failure is one they should ignore.
+    why = ("Mijoz botni bloklagan." if result.blocked
+           else "Xabar yetib bormadi (texnik sabab).")
     notify_owners(lambda owner: send(
         owner,
         "Mijozga xabar yetkazib bo'lmadi (" + what + ").\n"
+        f"{why}\n"
         f"Buyurtma: {order['item']} — {money(order['amount'])}\n"
         f"Mijoz chat: {order['chat_id']}\n"
-        "Botni bloklagan bo'lishi mumkin. Iltimos, o'zingiz bog'laning."))
+        "Iltimos, o'zingiz bog'laning."))
 
 
 def owner_review(order: dict) -> None:
