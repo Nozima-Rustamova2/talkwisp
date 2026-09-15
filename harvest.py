@@ -29,12 +29,15 @@ import re
 import sys
 
 from app.answer import SIMILARITY_FLOOR, detect_language, search
-from app.db import pool
+from app.db import business_by_name, connection, pool
 from app.normalize import normalize
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 LOG = pathlib.Path("messages.jsonl")
+# Set by main(), read by _report() so the written file says whose
+# questions it holds.
+BUSINESS = ""
 OUT = pathlib.Path("questions_harvested.py")
 
 # These never reached retrieval, so there is nothing to grade:
@@ -57,14 +60,40 @@ def slug(text: str) -> str:
     return "live-" + ("-".join(words) or "question")
 
 
-def load() -> list[dict]:
+def load(business_id: str) -> list[dict]:
+    """This business's lines. NEVER the whole file.
+
+    THE FAILURE THIS PREVENTS is not a crash, which is why it survived so long.
+    messages.jsonl is ONE file for every tenant -- bot.py stamps business_id on
+    each line precisely because the file cannot separate them. Read whole and
+    graded against one business's knowledge, another business's customer
+    questions produce scores that look real and mean nothing: a question about
+    an English course, scored against a clinic's facts, refuses for reasons
+    that say nothing about either. It would also write one business's customers
+    into a file about another.
+
+    That is the same hole app/conversations.py was built to close, in a script
+    written before it existed. Here the filter is an argument rather than a
+    ContextVar because this is a command-line tool with no request to bind to --
+    but the rule is identical: attribution is read, never guessed.
+
+    Lines with no business_id predate the stamp and are SKIPPED, not assigned.
+    """
     if not LOG.exists():
         raise SystemExit(f"{LOG} does not exist yet. Nothing to harvest.")
-    rows = []
+    rows, unattributed = [], 0
     for line in LOG.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if line:
-            rows.append(json.loads(line))
+        if not line:
+            continue
+        row = json.loads(line)
+        if not row.get("business_id"):
+            unattributed += 1
+        elif row["business_id"] == business_id:
+            rows.append(row)
+    if unattributed:
+        print(f"  {unattributed} line(s) skipped: written before business_id "
+              f"was logged, so they cannot be attributed now.")
     return rows
 
 
@@ -165,9 +194,29 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rerun", action="store_true",
                     help="also run each harvested question through the system now")
+    # REQUIRED, with no default. A default would pick a tenant on a run whose
+    # whole purpose is to be about one -- and the wrong default is exactly the
+    # bug: a silent fallback to the harness business would grade a real
+    # customer's questions against the demo clinic and print confident numbers.
+    ap.add_argument("--business", required=True,
+                    help="business name, as in bot.py --business. Only this "
+                         "business's logged questions are read.")
     args = ap.parse_args()
 
-    rows = load()
+    global BUSINESS
+    BUSINESS = args.business
+    # OPENED BEFORE THE FIRST QUERY, and the ordering is a bug this codebase
+    # has already shipped once: supervise.py called assert_app_role() above
+    # pool.open() and died with PoolClosed on the live box, with the bots
+    # already stopped. business_by_name() is a query like any other.
+    pool.open()
+    business_id = business_by_name(args.business)
+    if not business_id:
+        raise SystemExit(f"No business named {args.business!r}.")
+
+    rows = load(business_id)
+    if not rows:
+        raise SystemExit(f"Nothing logged for {args.business!r} yet.")
     kept = usable(rows)
     cases = dedupe(kept)
 
@@ -189,7 +238,12 @@ def main() -> None:
     # One `with pool:` for the whole run -- a ConnectionPool cannot be reopened
     # once closed, so opening it again for the re-run raises PoolClosed.
     with pool:
-        with pool.connection() as conn:
+        # app.db.connection(), NOT pool.connection(). The raw pool sets no
+        # tenant GUC and no approval flag, so every retrieval here ran unbound
+        # -- which is why this script has raised "No business is bound" since
+        # the spending gate landed, and why it had never been run on real
+        # traffic.
+        with connection(business_id) as conn:
             for case in sorted(cases, key=lambda c: c["status"]):
                 nearest = None
                 if case["status"] == "unknown":
@@ -200,14 +254,17 @@ def main() -> None:
 
         _report(stubs, refusals)
         if args.rerun:
-            with pool.connection() as conn:
+            with connection(business_id) as conn:
                 rerun(conn, cases)
         return
 
 
 def _report(stubs: list[str], refusals: list) -> None:
     header = (
-        '"""Harvested from messages.jsonl -- real questions from real people.\n\n'
+        f'"""Harvested from messages.jsonl for {BUSINESS!r}.\n\n'
+        'Real questions from real people, and ONE business\'s. Grading these\n'
+        'against another business\'s knowledge produces scores that look real\n'
+        'and mean nothing.\n\n'
         "Stubs, not tests. Fill in `expect` and `want`, then move the ones worth\n"
         "keeping into questions.py. `note` carries what the log already knew.\n"
         '"""\n\nHARVESTED = [\n'
