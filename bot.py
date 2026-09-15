@@ -77,7 +77,15 @@ API: str | None = None
 # The owner id moves with it. "Who may tap the owner buttons" is a different
 # answer per business, so it cannot stay a single global.
 BUSINESS_ID: str | None = None
-OWNER_ID: str | None = None
+# EVERY claimed owner, up to three. Read at startup and refreshed on the
+# heartbeat, so a claim made in another process or a removal made in the web app
+# reaches this bot within a minute without a restart.
+#
+# A LIST, because the single id was doing two different jobs: "may this person
+# act" and "where do we send this". Those separate into is_owner_id() below and
+# notify_owners() -- and the second is the one that can fail quietly. A fan-out
+# bug that sends only to the first owner looks exactly like working software.
+OWNERS: list[int] = []
 # The business's own name, read once at startup and used in the greeting.
 #
 # EVERY CANNED STRING IN THIS FILE USED TO SAY "klinika". Seventeen of them, in
@@ -567,7 +575,59 @@ _KIND_FOR = {"drop": "fact", "pick": "fact", "save": "fact",
 
 
 def is_owner_id(user_id) -> bool:
-    return OWNER_ID is not None and str(user_id) == str(OWNER_ID)
+    """MAY THIS PERSON ACT. The only authorisation question in this file.
+
+    TOTAL, for any input. The first version did int(user_id) and raised on
+    anything that was not a number -- which the previous string comparison
+    never did. Telegram ids are integers, but this reads a field off a JSON
+    update, and an authorisation check that raises on a malformed one turns a
+    stranger's bad input into a crashed handler. Not an owner is the right
+    answer for anything that is not an id.
+    """
+    try:
+        return int(user_id) in OWNERS
+    except (TypeError, ValueError):
+        return False
+
+
+def notify_owners(send_one) -> int:
+    """WHO DO WE TELL. Calls send_one(chat_id) for every claimed owner.
+
+    ONE FAILURE MUST NOT SWALLOW THE REST. An owner who blocked the bot, or
+    whose account is gone, would otherwise stop the message reaching the other
+    two -- and the escalation the customer is waiting on would vanish because
+    somebody else's phone was unreachable. Each send is attempted on its own.
+
+    Returns how many got through, so a caller that must know whether ANYONE was
+    told can ask. Nothing here retries: a notification that failed twice is a
+    notification that is not coming.
+    """
+    sent = 0
+    for owner in OWNERS:
+        try:
+            if send_one(owner) is not False:
+                sent += 1
+        except Exception as exc:  # noqa: BLE001 - see the docstring
+            print(f"notifying owner {owner} failed (not fatal): {exc!r}",
+                  flush=True)
+    return sent
+
+
+def refresh_owners(conn) -> None:
+    """Pick up a claim or a removal without a restart.
+
+    Same mechanism and same reason as refresh_business_name(): the heartbeat
+    already holds a connection to this business once a minute, and an owner
+    removed in the web app must actually stop being an owner. Reads under RLS,
+    so it can only ever see its own business's rows.
+    """
+    global OWNERS
+    found = [row[0] for row in conn.execute(
+        "select telegram_id from business_owner order by claimed_at,"
+        " telegram_id").fetchall()]
+    if found != OWNERS:
+        print(f"owners changed: {OWNERS} -> {found}", flush=True)
+        OWNERS = found
 
 NOT_OWNER = ("Bu buyruq faqat biznes egasi uchun.\n"
              "Эта команда доступна только владельцу бизнеса.")
@@ -1109,12 +1169,12 @@ def tell_customer(order: dict, text: str, what: str) -> None:
         return
     log({"chat_id": order["chat_id"], "outcome": "customer_unreachable",
          "order_id": str(order["id"]), "what": what})
-    if OWNER_ID:
-        send(int(OWNER_ID),
-             "Mijozga xabar yetkazib bo'lmadi (" + what + ").\n"
-             f"Buyurtma: {order['item']} — {money(order['amount'])}\n"
-             f"Mijoz chat: {order['chat_id']}\n"
-             "Botni bloklagan bo'lishi mumkin. Iltimos, o'zingiz bog'laning.")
+    notify_owners(lambda owner: send(
+        owner,
+        "Mijozga xabar yetkazib bo'lmadi (" + what + ").\n"
+        f"Buyurtma: {order['item']} — {money(order['amount'])}\n"
+        f"Mijoz chat: {order['chat_id']}\n"
+        "Botni bloklagan bo'lishi mumkin. Iltimos, o'zingiz bog'laning."))
 
 
 def owner_review(order: dict) -> None:
@@ -1125,7 +1185,7 @@ def owner_review(order: dict) -> None:
     later. A Confirm button that stopped working after a restart would strand
     the money it exists to release. 41 bytes of the 64 Telegram allows.
     """
-    if not OWNER_ID:
+    if not OWNERS:
         return
     caption = ("Yangi to'lov tekshiruvi\n"
                f"{order['item']} — {order['attribute']}\n"
@@ -1133,10 +1193,17 @@ def owner_review(order: dict) -> None:
                f"Mijoz chat: {order['chat_id']}")
     markup = keyboard([[("Tasdiqlash", f"conf:{order['id']}"),
                         ("Rad etish", f"rej:{order['id']}")]])
-    if not send_photo(int(OWNER_ID), order["screenshot_file_id"],
-                      caption, markup):
-        # No image in front of them is still better than no notification.
-        send_kb(int(OWNER_ID), caption, markup)
+    # THE FALLBACK IS PER RECIPIENT, not one decision around one call. With
+    # three owners the photo can reach one and fail for another -- Telegram
+    # rejects a file_id per chat, not globally -- so each owner gets their own
+    # attempt and their own fallback. One decision for all three would drop the
+    # image for everyone because one send failed, or worse, send nothing.
+    def review(owner):
+        if not send_photo(owner, order["screenshot_file_id"], caption, markup):
+            # No image in front of them is still better than no notification.
+            send_kb(owner, caption, markup)
+
+    notify_owners(review)
 
 
 # console.suggestions() labels each question with the language it is phrased in.
@@ -1214,7 +1281,7 @@ def with_takeover(conn, chat_id: int, text: str,
     if (result.get("source") or "").startswith("meta-"):
         return result["answer"], False
 
-    offer = bool(OWNER_ID) and not escalation.waiting_for_chat(conn, chat_id)
+    offer = bool(OWNERS) and not escalation.waiting_for_chat(conn, chat_id)
 
     if offer:
         # SHORT, WHATEVER THE SOURCE. The previous version kept the model's own
@@ -1320,16 +1387,21 @@ def notify_owner_payment_gap(conn, subject: str | None) -> None:
     bot -- which would cost them the escalation pings too, the feature the
     landing page actually promises.
     """
-    if not OWNER_ID:
+    if not OWNERS:
         return
+    # THE CLAIM STAYS PER BUSINESS, not per owner. "Once a day" means the
+    # business is told once a day, and three owners are one business -- telling
+    # each of them once would be three messages for one problem, which is how a
+    # notification channel gets muted.
     claimed = conn.execute(
         "select app_business_claim_payment_gap(%s)",
         (BUSINESS_ID,)).fetchone()[0]
     if not claimed:
         return
-    send(int(OWNER_ID), PAYMENT_GAP_OWNER.format(
+    message = PAYMENT_GAP_OWNER.format(
         name=BUSINESS_NAME or "Agent",
-        what=f"«{subject}»" if subject else "bir xizmat"))
+        what=f"«{subject}»" if subject else "bir xizmat")
+    notify_owners(lambda owner: send(owner, message))
 
 
 def notify_owner_escalation(row: dict) -> None:
@@ -1343,7 +1415,7 @@ def notify_owner_escalation(row: dict) -> None:
     problems -- one is "you told me and I could not find it", the other is "you
     never told me this" -- and only the first is worth re-wording a fact over.
     """
-    if not OWNER_ID:
+    if not OWNERS:
         return
     ctx = row.get("context") or {}
     lines = [f"{BUSINESS_NAME or 'Agent'} — javob bera olmadim",
@@ -1386,7 +1458,11 @@ def notify_owner_escalation(row: dict) -> None:
 
     markup = keyboard([[("Javob berish", f"ans:{row['id']}"),
                         ("Bizga tegishli emas", f"skip:{row['id']}")]])
-    send_kb(int(OWNER_ID), "\n".join(lines), markup)
+    body = "\n".join(lines)
+    # EVERY owner gets the question and its Answer button. The per-owner claim
+    # added in 0019 is what makes three live buttons safe: whoever taps first
+    # claims it for themselves, and the others' taps cannot release it.
+    notify_owners(lambda owner: send_kb(owner, body, markup))
 
 
 def file_id_of(message: dict) -> str | None:
@@ -1507,8 +1583,11 @@ def handle(conn, message: dict, last_seen: dict) -> None:
                     "select app_business_claim_owner(%s, %s)",
                     (BUSINESS_ID, user_id)).fetchone()[0]
             if claimed:
-                global OWNER_ID
-                OWNER_ID = str(user_id)
+                # RE-READ, never assign. Assigning would have made this owner
+                # the only one -- the exact bug a list is meant to prevent, and
+                # invisible until a second person claimed.
+                with connection(BUSINESS_ID) as conn:
+                    refresh_owners(conn)
                 send(chat_id,
                      "Tayyor — bu bot endi sizga bogʻlandi.\n"
                      "Готово — бот привязан к вам.")
@@ -1843,6 +1922,7 @@ def heartbeat(force: bool = False) -> None:
         with connection(BUSINESS_ID) as conn:
             conn.execute("select app_business_touch_bot(%s)", (BUSINESS_ID,))
             refresh_business_name(conn)
+            refresh_owners(conn)
         _last_beat = now
     except Exception as exc:  # noqa: BLE001 - see the docstring
         print(f"heartbeat failed (not fatal): {exc!r}", flush=True)
@@ -1901,7 +1981,7 @@ def sweep_expiring(force: bool = False) -> None:
     so a five-minute sweep tells the owner once rather than 576 times.
     """
     global _last_expiry_sweep
-    if not OWNER_ID:
+    if not OWNERS:
         return
     now = time.monotonic()
     if not force and now - _last_expiry_sweep < SWEEP_SECONDS:
@@ -1912,15 +1992,15 @@ def sweep_expiring(force: bool = False) -> None:
             due = knowledge.expiring_soon(conn, EXPIRY_WARN_HOURS)
         for fact in due:
             when = fact["expires_at"].strftime("%d.%m %H:%M")
-            send_kb(
-                int(OWNER_ID),
+            warning = (
                 f"{BUSINESS_NAME or 'Agent'} \u2014 bu maʼlumot tugaydi\n\n"
                 f"\u00ab{fact['subject']} / {fact['attribute']} / "
                 f"{fact['value']}\u00bb\n\n"
                 f"Tugash vaqti: {when}\n"
-                "Shundan keyin agent buni aytmaydi.",
-                keyboard([[("Yana 30 kun", f"ext:{fact['id']}"),
-                           ("Tugasin", f"letexp:{fact['id']}")]]))
+                "Shundan keyin agent buni aytmaydi.")
+            buttons = keyboard([[("Yana 30 kun", f"ext:{fact['id']}"),
+                                 ("Tugasin", f"letexp:{fact['id']}")]])
+            notify_owners(lambda owner: send_kb(owner, warning, buttons))
             print(f"warned owner: {fact['subject']} / {fact['attribute']}",
                   flush=True)
     except Exception as exc:  # noqa: BLE001 - housekeeping is never fatal
@@ -2020,7 +2100,7 @@ def resolve_identity() -> tuple[str, str]:
 
 
 def main() -> None:
-    global TOKEN, API, BUSINESS_ID, OWNER_ID, BUSINESS_NAME
+    global TOKEN, API, BUSINESS_ID, BUSINESS_NAME
 
     # Fail now, not on the first customer message. The second call
     # spends one tiny generation to prove the pinned model answers for
@@ -2055,13 +2135,16 @@ def main() -> None:
             raise RuntimeError(f"Telegram rejected the token: {me}")
 
         with connection(BUSINESS_ID) as conn:
-            BUSINESS_NAME, OWNER_ID = conn.execute(
-                "select name, owner_telegram_id from business").fetchone()
+            BUSINESS_NAME = conn.execute(
+                "select name from business").fetchone()[0]
+            refresh_owners(conn)
         name = BUSINESS_NAME
         print(f"serving {name}.")
-        if not OWNER_ID:
-            print("business.owner_telegram_id is not set -- /fact will refuse "
+        if not OWNERS:
+            print("no owner has claimed this bot -- /fact will refuse "
                   "everyone, including you.")
+        else:
+            print(f"{len(OWNERS)} owner(s) claimed.")
         print(f"@{me['result']['username']} polling. Ctrl-C to stop.")
         signal.signal(signal.SIGTERM, _stop)
         signal.signal(signal.SIGINT, _stop)

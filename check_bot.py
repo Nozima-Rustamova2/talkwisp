@@ -153,8 +153,8 @@ check("an unknown action would be owner-only",
 print("\nthe owner check itself")
 
 check("no owner means no owner -- never everyone",
-      bot.is_owner_id(12345) if bot.OWNER_ID is None else True, False
-      if bot.OWNER_ID is None else True)
+      bot.is_owner_id(12345) if not bot.OWNERS else True, False
+      if not bot.OWNERS else True)
 check("a different id is not the owner", bot.is_owner_id("not-the-owner"), False)
 
 # ---------------------------------------------------------------------------

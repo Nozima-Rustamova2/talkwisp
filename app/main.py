@@ -743,7 +743,11 @@ def channel_state(business: Business) -> dict:
     """
     with connection(business) as conn:
         row = conn.execute(
-            "select bot_token, owner_telegram_id,"
+            "select bot_token,"
+            # COUNTED, not a single id. Up to three owners can be claimed, and
+            # "is anyone linked" is the question this screen asks -- one that a
+            # column holding one id could answer only for the first of them.
+            " (select count(*) from business_owner) > 0,"
             " bot_last_seen_at > now() - interval '3 minutes'"
             " from business").fetchone()
     token = row[0] if row else None
@@ -761,7 +765,12 @@ def channel_state(business: Business) -> dict:
         # being looked at is the same mistake as a check reading a different
         # object than the behaviour uses -- it just fails in the UI instead.
         return {"connected": False, "bot_username": None, "live": None,
-                "owner_linked": row is not None and row[1] is not None,
+                # bool(), NOT `is not None`. This column used to be the
+                # nullable owner_telegram_id, where "is not None" meant "has an
+                # owner". It is now a COUNT > 0 -- a boolean that is never null
+                # -- so the old test was true for every business that exists,
+                # and every unclaimed bot reported itself as claimed.
+                "owner_linked": bool(row and row[1]),
                 "polling": False, "claim_link": None}
 
     ok, detail = channel.verify_token(token)
@@ -773,7 +782,10 @@ def channel_state(business: Business) -> dict:
         # api.telegram.org blipped would be worse than saying nothing.
         "live": ok if ok else (False if "rejected" in detail else None),
         "detail": None if ok else detail,
-        "owner_linked": row[1] is not None,
+        # Same correction as the early return above: row[1] is a COUNT > 0 now,
+        # never null. `is not None` would say every connected bot has an owner,
+        # which is precisely when the screen must offer the claim link.
+        "owner_linked": bool(row[1]),
         "polling": polling,
         # ONLY WHEN SOMETHING IS LISTENING, and that condition is the whole
         # point of this change. The link was previously offered the moment a

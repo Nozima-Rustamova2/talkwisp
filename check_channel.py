@@ -8,7 +8,7 @@ needs a live token is the collision path, which reuses whatever token the
 harness business already has, and sets it on the business that already owns it
 so nothing changes.
 
-THE SECTION THAT MATTERS MOST IS 4, the claim code. `owner_telegram_id` gates
+THE SECTION THAT MATTERS MOST IS 4, the claim code. A claimed owner gates
 /fact and the owner buttons, and a bot is findable the moment it exists -- so if
 /start claimed ownership for whoever pressed it first, any customer could become
 the owner. Section 4 is the proof that a stranger's press cannot.
@@ -52,6 +52,8 @@ def main() -> None:
         raise SystemExit("ADMIN_DATABASE_URL is not set.")
     pool.open()
     admin = psycopg.connect(admin_url, autocommit=True)
+    admin.execute("delete from business_owner where business_id in"
+                  " (select id from business where owner_email = %s)", (ADDR,))
     admin.execute("delete from business where owner_email = %s", (ADDR,))
     scratch = str(admin.execute(
         "insert into business (name, owner_email, approved) "
@@ -59,6 +61,8 @@ def main() -> None:
     try:
         run(admin, scratch)
     finally:
+        admin.execute("delete from business_owner where business_id = %s",
+                      (scratch,))
         admin.execute("delete from session where business_id = %s", (scratch,))
         admin.execute("delete from business where id = %s", (scratch,))
         admin.close()
@@ -149,24 +153,43 @@ def run(admin, scratch: str) -> None:
     check("an expired code does not verify, though its signature is valid",
           channel.check_claim(expired, scratch, fake_token), False)
 
-    print("\n5. Ownership is claimed once, and only from empty")
-    admin.execute("update business set owner_telegram_id = null where id = %s",
+    print("\n5. Ownership is claimed through the link, up to three")
+    # THE RULE CHANGED DELIBERATELY. This section used to assert "claimed once,
+    # and only from empty" -- correct when a business had a single owner column.
+    # A business may now claim up to three, and the cap and the duplicate
+    # handling are covered in depth by check_owners.py. What belongs HERE is
+    # that the claim still goes through the signed link and nothing else.
+    admin.execute("delete from business_owner where business_id = %s",
                   (scratch,))
     with connection(scratch) as conn:
         first = conn.execute("select app_business_claim_owner(%s, %s)",
                              (scratch, 111)).fetchone()[0]
         second = conn.execute("select app_business_claim_owner(%s, %s)",
                               (scratch, 222)).fetchone()[0]
+        again = conn.execute("select app_business_claim_owner(%s, %s)",
+                             (scratch, 111)).fetchone()[0]
     check("the first claim succeeds", first, True)
-    check("the second is refused", second, False)
-    owner = admin.execute("select owner_telegram_id from business where id = %s",
-                          (scratch,)).fetchone()[0]
-    check("and the owner is still the first one", owner, 111)
+    check("a second PERSON may also claim", second, True)
+    check("but the same person twice does not", again, False)
+    owners = [r[0] for r in admin.execute(
+        "select telegram_id from business_owner where business_id = %s"
+        " order by telegram_id", (scratch,)).fetchall()]
+    check("and both are owners, once each", owners, [111, 222])
 
     print("\n6. A claimed bot stops offering a claim link")
-    admin.execute("update business set owner_telegram_id = %s where id = %s",
-                  (111, scratch))
+    admin.execute("insert into business_owner (business_id, telegram_id)"
+                  " values (%s, %s) on conflict do nothing",
+                  (scratch, 111))
     check("owner_linked is true", client.get("/channel").json()["owner_linked"], True)
+    # THE OTHER RETURN PATH. /channel answers from two places -- one for a
+    # business with no token, one for a business with one -- and only the first
+    # was covered. Both read the same column, so both carried the same bug when
+    # it became a boolean, and only one of them failed a check.
+    admin.execute("delete from business_owner where business_id = %s", (scratch,))
+    check("and false again once the owners are gone, on the connected path",
+          client.get("/channel").json()["owner_linked"], False)
+    admin.execute("insert into business_owner (business_id, telegram_id)"
+                  " values (%s, %s) on conflict do nothing", (scratch, 111))
     check("and no claim link is offered",
           client.get("/channel").json()["claim_link"], None)
 
@@ -182,7 +205,7 @@ def run(admin, scratch: str) -> None:
     # enough for `connected`, and the polling flag is read from the column
     # rather than from Telegram, so all three transitions are real.
     admin.execute(
-        "update business set bot_token = %s, owner_telegram_id = null, "
+        "update business set bot_token = %s, "
         "bot_last_seen_at = null where id = %s",
         ("999999999:AAEcheckchannelscratchtokennotreal01", scratch))
 

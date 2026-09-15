@@ -1,0 +1,14 @@
+-- FORCE row level security on business_owner.
+--
+-- 0020 enabled RLS and wrote the policy, and stopped one word short. Without
+-- FORCE, the table's OWNER bypasses every policy -- so the protection held for
+-- talkwisp_app and evaporated for whichever role runs migrations or a console
+-- session, which is exactly the role a mistake is made from.
+--
+-- CAUGHT BY check_tenancy.py ON THE DAY THE TABLE WAS WRITTEN, which is what
+-- that check exists for. It does not list the tables it expects; it asks the
+-- database which ones carry a business_id, and asserts every one the app role
+-- can reach is `relrowsecurity and relforcerowsecurity`. A table added without
+-- it fails immediately rather than whenever somebody next rereads the
+-- migrations -- and its comment says so in as many words.
+alter table business_owner force row level security;

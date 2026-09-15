@@ -60,22 +60,43 @@ Rules:
   unchanged. A bad guess sends the search somewhere wrong."""
 
 
-def needs_rewrite(question: str, history: list) -> bool:
-    """Cheap gate, so most messages never cost an extra model call.
+def underspecified(question: str) -> bool:
+    """Whether this question depends on something outside itself.
+
+    HISTORY-FREE, deliberately. Two callers ask different questions of the same
+    test: needs_rewrite() below asks "can I resolve this against what was said
+    before?", and bot.py asks "was this question ever resolvable at all?" --
+    the second only matters when there is NO history, which is exactly when the
+    first must say no.
+
+    One definition, because two answers to "is this underspecified?" would drift
+    the first time either was edited, and the drift would be invisible: the
+    rewriter would stop firing where the clarifier still did.
 
     Deliberately lets some self-contained questions through -- "Kardiolog narxi
-    qancha?" is three words and will trip this. The prompt's instruction to
-    return such a question unchanged is the second line of defence, and logging
-    both texts is what makes a corruption visible instead of mysterious.
+    qancha?" is three words and will trip this. Downstream, the rewriter's
+    prompt is told to return such a question unchanged; the clarifier's second
+    condition is that nothing was said before, which a customer mid-conversation
+    never satisfies.
     """
-    if not history:
-        return False
     words = normalize(question).split()
     if not words:
         return False
     if len(words) <= MAX_WORDS_WITHOUT_REFERENCE:
         return True
     return any(w in _REFERENCE_WORDS for w in words)
+
+
+def needs_rewrite(question: str, history: list) -> bool:
+    """Cheap gate, so most messages never cost an extra model call.
+
+    Underspecified AND there is something to resolve against. With no history
+    there is nothing to rewrite from, and a guess would send the search
+    somewhere wrong -- that case belongs to the clarifier in bot.py instead.
+    """
+    if not history:
+        return False
+    return underspecified(question)
 
 
 def rewrite(history: list, question: str) -> tuple[str, bool]:

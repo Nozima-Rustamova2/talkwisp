@@ -79,20 +79,20 @@ def main() -> None:
     import contextlib
 
     saved = (bot.send, bot.send_kb, bot.parse_fact, bot.typing,
-             bot.BUSINESS_ID, bot.OWNER_ID, bot.BUSINESS_NAME)
+             bot.BUSINESS_ID, bot.OWNERS, bot.BUSINESS_NAME)
     bot.send = lambda chat, text: (SENT.append((chat, text)), True)[1]
     bot.send_kb = lambda chat, text, markup: SENT.append((chat, text))
     bot.typing = lambda chat: contextlib.nullcontext()
     bot.BUSINESS_ID = biz
     bot.BUSINESS_NAME = "Rangli Salon"
-    bot.OWNER_ID = "900900"
+    bot.OWNERS = [OWNER]
 
     pool.open()
     try:
         run(admin, biz)
     finally:
         (bot.send, bot.send_kb, bot.parse_fact, bot.typing,
-         bot.BUSINESS_ID, bot.OWNER_ID, bot.BUSINESS_NAME) = saved
+         bot.BUSINESS_ID, bot.OWNERS, bot.BUSINESS_NAME) = saved
         # Facts first: escalation.fact_id is ON DELETE SET NULL, but `fact`
         # itself references `business`, so the business cannot go while any
         # fact this run wrote is still there.
@@ -135,7 +135,7 @@ def run(admin, biz: str) -> None:
         bot.notify_owner_escalation(escalation.get(conn, first))
     check("the owner got exactly one message", len(SENT), 1)
     owner_msg = SENT[0][1]
-    check("addressed to the owner", SENT[0][0], 900900)
+    check("addressed to the owner", SENT[0][0], OWNER)
     check("it names the business", "Rangli Salon" in owner_msg, True)
     check("it quotes the question",
           "Bolalarga chegirma bormi?" in owner_msg, True)
@@ -154,7 +154,7 @@ def run(admin, biz: str) -> None:
                    "value": "10%"}}
     with connection(biz) as conn:
         escalation.start_answering(conn, first, OWNER)
-        bot.deliver_owner_answer(conn, 900900,
+        bot.deliver_owner_answer(conn, OWNER,
                                  escalation.get(conn, first),
                                  "Ha, bolalarga 10% chegirma bor.")
     told = sorted(chat for chat, _ in SENT if chat in (111, 222))
@@ -186,12 +186,12 @@ def run(admin, biz: str) -> None:
         esc_id, _ = escalation.open_or_join(conn, 333, "Yakshanba ishlaysizmi?",
                                             ctx)
         escalation.start_answering(conn, esc_id, OWNER)
-        bot.deliver_owner_answer(conn, 900900, escalation.get(conn, esc_id),
+        bot.deliver_owner_answer(conn, OWNER, escalation.get(conn, esc_id),
                                  "Ha, lekin faqat ertalab.")
     check("the customer still got the answer",
           any(c == 333 and "ertalab" in t for c, t in SENT), True)
     check("and the owner was told it could not be saved",
-          any(c == 900900 and "saqlay olmadim" in t for c, t in SENT), True)
+          any(c == OWNER and "saqlay olmadim" in t for c, t in SENT), True)
     with connection(biz) as conn:
         row = escalation.get(conn, esc_id)
     check("the escalation still closed", row["status"], "answered")
@@ -222,10 +222,10 @@ def run(admin, biz: str) -> None:
     # link. Offering "shall I pass this on?" with nobody behind it is a control
     # that cannot work -- the rule this project applies to every affordance.
     with connection(biz) as conn:
-        saved_owner = bot.OWNER_ID
-        bot.OWNER_ID = None
+        saved_owner = bot.OWNERS
+        bot.OWNERS = []
         _, offer_without = bot.with_takeover(conn, 555, "test", {})
-        bot.OWNER_ID = saved_owner
+        bot.OWNERS = saved_owner
         _, offer_with = bot.with_takeover(conn, 555, "test", {})
     check("no owner linked -> no button", offer_without, False)
     check("owner linked -> button", offer_with, True)
