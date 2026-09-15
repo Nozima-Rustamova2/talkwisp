@@ -386,14 +386,30 @@ check("no sent message carries an unfilled {placeholder}",
 
 # THE CONTROL. An empty list is equally true of a working rule and a rule that
 # matches nothing, so plant the bug back and require it to be seen.
-# Removing the .format() call is EXACTLY how it shipped -- the template and
-# the placeholders were already there. The first attempt at this control kept
-# the .format() and merely added to the expression, so nothing was broken and
-# the control correctly refused to pass.
-planted = SOURCE.replace(').format(name=BUSINESS_NAME or "biz")', ')', 1)
-assert planted != SOURCE, "the control planted nothing"
-check("and the rule would catch it coming back",
+# THE CONTROL TESTS THE RULE, NOT A LINE OF bot.py.
+#
+# It used to plant by deleting a specific .format() call from the real source.
+# That worked until the greeting it targeted was rewritten to call
+# greeting_for(), at which point the plant matched nothing -- and the assert
+# below caught it, which is the only reason this is a working control rather
+# than a green tick. Coupling a control to a line that keeps moving means it
+# silently stops controlling anything the day someone edits that line.
+#
+# So it feeds the rule a synthetic module instead. bot.py's own cleanliness is
+# asserted above, against the real source; this proves the thing doing the
+# asserting can see the bug at all.
+planted = 'def f():\n    send(chat_id, "Salom! {name} haqida savolingizni yozing.")\n'
+assert _unformatted(planted), "the control planted nothing the rule can see"
+check("the rule sees an unformatted placeholder in a send()",
       len(_unformatted(planted)) > 0, True)
+
+# AND THE OTHER HALF. A rule that flags everything would pass the line above and
+# be useless -- the first version of it flagged four legitimate templates and
+# would have been switched off within a week.
+formatted = ('def f():\n    send(chat_id, "Salom! {name} haqida."'
+             '.format(name=x))\n')
+check("and does NOT flag one that is formatted",
+      _unformatted(formatted), [])
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

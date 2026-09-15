@@ -28,6 +28,7 @@ from app.llm import complete
 from app import payment
 from app.retrieval import _fact_row, find
 from app import meta
+from app import style
 from app.triage import medical_lead
 from app.triage import reply as triage_reply
 from app.triage import triage
@@ -293,9 +294,18 @@ def detect_language(text: str) -> str:
 _REPLY_IN_ECHO = re.compile(r"^\s*REPLY IN:.*$", re.MULTILINE | re.IGNORECASE)
 
 
-def _ask(prompt: str, question: str) -> tuple[str, bool]:
+def _ask(prompt: str, question: str, style: str = "") -> tuple[str, bool]:
     """Returns (reply, refused). The model signals refusal with a marker so the
-    caller can log a gap, instead of the refusal disappearing into prose."""
+    caller can log a gap, instead of the refusal disappearing into prose.
+
+    `style` is APPENDED TO THE SYSTEM PROMPT, after the rules, and defaults to
+    "" -- so a business that has set no personality gets the exact bytes this
+    function sent before app/style.py existed. That default is the property
+    check_style asserts, and it is why 'normal' length and 'off' emoji map to
+    no text rather than to a neutral-sounding sentence.
+
+    It is never the last thing the model reads: REPLY IN is the final line of
+    the user message below, and rule 5 depends on that placement."""
     # REPLY IN goes LAST, after the context, not before it. It used to sit at
     # the top; once both retrieval paths were merged the context block grew and
     # a Cyrillic Uzbek question started coming back in LATIN -- the model
@@ -305,7 +315,7 @@ def _ask(prompt: str, question: str) -> tuple[str, bool]:
     # had to override. The harness could not see it: grading is route-based, so
     # a correct answer in the wrong script still passes.
     text = complete(
-        _SYSTEM,
+        _SYSTEM + style,
         f"{_clock()}\n\n{prompt}\n\nREPLY IN: {detect_language(question)}"
     )
     # Moving REPLY IN to the last line made the model occasionally CONTINUE it:
@@ -576,6 +586,7 @@ def _answer(conn: Connection, question: str) -> dict:
             f"This could refer to more than one person or service: {names}.\n\n"
             "Ask the customer which one they mean. Do not answer for any of them.",
             question,
+            style.block(conn),
         )
         return result
 
@@ -638,7 +649,8 @@ def _answer(conn: Connection, question: str) -> dict:
                          + "\n\n".join(c["content"] for c in usable_chunks))
         context = "\n\n".join(parts)
         reply, refused = _ask(
-            f"Context:\n{context}\n\nCustomer question: {question}", question)
+            f"Context:\n{context}\n\nCustomer question: {question}", question,
+            style.block(conn))
         if not refused:
             # Name what was actually in the context. Labelling this
             # "vector-facts" whenever any fact cleared the floor made two

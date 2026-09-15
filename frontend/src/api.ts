@@ -773,3 +773,38 @@ export function renameBusiness(name: string): Promise<{ name: string }> {
     body: new URLSearchParams({ name }).toString(),
   });
 }
+
+/* --- how the agent sounds --------------------------------------------------
+ *
+ * TONE IS AN ENUM, NOT A TEXT BOX, and that is the whole design. A free-text
+ * persona field lives in the same prompt as the rules, and an owner writing
+ * something reasonable -- "always be helpful", "you know everything about us"
+ * -- erodes a guarantee invisibly, as a slightly more confident answer rather
+ * than an error. Fixed options are also the only version the harness can test.
+ *
+ * The agent name and the greetings never reach a model at all: they are
+ * substituted into sentences we wrote. */
+
+export type Style = {
+  agent_name: string | null;
+  tone_register: "formal" | "informal" | null;
+  tone_length: "normal" | "concise" | null;
+  tone_emoji: "off" | "light" | null;
+  greeting_uz_latn: string | null;
+  greeting_uz_cyrl: string | null;
+  greeting_ru: string | null;
+};
+
+export function getStyle(): Promise<Style> {
+  return request<Style>("/style");
+}
+
+/* Sends every field every time: absent means cleared, so unsetting needs no
+   second endpoint and there is one representation of "not set". */
+export function saveStyle(fields: Record<string, string>): Promise<Style> {
+  return request<Style>("/style", {
+    method: "PUT",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(fields).toString(),
+  });
+}

@@ -34,7 +34,8 @@ import httpx
 import psycopg
 from dotenv import load_dotenv
 
-from app import buy, console, escalation, knowledge, orders, payment
+from app import (buy, console, escalation, knowledge, orders, payment,
+                 style)
 from app.answer import answer, detect_language
 from app.followup import rewrite
 from app.db import (assert_app_role, business_by_name,
@@ -114,6 +115,48 @@ GREETING_REPLY = {
 }
 GREETING_DEFAULT = "Assalomu alaykum! {name} haqidagi savolingizni yozing."
 
+# THE SAME SENTENCE WITH A NAME IN IT, used when the owner has given their
+# agent one. Two tables rather than one with an optional clause, because the
+# Uzbek and Russian versions need different word order once a name is
+# introduced, and a template with a conditional fragment inside it is the kind
+# of string that reads fine until the day it does not.
+#
+# The agent name is a VALUE IN A SENTENCE WE WROTE, exactly like the business
+# name beside it. It never reaches a model: the answering prompt has no use for
+# it, and "who are you" is answered by app/meta.py before a model is called.
+AGENT_GREETING = {
+    "Russian": "Здравствуйте! Я {agent}, помощник {name}. "
+               "Задайте свой вопрос.",
+    "Uzbek, in CYRILLIC script": "Ассалому алайкум! Мен {agent}, {name} "
+                                 "ёрдамчисиман. Саволингизни ёзинг.",
+}
+AGENT_GREETING_DEFAULT = ("Assalomu alaykum! Men {agent}, {name} "
+                          "yordamchisiman. Savolingizni yozing.")
+
+UZ_LATN = "the same language the customer wrote in, in LATIN script"
+RUSSIAN = "Russian"
+
+
+def greeting_for(conn, language: str) -> str:
+    """The owner's own first message, else the agent form, else the built-in.
+
+    THREE LAYERS AND THE ORDER MATTERS. A business that wrote its own greeting
+    gets exactly that, unedited -- it is their words and we do not decorate
+    them. A business that only named its agent gets our sentence with the name
+    in it. A business that has set neither gets precisely what it got before
+    any of this existed.
+    """
+    own = style.greeting(conn, language)
+    if own:
+        return own
+    agent = style.current(conn)["agent_name"]
+    if agent:
+        return AGENT_GREETING.get(language, AGENT_GREETING_DEFAULT).format(
+            agent=agent, name=BUSINESS_NAME or "biz")
+    return GREETING_REPLY.get(language, GREETING_DEFAULT).format(
+        name=BUSINESS_NAME or "biz")
+
+
 THANKS_REPLY = {
     "Russian": "Пожалуйста! Если будут вопросы — пишите.",
     "Uzbek, in CYRILLIC script": "Арзимайди! Саволингиз бўлса, ёзаверинг.",
@@ -121,24 +164,40 @@ THANKS_REPLY = {
 THANKS_DEFAULT = "Arzimaydi! Savolingiz boʻlsa, yozavering."
 
 
-def social(text: str) -> str | None:
-    """A canned reply for a message that is only a greeting or only thanks.
+def is_social(text: str) -> str | None:
+    """"greeting", "thanks", or None. PURE -- no database, no business.
 
-    Short-circuits before retrieval. Only fires when the WHOLE message is
-    social -- "Salom, kardiolog narxi qancha?" is a question and must go
-    through the normal path.
+    Split out from social() when the greeting gained three layers and needed a
+    connection to build a reply. harvest.py asks only whether a message WAS
+    social, to keep canned replies out of the graded set; it has no business
+    bound and no reply to send. A predicate that needed a tenant would have
+    made a reporting script open a connection to answer a question about a
+    string.
+
+    Only fires when the WHOLE message is social -- "Salom, kardiolog narxi
+    qancha?" is a question and must go through the normal path.
     """
     words = normalize(text).split()
     if not words or len(words) > 3:
         return None
     if all(w in _GREETINGS for w in words):
-        # A business with no name is not a state that exists -- name is NOT NULL
-        # -- but falling back keeps a greeting from crashing on a half-set-up
-        # process rather than answering a customer with a traceback.
-        return GREETING_REPLY.get(detect_language(text),
-                                  GREETING_DEFAULT).format(
-                                      name=BUSINESS_NAME or "biz")
+        return "greeting"
     if all(w in _THANKS for w in words):
+        return "thanks"
+    return None
+
+
+def social(conn, text: str) -> str | None:
+    """The canned reply for such a message, or None. Short-circuits before
+    retrieval, so neither path costs a model call."""
+    kind = is_social(text)
+    if kind == "greeting":
+        # A business with no name is not a state that exists -- name is NOT
+        # NULL -- but falling back keeps a greeting from crashing on a
+        # half-set-up process rather than answering a customer with a
+        # traceback.
+        return greeting_for(conn, detect_language(text))
+    if kind == "thanks":
         return THANKS_REPLY.get(detect_language(text), THANKS_DEFAULT)
     return None
 
@@ -1433,13 +1492,17 @@ def handle(conn, message: dict, last_seen: dict) -> None:
         # Formatted BEFORE the owner suffix is appended. That suffix has no
         # placeholders, and formatting the whole concatenation would turn
         # any brace added to it later into a format field by accident.
-        send(chat_id, ("Salom! {name} haqida savolingizni yozing.\n"
-                       "Здравствуйте! Напишите свой вопрос о {name}."
-                       ).format(name=BUSINESS_NAME or "biz")
+        # BOTH LANGUAGES, because /start arrives before the customer has
+        # written anything and there is nothing yet to detect. Each line goes
+        # through the same three layers as a typed greeting, so an owner who
+        # wrote their own first message sees it here too rather than only on
+        # the path they did not test.
+        send(chat_id, greeting_for(conn, UZ_LATN) + "\n"
+                      + greeting_for(conn, RUSSIAN)
                       + ("\n\n(Siz egasi sifatida tanildingiz.)" if is_owner else ""))
         return
 
-    canned = social(text)
+    canned = social(conn, text)
     if canned is not None:
         send(chat_id, canned)
         log({"chat_id": chat_id, "is_owner": is_owner, "question": text,

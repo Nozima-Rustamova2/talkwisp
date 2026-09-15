@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Personality from "./Personality";
 import {
   ApiError,
   connectTelegram,
@@ -370,6 +371,7 @@ export default function Settings() {
           </p>
         )}
       </div>
+      <Personality />
     </div>
   );
 }

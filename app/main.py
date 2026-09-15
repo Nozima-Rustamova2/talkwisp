@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
 from app import (auth, channel, console, conversations, dashboard, extract,
-                 knowledge, payment, review, sources, vision)
+                 knowledge, payment, review, sources, style, vision)
 from app.approval import NotApproved
 from app.db import assert_app_role, connection, current_approved, pool
 from app.llm import check_configured, check_reachable
@@ -362,6 +362,63 @@ def reject_fact(business: Business, fact_id: str) -> dict:
                        "elsewhere -- rejecting means the extraction was wrong, "
                        "not that the thing stopped being true.")
         return {"id": fact_id, "rejected": True}
+
+
+# --- how the agent sounds ---------------------------------------------------
+#
+# ONLY THE TONE FIELDS REACH A MODEL, and each is an enum the database
+# constrains. The agent name and the greetings are canned strings assembled in
+# code. There is deliberately no free-text persona field: it would live in the
+# same prompt as the rules, and an owner writing something entirely reasonable
+# ("always be helpful", "you know everything about us") erodes a guarantee
+# without knowing, invisibly, as a slightly more confident answer.
+
+REGISTERS = ("formal", "informal")
+LENGTHS = ("normal", "concise")
+EMOJI = ("off", "light")
+
+
+@app.get("/style")
+def get_style(business: Business) -> dict:
+    with connection(business) as conn:
+        return style.current(conn)
+
+
+@app.put("/style")
+def set_style(business: Business,
+              agent_name: str = Form(""),
+              tone_register: str = Form(""),
+              tone_length: str = Form(""),
+              tone_emoji: str = Form(""),
+              greeting_uz_latn: str = Form(""),
+              greeting_uz_cyrl: str = Form(""),
+              greeting_ru: str = Form("")) -> dict:
+    """Save the lot. Absent fields clear, so the screen never needs a second
+    call to unset something.
+
+    Validated here AND constrained in the database. This check produces the
+    readable error; the CHECK constraint is the floor under it, because a bug
+    in this function would otherwise put free text into the one column that
+    becomes prompt text.
+    """
+    for value, allowed, field in ((tone_register, REGISTERS, "tone_register"),
+                                  (tone_length, LENGTHS, "tone_length"),
+                                  (tone_emoji, EMOJI, "tone_emoji")):
+        if value and value not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field} must be one of {', '.join(allowed)}.")
+    with connection(business) as conn:
+        try:
+            style.save(conn, agent_name=agent_name, tone_register=tone_register,
+                       tone_length=tone_length, tone_emoji=tone_emoji,
+                       greeting_uz_latn=greeting_uz_latn,
+                       greeting_uz_cyrl=greeting_uz_cyrl,
+                       greeting_ru=greeting_ru)
+        except psycopg.errors.CheckViolation as exc:
+            raise HTTPException(status_code=400,
+                                detail=str(exc).split("\n")[0]) from None
+        return style.current(conn)
 
 
 # --- the business itself ----------------------------------------------------

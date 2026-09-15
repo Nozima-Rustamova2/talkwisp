@@ -100,13 +100,13 @@ def load(business_id: str) -> list[dict]:
 def usable(rows: list[dict]) -> list[dict]:
     """Rows worth turning into test cases.
 
-    Social messages are filtered by running bot.social() against the TEXT, not
+    Social messages are filtered by running bot.is_social() against the TEXT,
     only by trusting the logged outcome. The log records what happened at the
     time, and the short-circuit did not exist for the first messages ever sent
     -- so "assalomu" and "rahmat" were logged as ordinary questions and became
     stubs. Judging the text applies today's rules to yesterday's log.
     """
-    from bot import social
+    from bot import is_social
 
     kept = []
     for r in rows:
@@ -117,7 +117,7 @@ def usable(rows: list[dict]) -> list[dict]:
             continue
         if "status" not in r:  # an error row: no route, no answer to grade
             continue
-        if social(question) is not None:
+        if is_social(question) is not None:
             continue
         kept.append(r)
     return kept
