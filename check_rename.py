@@ -156,5 +156,40 @@ def run(admin, biz_a, biz_b):
           None)
 
 
+    print("\n4. A running bot picks the new name up without a restart")
+    # THE STEP THAT WOULD HAVE BEEN MANUAL. bot.py read BUSINESS_NAME once at
+    # startup, so an owner could rename in Settings, be told it was saved, and
+    # watch customers keep getting the old name until someone with root
+    # restarted the poller -- which an owner cannot do. The heartbeat already
+    # opens a connection once a minute, so the name rides along on it.
+    import bot
+
+    bot.BUSINESS_ID, bot.BUSINESS_NAME = biz_a, name_of(admin, biz_a)
+    admin.execute("update business set name = %s where id = %s",
+                  ("Renamed While Running", biz_a))
+    with connection(biz_a) as conn:
+        bot.refresh_business_name(conn)
+    check("the running bot sees the new name",
+          bot.BUSINESS_NAME, "Renamed While Running")
+
+    # NEGATIVE HALF. "It equals the new name" is also true of a function that
+    # assigns unconditionally, or of one that never ran because the name
+    # happened to match already. Rename it back underneath and require the
+    # refresh to follow.
+    admin.execute("update business set name = %s where id = %s",
+                  ("Changed Again", biz_a))
+    with connection(biz_a) as conn:
+        bot.refresh_business_name(conn)
+    check("and follows a second change", bot.BUSINESS_NAME, "Changed Again")
+
+    # It reads its OWN row. A bot cannot be relabelled by another tenant's
+    # rename, which is RLS doing the work rather than this function.
+    admin.execute("update business set name = %s where id = %s",
+                  ("Not Mine", biz_b))
+    with connection(biz_a) as conn:
+        bot.refresh_business_name(conn)
+    check("another business's rename does not touch it",
+          bot.BUSINESS_NAME, "Changed Again")
+
 if __name__ == "__main__":
     main()

@@ -118,12 +118,14 @@ function BusinessName() {
         </p>
       ) : null}
       {saved ? (
-        /* SAID, because it is true and not obvious: each bot reads its name once
-           when it starts, so a rename reaches customers on the next restart. A
-           change that appears to have worked and has not is worse than one that
-           says when it takes effect. */
+        /* WITHIN A MINUTE, and that number is the heartbeat's, not a guess.
+           The bot reads its name on the same once-a-minute connection it uses
+           to record that it is alive, so this is the real interval rather than
+           a reassuring one. It said "the next time it restarts" until the
+           refresh existed -- true then, false now, and copy that describes old
+           behaviour is how a screen starts lying quietly. */
         <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--text-faint)" }}>
-          Saved. Your agent will start using it the next time it restarts.
+          Saved. Your agent starts using it within a minute.
         </p>
       ) : null}
     </div>

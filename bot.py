@@ -1655,6 +1655,36 @@ HEARTBEAT_SECONDS = 60
 _last_beat = 0.0
 
 
+def refresh_business_name(conn) -> None:
+    """Pick up a rename without a restart.
+
+    THE NAME WAS READ ONCE AT STARTUP and never again, which was fine while the
+    only way to change it was admin SQL. Settings can now rename a business, so
+    an owner could save a new name, be told it was saved, and watch their
+    customers keep being greeted by the old one until someone with root
+    restarted the poller. An owner cannot restart their own bot.
+
+    That is the same shape as every other thing fixed this week: a self-serve
+    action with a manual step behind it. Here the fix is nearly free -- the
+    heartbeat already opens a connection to this business once a minute, so the
+    name rides along on a connection that was being made anyway.
+
+    Reads `business` under RLS like everything else, so it can only ever see its
+    own row.
+
+    NOT the token, and not the owner id. Rebinding a token mid-flight would
+    change which bot this process is while it holds an open getUpdates against
+    the old one -- a different and much less safe thing than relabelling.
+    """
+    global BUSINESS_NAME
+    row = conn.execute("select name from business").fetchone()
+    if row and row[0] != BUSINESS_NAME:
+        # Printed, because a bot that quietly starts calling itself something
+        # else is a support conversation nobody can reconstruct.
+        print(f"business renamed: {BUSINESS_NAME!r} -> {row[0]!r}", flush=True)
+        BUSINESS_NAME = row[0]
+
+
 def heartbeat(force: bool = False) -> None:
     """Record that a poller is alive for this business.
 
@@ -1673,6 +1703,7 @@ def heartbeat(force: bool = False) -> None:
     try:
         with connection(BUSINESS_ID) as conn:
             conn.execute("select app_business_touch_bot(%s)", (BUSINESS_ID,))
+            refresh_business_name(conn)
         _last_beat = now
     except Exception as exc:  # noqa: BLE001 - see the docstring
         print(f"heartbeat failed (not fatal): {exc!r}", flush=True)
