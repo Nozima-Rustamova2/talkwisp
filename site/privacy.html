@@ -1,0 +1,205 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy — Talkwisp</title>
+<meta name="description" content="What Talkwisp stores, who else processes it, and how to have it deleted.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="fonts/manrope.css">
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; background: #fff; color: rgb(20, 24, 31);
+         font-family: Manrope, system-ui, sans-serif; font-size: 16px;
+         line-height: 1.65; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+  a { color: rgb(22, 87, 192); }
+  h1 { font-size: 30px; line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 8px; }
+  h2 { font-size: 20px; letter-spacing: -0.01em; margin: 38px 0 10px; }
+  h3 { font-size: 16px; margin: 24px 0 6px; }
+  p, li { color: rgb(58, 66, 80); }
+  .lede { font-size: 17px; }
+  .updated { color: rgb(92, 102, 117); font-size: 14px; margin: 0 0 28px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  .note { background: rgb(231, 240, 255); border-radius: 12px;
+          padding: 16px 18px; margin: 20px 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note p:first-child { margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 15px; }
+  td, th { text-align: left; vertical-align: top; padding: 9px 12px 9px 0;
+           border-top: 1px solid rgb(231, 236, 243); }
+  th { color: rgb(20, 24, 31); font-weight: 700; }
+  .back { display: inline-block; margin-bottom: 26px; font-size: 14px;
+          font-weight: 600; text-decoration: none; }
+  footer { margin-top: 48px; padding-top: 20px;
+           border-top: 1px solid rgb(231, 236, 243);
+           font-size: 14px; color: rgb(92, 102, 117); }
+</style>
+</head><body><div class="wrap">
+
+<a class="back" href="/">← Talkwisp</a>
+
+<h1>Privacy policy</h1>
+<p class="updated">Last updated 16 September 2026</p>
+
+<p class="lede">Talkwisp provides an AI assistant that businesses connect to their
+own Telegram bot. This page describes what we store, who else it passes through,
+and how to have it removed. It is written from what the software actually does,
+not from a template.</p>
+
+<p>Talkwisp is operated from Tashkent, Uzbekistan. Contact:
+<a href="mailto:info@talkwisp.uz">info@talkwisp.uz</a>.</p>
+
+<h2>Two different people are covered here</h2>
+
+<p><strong>Businesses</strong> sign up for Talkwisp, add information about
+themselves, and connect a Telegram bot.</p>
+
+<p><strong>Customers</strong> are the people who message that business's bot.
+They do not have a Talkwisp account and never interact with us directly. The
+business decides what their agent knows; we run the software behind it.</p>
+
+<h2>What we store about customers</h2>
+
+<p>When someone messages a business's bot, we record the following. Every item
+is something the software genuinely writes down — this is a list of fields, not
+a category.</p>
+
+<table>
+  <tr><th>What</th><th>Why it exists</th></tr>
+  <tr><td>Telegram chat and user ID</td>
+      <td>To reply in the right conversation and to recognise a returning
+          customer.</td></tr>
+  <tr><td>First name and Telegram username, where the account has them</td>
+      <td>So the business can see who asked, and reach them again. Recorded from
+          September 2026 onward.</td></tr>
+  <tr><td>The language code Telegram reports for the account</td>
+      <td>A weak hint only; the reply language is decided from the text.</td></tr>
+  <tr><td>Every message sent to the bot, and every reply</td>
+      <td>So the business can read the conversation, and so we can tell whether
+          the agent answered well.</td></tr>
+  <tr><td>Questions the agent could not answer, with the internal match scores</td>
+      <td>To show the business what its agent is missing.</td></tr>
+  <tr><td>Questions passed to a human, with the few messages before them</td>
+      <td>An owner cannot answer a question without the context it came in.</td></tr>
+  <tr><td>Orders: what was ordered, the amount, the status and timestamps</td>
+      <td>Someone who paid must not be lost.</td></tr>
+  <tr><td>A Telegram reference to a payment screenshot — see below</td>
+      <td>Evidence for the business that a payment was sent.</td></tr>
+</table>
+
+<div class="note">
+<p><strong>We do not store payment screenshots.</strong> When a customer sends
+one, Telegram keeps the image and gives us a short reference to it — a
+<code>file_id</code>. That is the only thing in our database. We never download
+the image, never copy it to our servers, and never read it with software. When
+the business views it, Telegram serves it to them directly.</p>
+<p>We also never see or handle any money. Payments happen card to card between
+the customer and the business.</p>
+</div>
+
+<h2>What we store about businesses</h2>
+
+<ul>
+  <li>The email address used to sign in, and sign-in sessions.</li>
+  <li>The business name, and any agent name, greeting or tone settings.</li>
+  <li>The Telegram bot token, so the software can operate the bot.</li>
+  <li>The Telegram ID and first name of each person who claims the bot as an
+      owner — up to three.</li>
+  <li>Everything the business adds as knowledge: typed facts, uploaded files and
+      the text extracted from them, and payment details such as a card number,
+      card holder name and bank.</li>
+</ul>
+
+<h2>Who else processes this</h2>
+
+<p>We use a small number of other companies. Each one is listed with what it
+actually receives.</p>
+
+<h3>Google — Gemini API</h3>
+
+<p>This is the most significant one, and it works three different ways depending
+on what the data is:</p>
+
+<ul>
+  <li><strong>Customer questions are sent to Google.</strong> Every question a
+      customer asks is sent to the Gemini API twice: once to convert it into a
+      numeric representation for searching, and once to write the reply, together
+      with the business information needed to answer it.</li>
+  <li><strong>Files a business uploads are sent to Google.</strong> Price lists
+      and documents, including photographs of them, are read by Gemini's vision
+      model so their contents can be turned into facts.</li>
+  <li><strong>Payment screenshots are never sent to Google.</strong> They are not
+      read by any model, by design. They exist only for the business to look
+      at.</li>
+</ul>
+
+<p>Google processes this under its own terms for the Gemini API.</p>
+
+<h3>Telegram</h3>
+
+<p>The conversation happens on Telegram, so Telegram necessarily handles every
+message and holds its own copy under its own privacy policy. Payment screenshots
+are stored on Telegram's servers rather than ours.</p>
+
+<h3>Google Cloud, Cloudflare, Resend</h3>
+
+<ul>
+  <li><strong>Google Cloud</strong> hosts the server and the database.</li>
+  <li><strong>Cloudflare</strong> sits in front of our website and sees requests
+      to it.</li>
+  <li><strong>Resend</strong> delivers sign-in emails to business owners. It
+      receives the owner's email address. It is not involved in customer
+      conversations.</li>
+</ul>
+
+<h2>How long we keep it</h2>
+
+<div class="note">
+<p><strong>Nothing is deleted automatically.</strong> There is no retention
+period, no scheduled clean-up and no cascade. Data stays until someone asks us
+to remove it, and then a person removes it by hand.</p>
+<p>We would rather say that plainly than state a number our software does not
+enforce. If this page claimed "we delete after 12 months", nothing in the system
+would make that true.</p>
+</div>
+
+<p>We do not run database backups, so there is no second copy of your data for us
+to find later. Our hosting provider may keep infrastructure-level snapshots that
+we do not control or have access to.</p>
+
+<h2>Deleting your data</h2>
+
+<p>Anyone can ask, whether they are a business or a customer who messaged one.
+The <a href="/data-deletion">data deletion page</a> explains exactly how to ask,
+what happens, and what we cannot reach.</p>
+
+<h2>Legal basis and your rights</h2>
+
+<p>We process this information in order to provide the service a business asked
+for, and because a customer chose to start a conversation with that business's
+bot. You can ask us what we hold about you, ask for it to be corrected, or ask
+for it to be deleted, by writing to
+<a href="mailto:info@talkwisp.uz">info@talkwisp.uz</a>.</p>
+
+<p>If you messaged a business's bot, that business is also responsible for how it
+uses what you told them. We provide the software; they decide what to do with the
+conversation.</p>
+
+<h2>Children</h2>
+
+<p>Talkwisp is a tool for businesses and is not directed at children. We do not
+knowingly collect information from children.</p>
+
+<h2>Changes to this page</h2>
+
+<p>If we change what we store or who processes it, we will change this page and
+update the date at the top.</p>
+
+<footer>
+Talkwisp · Tashkent, Uzbekistan ·
+<a href="mailto:info@talkwisp.uz">info@talkwisp.uz</a><br>
+<a href="/terms">Terms of service</a> ·
+<a href="/data-deletion">Data deletion</a>
+</footer>
+
+</div></body></html>

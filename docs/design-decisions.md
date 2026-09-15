@@ -2874,13 +2874,65 @@ What is NOT derivable and was not faked: what a customer asked ABOUT.
 so the column shows the last question verbatim. Clustering would cost a model
 call per customer to fill one column.
 
-### OPEN: the log now holds personal data it did not before
+### CLOSED 2026-09-16: the three legal pages exist
 
-`first_name`, `username` and Telegram's `language_code` are personal data. The
-site footer already links to /privacy, /terms and /data-deletion and all three
-are 404. Names belong in that policy's list of what is stored, alongside message
-content and Telegram IDs, and the pages still do not exist. Noted here rather
-than discovered later.
+`first_name`, `username` and Telegram's `language_code` are personal data, and
+the footer linked to three 404s. The pages are written and are listed in the
+privacy policy's field table, which lists FIELDS rather than categories so it
+can be checked against the code.
+
+Served from `site/` as real paths -- the Caddyfile's `@legal` matcher already
+did `try_files {path}.html`, so three files were the whole change. Not
+fragments, not redirects: a reviewer opens them directly and a redirect reads
+as evasion.
+
+Three things are stated plainly because most policies hedge them:
+
+  **Google is named, three ways.** Customer questions go to Gemini for embedding
+  and generation. Owner-uploaded price lists go to its vision model. Payment
+  screenshots go nowhere near a model, by design -- and that last one is the
+  good news, so it is stated as its own sentence rather than folded in.
+
+  **Nothing is deleted automatically.** No retention period, no sweep, no
+  cascade. A stated period would be a promise the code does not keep; there is
+  no job that would make it true.
+
+  **Payment screenshots are not stored by us.** Telegram holds the image and we
+  hold a `file_id`. Unusual and in our favour, so it is said precisely.
+
+  **And no backups exist.** Verified rather than assumed -- no `pg_dump`, no
+  snapshot job anywhere. So deletion is complete on our side, and the page says
+  so while deliberately claiming NOTHING about our host's own infrastructure
+  snapshots, which we cannot see or search. Complete about us, silent about
+  them, is the honest shape.
+
+Deletion is described as what it is: a person running SQL and editing three
+JSONL files by hand, within thirty days. That is what makes thirty days a
+number we can meet rather than one copied from another company.
+
+### OPEN: the legal pages are English only
+
+The site is trilingual and these are not. It unblocks Google and Meta, whose
+reviewers read English, and it leaves a real asymmetry: an Uzbek customer
+exercising a deletion right should not have to read English to do it. This
+belongs with app-side i18n on the open list rather than being treated as done.
+
+### OPEN: one legal conversation covers three questions
+
+Worth doing as one thing rather than three, because they share an answer:
+
+1. Does "messaged the bot once" constitute consent for a non-transactional
+   announcement under Uzbek law, and does an opt-out satisfy it or is opt-in
+   required? This decides the SHAPE of the announcements feature, not a detail
+   of it -- building opt-out and then learning opt-in is required means
+   rebuilding the consent model, the copy and the recipient set.
+2. Does the answer differ for a TRANSACTIONAL message -- "your course starts
+   tomorrow" to somebody who paid -- versus an announcement to everyone who
+   ever asked a question? If those sit on different sides, the transactional
+   half is buildable now against the `purchase` table, with a far smaller
+   recipient set and almost no spam surface.
+3. Do storing chat ids and names, and the choice of Uzbek governing law in the
+   terms, trigger localisation or registration duties?
 
 
 ## Payment details had no writer at all — 2026-09-13

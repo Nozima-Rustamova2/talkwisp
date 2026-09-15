@@ -1,0 +1,145 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data deletion — Talkwisp</title>
+<meta name="description" content="How to have your data removed from Talkwisp, what happens when you ask, and what we cannot reach.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="fonts/manrope.css">
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; background: #fff; color: rgb(20, 24, 31);
+         font-family: Manrope, system-ui, sans-serif; font-size: 16px;
+         line-height: 1.65; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+  a { color: rgb(22, 87, 192); }
+  h1 { font-size: 30px; line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 8px; }
+  h2 { font-size: 20px; letter-spacing: -0.01em; margin: 38px 0 10px; }
+  h3 { font-size: 16px; margin: 24px 0 6px; }
+  p, li { color: rgb(58, 66, 80); }
+  .lede { font-size: 17px; }
+  .updated { color: rgb(92, 102, 117); font-size: 14px; margin: 0 0 28px; }
+  ul, ol { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  .note { background: rgb(231, 240, 255); border-radius: 12px;
+          padding: 16px 18px; margin: 20px 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note p:first-child { margin-top: 0; }
+  .back { display: inline-block; margin-bottom: 26px; font-size: 14px;
+          font-weight: 600; text-decoration: none; }
+  footer { margin-top: 48px; padding-top: 20px;
+           border-top: 1px solid rgb(231, 236, 243);
+           font-size: 14px; color: rgb(92, 102, 117); }
+</style>
+</head><body><div class="wrap">
+
+<a class="back" href="/">← Talkwisp</a>
+
+<h1>Data deletion</h1>
+<p class="updated">Last updated 16 September 2026</p>
+
+<p class="lede">You can ask us to delete what we hold about you, whether you are a
+business using Talkwisp or someone who messaged a business's bot. This page says
+how to ask, what actually happens, and what we cannot reach.</p>
+
+<h2>How to ask</h2>
+
+<p>Email <a href="mailto:info@talkwisp.uz">info@talkwisp.uz</a> with the subject
+<strong>Data deletion</strong>, and tell us which you are:</p>
+
+<ul>
+  <li><strong>A business.</strong> Write from the email address you sign in with.
+      That is how we know it is you.</li>
+  <li><strong>A customer who messaged a bot.</strong> Tell us which business's
+      bot you messaged and your Telegram username, or send
+      <code>/start</code> to that bot and mention your request — we can then match
+      your account.</li>
+</ul>
+
+<p>We may ask one follow-up question if we cannot tell which records are yours.
+We will not ask for identity documents.</p>
+
+<h2>What happens then</h2>
+
+<div class="note">
+<p><strong>A person does it by hand.</strong> There is no delete button and no
+automated job. Someone runs database statements to remove your rows and edits our
+three log files to remove your lines.</p>
+<p>We say this because it is true and because it is what makes thirty days a
+commitment we can meet rather than a number copied from another company's
+policy.</p>
+</div>
+
+<p><strong>We will complete it within 30 days of your request</strong>, and email
+you when it is done.</p>
+
+<h2>What gets deleted</h2>
+
+<h3>If you are a customer</h3>
+
+<ul>
+  <li>Every message you sent the bot and every reply, from our message log.</li>
+  <li>Your Telegram ID, first name and username wherever they appear.</li>
+  <li>Questions of yours the agent could not answer, from our gap log.</li>
+  <li>Any question of yours passed to the business, including the conversation
+      context stored with it.</li>
+  <li>Any orders you placed, and our reference to any payment screenshot you
+      sent.</li>
+</ul>
+
+<h3>If you are a business</h3>
+
+<ul>
+  <li>Your account, sign-in email and any active sessions.</li>
+  <li>Your business name, agent settings and greetings.</li>
+  <li>Your Telegram bot token, and the owner records for everyone who claimed
+      the bot.</li>
+  <li>All of your knowledge: typed facts, uploaded files and the text extracted
+      from them, and your payment details including your card number.</li>
+  <li>Your customers' conversations, orders and escalations.</li>
+</ul>
+
+<p>Deleting your business account deletes your customers' data with it. If you
+want to keep your knowledge, export or copy it before asking.</p>
+
+<h2>What we cannot reach</h2>
+
+<p>Being precise about this is more useful than promising more than we can do.</p>
+
+<ul>
+  <li><strong>Telegram's own copy of the conversation.</strong> The chat exists in
+      Telegram between you and the bot, on Telegram's servers, under Telegram's
+      policy. Deleting our records does not remove it from your Telegram app or
+      theirs. You can delete the chat yourself in Telegram.</li>
+  <li><strong>Payment screenshots.</strong> We never stored the image — only a
+      Telegram reference to it. We delete the reference; the picture stays on
+      Telegram until it is deleted there.</li>
+  <li><strong>Google's processing of past requests.</strong> Customer questions
+      were sent to Google's Gemini API to be answered. What Google retains is
+      governed by Google's terms, not ours, and we cannot delete it on your
+      behalf.</li>
+  <li><strong>Infrastructure snapshots at our hosting provider.</strong> We do not
+      run backups ourselves, so there is no second copy we hold. Our provider may
+      keep low-level snapshots we neither control nor can search.</li>
+</ul>
+
+<h2>Deleting some of it</h2>
+
+<p>You do not have to delete everything. A business can remove individual facts,
+sources and payment details from the Knowledge screen at any time, and remove an
+owner's access in Settings. If you want part of your data removed rather than all
+of it, say which part when you write.</p>
+
+<h2>If you just want the messages to stop</h2>
+
+<p>Block the bot in Telegram, or simply stop writing to it. The agent never
+messages anyone first — it only replies to a message you send. Blocking does not
+delete what is already stored; ask us if you want that too.</p>
+
+<footer>
+Talkwisp · Tashkent, Uzbekistan ·
+<a href="mailto:info@talkwisp.uz">info@talkwisp.uz</a><br>
+<a href="/privacy">Privacy policy</a> ·
+<a href="/terms">Terms of service</a>
+</footer>
+
+</div></body></html>
