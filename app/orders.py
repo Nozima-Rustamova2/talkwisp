@@ -60,7 +60,7 @@ REJECT_REASONS = ("amount_mismatch", "not_received")
 _FIELDS = ("id", "chat_id", "item", "subject_key", "attribute", "base_amount",
            "suffix", "amount", "state", "screenshot_file_id", "reject_reason",
            "created_at", "expires_at", "screenshot_at", "owner_confirmed_at",
-           "owner_rejected_at", "language")
+           "owner_rejected_at", "language", "resolved_by")
 _SELECT = ", ".join(_FIELDS)
 
 
@@ -329,18 +329,28 @@ def attach_screenshot(conn: Connection, order_id, file_id: str) -> dict:
                        (file_id,))
 
 
-def confirm(conn: Connection, order_id) -> dict:
-    """The owner says the money arrived. That is all this records."""
+def confirm(conn: Connection, order_id, by: int | None = None) -> dict:
+    """The owner says the money arrived. That is all this records.
+
+    `by` is written by the SAME conditional UPDATE that moves the state, so it
+    can never disagree with the row it explains. A second owner tapping Confirm
+    loses that UPDATE and therefore never writes here -- which is what makes
+    "Nigora already confirmed this" true rather than a guess about who was
+    first.
+    """
     return _transition(conn, order_id, "owner_confirmed",
-                       ", owner_confirmed_at = now()")
+                       ", owner_confirmed_at = now(), resolved_by = %s",
+                       (by,))
 
 
-def reject(conn: Connection, order_id, reason: str) -> dict:
+def reject(conn: Connection, order_id, reason: str,
+           by: int | None = None) -> dict:
     if reason not in REJECT_REASONS:
         raise OrderError("bad_reason", {"reason": reason})
     return _transition(conn, order_id, "owner_rejected",
-                       ", reject_reason = %s, owner_rejected_at = now()",
-                       (reason,))
+                       ", reject_reason = %s, owner_rejected_at = now(),"
+                       " resolved_by = %s",
+                       (reason, by))
 
 
 def cancel(conn: Connection, order_id) -> dict:

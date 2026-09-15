@@ -179,6 +179,102 @@ def run(admin, biz):
     check("and so is a direct delete", denied, True)
 
 
+    print("\n8. The second owner to tap is told WHO resolved it")
+    from app import orders
+    with connection(biz) as conn:
+        # Two owners with names, so the message has something to say.
+        conn.execute("select app_business_claim_owner(%s, %s, %s)",
+                     (biz, BOB, "Nigora"))
+        bot.refresh_owners(conn)
+        conn.execute(
+            "insert into fact (subject, subject_key, attribute, attribute_key,"
+            " value, value_key, confirmed) values"
+            " ('Kurs','kurs','narxi','narxi','250 000 so''m','250 000 som',true)")
+        order = orders.create(conn, 4242, "kurs", "narxi")
+        # A fresh order is awaiting_payment; Confirm is only offered once the
+        # customer has sent evidence, so walk it to awaiting_owner the way the
+        # real flow does rather than confirming from a state the buttons never
+        # appear in.
+        orders.attach_screenshot(conn, order["id"], "scratch-file-id")
+
+        # ALICE wins the race.
+        won = orders.confirm(conn, order["id"], ALICE)
+        check("the winning tap is recorded", won["resolved_by"], ALICE)
+
+        # NIGORA taps a moment later, on her own live copy of the message.
+        second = None
+        try:
+            orders.confirm(conn, order["id"], BOB)
+        except orders.OrderError as exc:
+            second = exc.reason
+        check("the second tap is refused, not applied twice",
+              second, "bad_transition")
+        check("and resolved_by still names the winner",
+              conn.execute("select resolved_by from purchase where id = %s",
+                           (order["id"],)).fetchone()[0], ALICE)
+
+        # THE SENTENCE THE SECOND OWNER READS. "Already resolved" is complete
+        # with one owner and confusing with three.
+        check("an owner with a name is named",
+              bot.owner_name(conn, BOB), "Nigora")
+        # Falls back to the id rather than to "someone": ugly and unambiguous
+        # beats tidy and useless, when the whole point is saying which one.
+        check("one without a name falls back to the id",
+              bot.owner_name(conn, ALICE), str(ALICE))
+        check("and nobody at all is still sayable",
+              bot.owner_name(conn, None), "Kimdir")
+
+        conn.execute("delete from purchase where id = %s", (order["id"],))
+        conn.execute("delete from fact where subject_key = 'kurs'")
+
+    print("\n9. Removal through the web app, not Telegram")
+    from fastapi.testclient import TestClient
+    import app.main as api
+    from app import auth
+    client = TestClient(api.app)
+    client.cookies.set(auth.COOKIE, auth.create_session(biz))
+
+    listed = client.get("/owners")
+    check("GET /owners answers", listed.status_code, 200)
+    ids = [o["telegram_id"] for o in listed.json()]
+    check("it lists the claimed owners", sorted(ids), sorted(bot.OWNERS))
+    check("with the name where there is one",
+          [o["name"] for o in listed.json() if o["telegram_id"] == BOB], ["Nigora"])
+
+    gone = client.request("DELETE", f"/owners/{BOB}")
+    check("DELETE removes one", gone.status_code, 200)
+    check("and reports it happened", gone.json()["removed"], True)
+    check("and says how many are left", gone.json()["remaining"], len(ids) - 1)
+    check("the list agrees",
+          BOB in [o["telegram_id"] for o in client.get("/owners").json()], False)
+
+    # REMOVING THE LAST OWNER IS ALLOWED. It returns the bot to unclaimed,
+    # which is recoverable from the link -- a business whose only owner lost
+    # their phone must be able to hand ownership on, and a guard here would
+    # create a stuck state rather than prevent one.
+    for remaining in [o["telegram_id"] for o in client.get("/owners").json()]:
+        client.request("DELETE", f"/owners/{remaining}")
+    check("the last owner can be removed too",
+          client.get("/owners").json(), [])
+    with connection(biz) as conn:
+        check("and the bot can be claimed again", claim(conn, ALICE), True)
+
+    # A SESSION FOR ANOTHER BUSINESS CANNOT REMOVE THESE. The endpoint passes
+    # the session's own business to the function, so this is the only thing
+    # standing between one tenant and another's owners.
+    other_biz = str(admin.execute(
+        "insert into business (name, owner_email, approved)"
+        " values ('owners other','owners-other@example.invalid',true)"
+        " returning id").fetchone()[0])
+    intruder = TestClient(api.app)
+    intruder.cookies.set(auth.COOKIE, auth.create_session(other_biz))
+    intruder.request("DELETE", f"/owners/{ALICE}")
+    with connection(biz) as conn:
+        bot.refresh_owners(conn)
+    check("another business's session cannot remove our owner",
+          bot.OWNERS, [ALICE])
+    admin.execute("delete from business where id = %s", (other_biz,))
+
 def fan_out(seen: list) -> list:
     """Run the real fan-out, recording who it reached."""
     bot.notify_owners(seen.append)

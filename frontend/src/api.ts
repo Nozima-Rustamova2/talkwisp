@@ -808,3 +808,30 @@ export function saveStyle(fields: Record<string, string>): Promise<Style> {
     body: new URLSearchParams(fields).toString(),
   });
 }
+
+/* --- who owns this bot -----------------------------------------------------
+ *
+ * There is no "add owner" call and there will not be one: a bot cannot message
+ * anyone by @username and there is no lookup from a username to a chat id, so
+ * the signed /start link is the only way Telegram reveals one. The screen hands
+ * out the link; the claim happens in Telegram.
+ *
+ * Removal is here rather than in Telegram because the thing being removed IS a
+ * Telegram identity -- letting one revoke another means a borrowed phone can
+ * lock out the real owner. This is authenticated by the email session. */
+
+export type Owner = {
+  telegram_id: number;
+  name: string | null;
+  claimed_at: string | null;
+};
+
+export function getOwners(): Promise<Owner[]> {
+  return request<Owner[]>("/owners");
+}
+
+export function removeOwner(telegramId: number): Promise<{ removed: boolean; remaining: number }> {
+  return request<{ removed: boolean; remaining: number }>(`/owners/${telegramId}`, {
+    method: "DELETE",
+  });
+}

@@ -613,6 +613,21 @@ def notify_owners(send_one) -> int:
     return sent
 
 
+def owner_name(conn, tg_id) -> str:
+    """What to call an owner in a message to another owner.
+
+    Falls back to the id rather than to "someone". "444000444 already confirmed
+    this" is ugly and unambiguous; "someone already confirmed this" is neither,
+    and with three owners the whole point of the sentence is saying which one.
+    """
+    if tg_id is None:
+        return "Kimdir"
+    row = conn.execute(
+        "select display_name from business_owner where telegram_id = %s",
+        (tg_id,)).fetchone()
+    return (row[0] if row and row[0] else str(tg_id))
+
+
 def refresh_owners(conn) -> None:
     """Pick up a claim or a removal without a restart.
 
@@ -843,15 +858,28 @@ def handle_callback(conn, cq):
 
         try:
             if action == "conf":
-                order = orders.confirm(conn, order_id)
+                order = orders.confirm(conn, order_id, user_id)
             else:
-                order = orders.reject(conn, order_id, rest.split(":")[1])
+                order = orders.reject(conn, order_id, rest.split(":")[1],
+                                      user_id)
         except orders.OrderError as exc:
             # A double tap lands here: the transition is refused, not applied
-            # twice. Say so rather than pretending it worked.
+            # twice. With one owner that was the same person tapping twice;
+            # with three it is the normal case, because the other two still
+            # have live buttons -- we can only edit the message belonging to
+            # the callback we received, never their copies.
+            #
+            # So the message NAMES WHO. "Already resolved" is a complete
+            # sentence when there is one owner and a confusing one when there
+            # are three, and resolved_by is written by the same UPDATE that
+            # moved the state, so it cannot disagree with it.
+            who = conn.execute(
+                "select resolved_by from purchase where id = %s",
+                (order_id,)).fetchone()
             answer_callback(cq["id"], "Allaqachon hal qilingan")
             edit_here(
-                 f"Bu buyurtma allaqachon hal qilingan ({exc.detail.get('state', '?')}).")
+                 f"Buni {owner_name(conn, who[0] if who else None)} allaqachon "
+                 f"hal qilgan ({exc.detail.get('state', '?')}).")
             return
 
         if action == "conf":
@@ -1579,9 +1607,14 @@ def handle(conn, message: dict, last_seen: dict) -> None:
                 # already inside a connection() block, so checking out a second
                 # would be the nested checkout app/db.py warns about -- the one
                 # that deadlocks a five-connection pool under concurrency.
+                # The name comes from the same `from` object the customer
+                # names come from, captured at claim time. A snapshot: it goes
+                # stale if they rename themselves, which is acceptable for a
+                # string that labels a button press.
                 claimed = conn.execute(
-                    "select app_business_claim_owner(%s, %s)",
-                    (BUSINESS_ID, user_id)).fetchone()[0]
+                    "select app_business_claim_owner(%s, %s, %s)",
+                    (BUSINESS_ID, user_id,
+                     (message.get("from") or {}).get("first_name"))).fetchone()[0]
             if claimed:
                 # RE-READ, never assign. Assigning would have made this owner
                 # the only one -- the exact bug a list is meant to prevent, and

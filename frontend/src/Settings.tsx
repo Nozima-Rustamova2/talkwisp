@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Owners from "./Owners";
 import Personality from "./Personality";
 import {
   ApiError,
@@ -371,6 +372,7 @@ export default function Settings() {
           </p>
         )}
       </div>
+      <Owners />
       <Personality />
     </div>
   );

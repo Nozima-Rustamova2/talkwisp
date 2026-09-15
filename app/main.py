@@ -364,6 +364,49 @@ def reject_fact(business: Business, fact_id: str) -> dict:
         return {"id": fact_id, "rejected": True}
 
 
+# --- who owns this bot ------------------------------------------------------
+#
+# REMOVAL LIVES HERE AND NOT IN TELEGRAM, deliberately. The thing being removed
+# IS a Telegram identity, so letting one Telegram identity revoke another means
+# a borrowed or stolen phone can lock out the real owner. These endpoints are
+# authenticated by the email session -- the address that created the business
+# and receives the sign-in link -- which is the account's root identity.
+#
+# Adding an owner is NOT here: a bot cannot message anyone by @username and
+# there is no lookup from a username to a chat id, so the signed /start link is
+# the only way Telegram ever reveals one. The screen hands out the link; the
+# claim happens in Telegram or not at all.
+
+
+@app.get("/owners")
+def owner_list(business: Business) -> list[dict]:
+    with connection(business) as conn:
+        rows = conn.execute(
+            "select telegram_id, display_name, claimed_at"
+            " from business_owner order by claimed_at, telegram_id").fetchall()
+    return [{"telegram_id": r[0], "name": r[1],
+             "claimed_at": r[2].isoformat() if r[2] else None} for r in rows]
+
+
+@app.delete("/owners/{telegram_id}")
+def remove_owner(business: Business, telegram_id: int) -> dict:
+    """Remove one owner. The last one may be removed too.
+
+    THAT IS NOT AN OVERSIGHT. Removing everyone returns the business to its
+    pre-claim state, which is recoverable -- the bot can be claimed again from
+    the link. A guard against it would create a stuck state rather than prevent
+    one: a business whose only owner lost their phone could never hand
+    ownership on. The screen says so rather than leaving it to be discovered.
+    """
+    with connection(business) as conn:
+        removed = conn.execute(
+            "select app_business_remove_owner(%s, %s)",
+            (business, telegram_id)).fetchone()[0]
+        remaining = conn.execute(
+            "select count(*) from business_owner").fetchone()[0]
+    return {"removed": bool(removed), "remaining": remaining}
+
+
 # --- how the agent sounds ---------------------------------------------------
 #
 # ONLY THE TONE FIELDS REACH A MODEL, and each is an enum the database
