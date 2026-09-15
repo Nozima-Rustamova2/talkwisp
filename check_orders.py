@@ -123,7 +123,24 @@ with pool:
                 # The range fact for the MRT is UNCONFIRMED (it came out of a
                 # file); the exact one is the owner's. The confirmed filter
                 # picks the right one without anything else being involved.
+                #
+                # SAID OUT LOUD, because this assumption drifted once and cost
+                # ten days. Somebody confirmed the range through the Review
+                # screen, price_for() then found two confirmed prices, and the
+                # whole file died on `OrderError: several_prices` -- a symptom
+                # that names a collision and says nothing about which fact
+                # should not have been there. seed.py writes extracted facts
+                # `confirmed = false` and says so above EXTRACTED; this asserts
+                # the database still agrees, so the next drift reports itself
+                # instead of being diagnosed.
                 mrt = normalize("MRT bosh miya")
+                confirmed_prices = conn.execute(
+                    "select count(*) from fact where subject_key = %s"
+                    " and attribute_key = %s and confirmed", (mrt, "narx")
+                ).fetchone()[0]
+                check("exactly one MRT price is confirmed -- the range from the "
+                      "file must still be awaiting review",
+                      confirmed_prices, 1)
                 check("MRT: the unconfirmed range is invisible here",
                       orders.price_for(conn, mrt)["amount"], 450000)
 
