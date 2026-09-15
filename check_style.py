@@ -124,8 +124,15 @@ def run(admin, biz):
           "never overrides the rules above" in block, True)
     check("informal register is named", "‘sen’" in block, True)
     check("concise is one sentence", "Prefer a single sentence." in block, True)
-    check("emoji is capped and kept away from numbers",
-          "at most one emoji" in block, True)
+    # CAPPED, and nothing more. The line used to add "never beside a price, a
+    # time or a number" -- and check_fragile measured that clause causing
+    # boundary-close-en to fail, a question about a closing TIME. A protective
+    # clause that mentions times perturbs the temporal decisions it sits near.
+    # Rule 3 already forbids altering a price or a time; what was given up is
+    # an emoji next to a number, against a measured regression.
+    check("emoji is capped", "at most one emoji" in block, True)
+    check("and the line says nothing about prices or times",
+          "price" in block or "time" in block, False)
 
     system = captured_system(biz)
     check("the style block is APPENDED, not inserted",

@@ -32,6 +32,38 @@ print(f"similarity floor = {SIMILARITY_FLOOR}\n")
 # forbidden-alias guard in seed.py.
 PROSE_SOURCE = "Bemorlar uchun qoidalar"
 
+
+# --- what is this run actually measuring? -----------------------------------
+#
+# A HARNESS BUSINESS WITH A TONE SET MAKES EVERY RUN SILENTLY ABOUT A DIFFERENT
+# CONFIGURATION. Personality is per business and read on every answer, so one
+# forgotten `style.save()` turns the next baseline into a measurement of an
+# informal agent -- and nothing in the output would say so. That is the drift
+# this codebase keeps producing, with the objects swapped again: the run reads
+# a different system from the one whoever reads the number assumes.
+#
+# So the run DECLARES its configuration rather than being trusted to be clean.
+# Unset is the default and is required unless --with-style is passed, and a
+# deliberate configured run prints the exact block that reached the model, so
+# the number and the thing it measures travel together.
+def declare_configuration(conn) -> None:
+    from app import style
+
+    block = style.block(conn)
+    if not block:
+        print("style: none set (the default prompt)\n")
+        return
+    if "--with-style" not in sys.argv:
+        print("ABORT: the harness business has a personality set, so this run "
+              "would measure a different configuration than the default.")
+        print(block.strip())
+        print("\nClear it, or pass --with-style if that is what you meant.")
+        sys.exit(2)
+    print("style: MEASURING A CONFIGURED AGENT")
+    print(block.strip())
+    print()
+
+
 def save(rows):
     """Persist, so re-grading never costs another API call -- and so an
     interrupted run leaves what it had rather than nothing."""
@@ -44,6 +76,7 @@ def save(rows):
 rows = []
 with pool:
     with connection(harness_business()) as conn:
+        declare_configuration(conn)
         needs_prose = [q["id"] for q in QUESTIONS if q["expect"] == "prose"]
         if needs_prose and not conn.execute(
                 "select count(*) from chunk").fetchone()[0]:

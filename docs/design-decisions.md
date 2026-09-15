@@ -2972,3 +2972,70 @@ against your bank app. On Knowledge it appears incidentally while you scan for
 something else, which is a different trade. The field would need masking the day
 it could hold something secret -- a Payme merchant key would qualify, and that
 is a different field on a different screen when it exists.
+
+
+## Rule 8 is the weakest rule under tone pressure — 2026-09-15
+
+Agent personality shipped with three enums. The acceptance test was the
+ninety-question harness at the loosest combination, compared against a FRESH
+baseline on the current model — the committed baseline is
+`flash-lite-3.1` and scores 80/10 where `gemini-3.6-flash` scores 77/13, so
+comparing against it would have reported the model swap as personality damage.
+
+The loose run scored 76/14, with 87 of 90 verdicts identical. Three moved.
+
+**The first conclusion was that three out of ninety is within run-to-run
+variance on a non-deterministic model, and it was wrong.** Repeating just those
+three questions, three times per configuration, took four minutes:
+
+| question | none | informal | emoji | both |
+|---|---|---|---|---|
+| boundary-close-en | PASS | PASS | FAIL | FAIL |
+| temporal-day-after-tomorrow | PASS | FAIL | FAIL | FAIL |
+| temporal-next-tuesday | FAIL | PASS | FAIL | PASS |
+
+Every cell is three identical verdicts. Perfectly steady within a configuration,
+different between them. The style block causes all three; "within variance" was
+a guess wearing the clothes of a measurement.
+
+THE CHEAP MEASUREMENT ANSWERED WHAT THE EXPENSIVE ONE COULD NOT, because they
+ask different questions. Ninety questions once each answers "did anything
+move". Three questions nine times each answers "does this move on its own",
+which is the question that decides whether a difference means anything.
+`check_fragile.py` is that second harness.
+
+### What it cost, per option
+
+The emoji line is the expensive one: two regressions, no gains. Its first
+version ended "never beside a price, a time or a number", and removing that
+clause recovered `boundary-close-en` — a question about a closing TIME. **A
+protective clause perturbed the decisions it named.** Rule 3 already forbids
+altering a price or a time, so the clause bought little and cost a measurable
+failure; the line is now "You may use at most one emoji."
+
+The informal register is a real trade: it breaks `temporal-day-after-tomorrow`
+and fixes `temporal-next-tuesday`.
+
+### Why rule 8 and not the refusal in general
+
+The twenty-two gap questions — where erosion would show first — held at 21 of
+22. What moved was rule 8, which carries two clauses that pull opposite ways: a
+day referred to only relatively must be refused, and a day NAMED outright must
+be answered. "Indinga" names nothing; "kelasi seshanba" names Tuesday. A single
+clause of a single rule, and the one that bends when anything else is added to
+the prompt.
+
+`boundary-close-en` is a separate finding and not about tone at all: its
+retrieval is IDENTICAL across every run — fact scores `[0.606, 0.593, …]`,
+nearest `SMM PRO / qabul vaqti` — so the model saw the same context and decided
+differently. 0.606 is barely over the floor and the nearest fact is a course's
+session time rather than the clinic's closing hour, which is exactly the
+"merely related" material rule 1b says to refuse on. The refusal may be correct
+and the grader's expectation the thing that is wrong.
+
+### What makes this safe to ship anyway
+
+A business that sets nothing gets a prompt byte-identical to the one before the
+feature existed, asserted in `check_style.py` against the bytes `_ask()` sends
+rather than a string the check rebuilds. Every cost above is paid only by a
+business that chose to pay it.

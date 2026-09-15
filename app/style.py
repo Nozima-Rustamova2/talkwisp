@@ -56,8 +56,7 @@ _LENGTH = {
 }
 
 _EMOJI = {
-    "light": "You may use at most one emoji, and never beside a price, a time "
-             "or a number.",
+    "light": "You may use at most one emoji.",
     "off": None,
 }
 
