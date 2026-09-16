@@ -406,7 +406,7 @@ print("\n5. Nothing checks a connection out without a tenant, except twice")
 #                    Asks about the server, not about anyone's data.
 #   bot.py        1  check_database -- select 1, before the bot announces it is
 #                    up. Same: about the server.
-#   app/auth.py   7  the chicken-and-egg. "Who is this" has to be answerable
+#   app/auth.py   9  the chicken-and-egg. "Who is this" has to be answerable
 #                    BEFORE a tenant is known, which is exactly what the tenancy
 #                    policies forbid, so these cannot run on a tenanted
 #                    connection. The exemption is made safe by the assertion
@@ -422,7 +422,7 @@ print("\n5. Nothing checks a connection out without a tenant, except twice")
 #                    literals rather than computed.
 
 ALLOWED = {str(pathlib.Path("app/main.py")): 1,
-           str(pathlib.Path("app/auth.py")): 7,
+           str(pathlib.Path("app/auth.py")): 9,
            "bot.py": 1}
 
 found: dict[str, int] = {}
@@ -459,8 +459,8 @@ auth_queries = [
     and node.args and isinstance(node.args[0], ast.Constant)
     and isinstance(node.args[0].value, str)
 ]
-check("all nine of auth.py's queries were found, not just the one-liners",
-      len(auth_queries), 9)
+check("all eleven of auth.py's queries were found, not just the one-liners",
+      len(auth_queries), 11)
 check("every one of them calls an app_* resolver",
       sum("app_" in q for q in auth_queries), len(auth_queries))
 check("and none names a table directly",
@@ -469,6 +469,13 @@ check("and none names a table directly",
 check("the resolvers it uses are the ones granted in 0008",
       sorted({q.split("app_")[1].split("(")[0] for q in auth_queries}),
       sorted(["business_for_email", "business_for_telegram", "business_signup",
+              # Changing the address you sign in with is the same
+              # chicken-and-egg as signing in: the claim is opened from a
+              # mail, in a browser with no session, so there is no tenant
+              # to bind. Both go through SECURITY DEFINER functions and
+              # neither names a table, which is what the assertions above
+              # actually check.
+              "email_change_create", "email_change_claim",
               "login_token_create", "login_token_claim", "session_create",
               "session_business", "session_delete"]))
 

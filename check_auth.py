@@ -273,11 +273,12 @@ class _FakeResponse:
 
 
 def _with_resend(key, poster):
-    """Run deliver() as though a Resend key were configured."""
+    """Run send_mail() as though a Resend key were configured."""
     saved_key, saved_post = auth.RESEND_API_KEY, auth.httpx.post
     auth.RESEND_API_KEY, auth.httpx.post = key, poster
     try:
-        auth.deliver("owner@example.test", "https://talkwisp.uz/auth/callback?token=t")
+        auth.send_mail("owner@example.test", "Your Talkwisp sign-in link",
+                       "https://talkwisp.uz/auth/callback?token=t")
     finally:
         auth.RESEND_API_KEY, auth.httpx.post = saved_key, saved_post
 

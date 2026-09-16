@@ -848,3 +848,17 @@ export function setReplyWindow(hours: string): Promise<{ hours: number | null }>
     body: new URLSearchParams({ hours }).toString(),
   });
 }
+
+/* Changing the address you sign in with.
+ *
+ * There is no "confirm" call here: the link in the mail is the confirmation,
+ * and it is opened from an inbox rather than from this app -- possibly in
+ * another browser entirely, which is why the token is the authority and not the
+ * session. */
+export function requestEmailChange(email: string): Promise<{ sent_to: string }> {
+  return request<{ sent_to: string }>("/auth/change-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ email }).toString(),
+  });
+}

@@ -130,11 +130,16 @@ def link_env_to_business(conn: psycopg.Connection) -> None:
     print("  linked TELEGRAM_BOT_TOKEN to the single business row")
 
 
-# Objects the app role is DELIBERATELY unable to read. 0008 grants it nothing on
-# these two -- they hold session ids and magic-link hashes, and access goes
-# exclusively through SECURITY DEFINER functions. Protection by absence of
-# privilege, which is stronger than a policy.
-UNGRANTED = {"session", "login_token", "schema_migrations"}
+# Objects the app role is DELIBERATELY unable to read. They hold session ids,
+# magic-link hashes and pending address changes, and access goes exclusively
+# through SECURITY DEFINER functions. Protection by absence of privilege, which
+# is stronger than a policy.
+#
+# ADDING TO THIS LIST IS A DECISION, not bookkeeping. The smoke test refuses any
+# object the app cannot read, so a table left out of it fails the migration --
+# which is how email_change arrived here: the check would not let it be
+# unreadable by accident, only on purpose.
+UNGRANTED = {"session", "login_token", "email_change", "schema_migrations"}
 
 
 def smoke_test(admin) -> None:

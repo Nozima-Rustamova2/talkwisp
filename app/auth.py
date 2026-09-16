@@ -21,6 +21,7 @@ link. The app role cannot even read those two tables -- see 0008; every access
 goes through a SECURITY DEFINER function that returns an id or a word.
 """
 
+import datetime
 import hashlib
 import hmac
 import os
@@ -197,12 +198,57 @@ def claim_link(raw: str) -> tuple[str | None, str]:
     return (str(row[0]) if row[0] else None), row[1]
 
 
-def _console(email: str, link: str) -> None:
-    print(f"\n  MAGIC LINK for {email}\n  {link}\n", flush=True)
+# How long a change link lives. Shorter than a sign-in link, deliberately: this
+# one changes the account's root identity, and an hour is plenty of time to open
+# a mail you just asked for.
+CHANGE_TTL = datetime.timedelta(hours=1)
 
 
-def deliver(email: str, link: str) -> None:
-    """Send the sign-in link, or print it if there is no sender configured.
+def request_email_change(business_id: str, new_email: str) -> str | None:
+    """Start a change. Returns the raw token, or None if the address is taken.
+
+    THE LINK GOES TO THE NEW ADDRESS, NOT THE OLD ONE. Confirming at the old
+    address would be useless in exactly the case this exists for -- the one
+    where that mailbox no longer works -- and confirming at the destination also
+    catches a second typo, which is how this could otherwise recreate the
+    problem it solves.
+    """
+    raw = secrets.token_urlsafe(32)
+    with pool.connection() as conn:
+        created = conn.execute(
+            "select app_email_change_create(%s, %s, %s, %s)",
+            (_hash(raw), business_id, new_email, CHANGE_TTL)).fetchone()[0]
+    return raw if created else None
+
+
+def claim_email_change(raw: str) -> tuple[str | None, str | None, str]:
+    """(old_email, new_email, outcome). Spends the token and does the change.
+
+    Outcomes are distinguished on purpose: 'used', 'expired' and 'taken' are
+    three different things to a person in front of a screen, and one generic
+    error makes all three look like broken software.
+    """
+    with pool.connection() as conn:
+        row = conn.execute("select old_email, new_email, outcome"
+                           " from app_email_change_claim(%s)",
+                           (_hash(raw),)).fetchone()
+    if not row:
+        return None, None, "unknown"
+    return row[0], row[1], row[2]
+
+
+def _console(email: str, body: str) -> None:
+    """The no-key backend: print the whole message rather than a link.
+
+    It printed only a link when the only mail was a sign-in link. An address
+    change sends two different mails, and what the recipient needs to see in a
+    local checkout is the text, not a URL stripped of what it will do.
+    """
+    print(f"\n  MAIL for {email}\n  {body}\n", flush=True)
+
+
+def send_mail(email: str, subject: str, body: str) -> None:
+    """Send one plain-text mail, or print it if no sender is configured.
 
     TWO BACKENDS, CHOSEN BY WHETHER RESEND_API_KEY IS SET. With no key this
     prints to the server log, which is what makes a local checkout usable
@@ -229,7 +275,7 @@ def deliver(email: str, link: str) -> None:
     is a DNS problem, not a code one.
     """
     if not RESEND_API_KEY:
-        _console(email, link)
+        _console(email, body)
         return
 
     try:
@@ -239,30 +285,25 @@ def deliver(email: str, link: str) -> None:
             json={
                 "from": RESEND_FROM,
                 "to": [email],
-                "subject": "Your Talkwisp sign-in link",
+                "subject": subject,
                 # Plain text, not HTML. A one-link email in HTML is more likely
                 # to be treated as marketing, and there is nothing to lay out.
-                "text": (
-                    "Here is your sign-in link. It works once and expires in "
-                    f"15 minutes.\n\n{link}\n\n"
-                    "If you did not ask for this, ignore it -- nothing happens "
-                    "until the link is opened."
-                ),
+                "text": body,
             },
             timeout=20,
         )
     except httpx.HTTPError as exc:
         print(f"  RESEND FAILED for {email}: {exc!r}", flush=True)
-        _console(email, link)
+        _console(email, body)
         return
 
     if response.status_code >= 400:
         print(f"  RESEND REFUSED for {email}: HTTP {response.status_code} "
               f"{response.text[:300]}", flush=True)
-        _console(email, link)
+        _console(email, body)
         return
 
-    print(f"  sign-in link sent to {email} "
+    print(f"  mail sent to {email} "
           f"(resend id {response.json().get('id')})", flush=True)
 
 

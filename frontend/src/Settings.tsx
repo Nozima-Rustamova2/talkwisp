@@ -7,6 +7,8 @@ import {
   getBusiness,
   getChannel,
   renameBusiness,
+  getMe,
+  requestEmailChange,
   setReplyWindow,
   type Channel,
 } from "./api";
@@ -251,6 +253,118 @@ function ReplyWindow() {
   );
 }
 
+
+/* The address you sign in with.
+ *
+ * THE ONLY SETTING WHOSE ABSENCE WAS PERMANENT. A sign-in link goes here; lose
+ * this mailbox and there is no way back in except somebody running SQL for you.
+ * (A typo at signup was never the problem -- addresses are unique per account,
+ * so you simply sign up again. Losing a correct address later is.)
+ *
+ * THE LINK GOES TO THE NEW ADDRESS. Confirming at the old one would be useless
+ * in exactly the case this exists for, and confirming at the destination proves
+ * the new address actually receives mail before anything is switched -- which
+ * is what stops a second typo recreating the problem.
+ *
+ * The old address is warned at REQUEST time rather than after. A warning that
+ * arrives once the change is done is a notification; one that arrives while the
+ * link is still unopened is a defence. */
+function SignInEmail() {
+  const [current, setCurrent] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /* The server redirects here with ?email=<outcome> after the link is opened.
+     Saying which outcome matters: "already used" and "expired" are different
+     things to somebody staring at a screen. */
+  const outcome = new URLSearchParams(
+    window.location.hash.split("?")[1] ?? "").get("email");
+
+  useEffect(() => {
+    getMe().then((who) => setCurrent(who.email)).catch(() => setCurrent(null));
+  }, []);
+
+  if (!current) return null;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      setSent((await requestEmailChange(draft.trim())).sent_to);
+      setDraft("");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not send the link.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: 22, marginTop: 16 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
+        Sign-in email
+      </div>
+      <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-faint)", lineHeight: 1.6 }}>
+        Sign-in links go to <strong style={{ color: "var(--text)" }}>{current}</strong>.
+        Change it before you lose access to that mailbox — afterwards we have to
+        do it for you by hand.
+      </p>
+
+      {outcome === "changed" ? (
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-muted)" }}>
+          Done — that's your sign-in address now.
+        </p>
+      ) : outcome === "used" ? (
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-muted)" }}>
+          That link was already used. If the address here is wrong, start again.
+        </p>
+      ) : outcome === "expired" ? (
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-muted)" }}>
+          That link expired — they last an hour. Start again below.
+        </p>
+      ) : outcome === "taken" ? (
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--danger, #a4362f)" }}>
+          Somebody claimed that address while you were deciding. Nothing changed.
+        </p>
+      ) : null}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          className="field"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="new@address.com"
+          inputMode="email"
+          style={{ flex: "1 1 240px", minWidth: 0 }}
+        />
+        <button
+          className="control control-primary"
+          onClick={save}
+          disabled={busy || !draft.trim()}
+        >
+          {busy ? "Sending…" : "Send link"}
+        </button>
+      </div>
+
+      {sent ? (
+        <p style={{ margin: "10px 0 0", fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}>
+          Open the link we sent to <strong>{sent}</strong> to finish.
+          Nothing changes until you do — and we've told {current} that this was
+          asked for.
+        </p>
+      ) : null}
+
+      {error ? (
+        <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--danger, #a4362f)" }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [state, setState] = useState<Channel | "loading">("loading");
   const [token, setToken] = useState("");
@@ -302,6 +416,7 @@ export default function Settings() {
       </p>
 
       <BusinessName />
+      <SignInEmail />
       <ReplyWindow />
 
       <div className="card" style={{ padding: 22, marginTop: 16 }}>

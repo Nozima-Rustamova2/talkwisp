@@ -397,6 +397,82 @@ def set_reply_window(business: Business, hours: str = Form("")) -> dict:
     return {"hours": current}
 
 
+# --- changing the address you sign in with ----------------------------------
+#
+# THE ONLY CAPABILITY WHOSE ABSENCE WAS PERMANENT. The sign-in link goes to
+# owner_email; an owner who loses that mailbox has no way back in except
+# somebody running SQL. A typo at SIGNUP is not that case -- addresses are
+# unique per row, so they simply sign up again and the bad row is litter. The
+# case this closes is losing a correct address later.
+
+
+@app.post("/auth/change-email")
+def request_email_change(business: Business, email: str = Form(...)) -> dict:
+    """Send a confirmation link to the NEW address, and warn the old one.
+
+    THE SESSION IS THE PROOF, which is right -- a session is what a magic link
+    buys, so holding one is holding the identity. It does mean a borrowed laptop
+    can move an account, which is why the old address is told at REQUEST time
+    rather than after: that is the moment it is still actionable.
+    """
+    address = email.strip()
+    if not auth.valid_email(address):
+        raise HTTPException(status_code=400,
+                            detail='That does not look like an email address.')
+
+    token = auth.request_email_change(business, address)
+    if token is None:
+        # Said plainly. Refusing to distinguish "taken" would leave a signed-in
+        # owner guessing at their own account -- the enumeration argument that
+        # governs /auth/request does not apply to somebody already inside.
+        raise HTTPException(status_code=400,
+                            detail="That address already belongs to an account.")
+
+    with connection(business) as conn:
+        current = conn.execute(
+            "select owner_email from business").fetchone()[0]
+
+    link = f"{auth.PUBLIC_BASE_URL}/auth/change-email?token={token}"
+    auth.send_mail(
+        address, "Confirm your new Talkwisp sign-in address",
+        "Open this link to finish changing the address you sign in with. "
+        "It works once and expires in an hour."
+        f"\n\n{link}\n\n"
+        "Nothing changes until the link is opened. If you did not ask for "
+        "this, ignore it.")
+    # THE OLD ADDRESS IS TOLD, and told now rather than afterwards -- a warning
+    # that arrives once the change is done is a notification, not a defence.
+    auth.send_mail(
+        current, "Someone asked to change your Talkwisp sign-in address",
+        f"A request was made to change the sign-in address for your Talkwisp "
+        f"account from {current} to {address}."
+        "\n\nIf that was you, open the link we sent to the new address and "
+        "nothing else is needed."
+        "\n\nIf it was NOT you, someone has access to your account. Sign in "
+        "and sign out of all devices, and write to us at info@talkwisp.uz."
+        "\n\nThe change does not happen until that link is opened.")
+    return {"sent_to": address}
+
+
+@app.get("/auth/change-email")
+def confirm_email_change(token: str = ""):
+    """Finish the change. Opened from the mail, possibly in another browser.
+
+    No session required: the token IS the authority, exactly as a magic link is.
+    Requiring a session here would break the ordinary case of opening a mail on
+    a phone.
+    """
+    old, new_address, outcome = auth.claim_email_change(token)
+    if outcome == "ok":
+        auth.send_mail(
+            old, "Your Talkwisp sign-in address was changed",
+            f"The sign-in address for your Talkwisp account is now "
+            f"{new_address}. This address will no longer receive sign-in links."
+            "\n\nIf this was not you, write to info@talkwisp.uz now.")
+        return RedirectResponse("/app/#/settings?email=changed", status_code=303)
+    return RedirectResponse(f"/app/#/settings?email={outcome}", status_code=303)
+
+
 # --- who owns this bot ------------------------------------------------------
 #
 # REMOVAL LIVES HERE AND NOT IN TELEGRAM, deliberately. The thing being removed
@@ -973,7 +1049,12 @@ def auth_request(request: Request, email: str = Form(...)) -> dict:
     _throttle(request, email)
     link = auth.issue_link(email)
     if link:
-        auth.deliver(email, link)
+        auth.send_mail(
+            email, "Your Talkwisp sign-in link",
+            "Here is your sign-in link. It works once and expires in "
+            f"15 minutes.\n\n{link}\n\n"
+            "If you did not ask for this, ignore it -- nothing happens "
+            "until the link is opened.")
     return {"sent": True,
             "message": "If that address has an account, a sign-in link is on "
                        "its way. It expires in 15 minutes."}
@@ -1018,7 +1099,12 @@ def auth_signup(request: Request, email: str = Form(...),
         # called.
         link = auth.issue_link(email)
     if link:
-        auth.deliver(email, link)
+        auth.send_mail(
+            email, "Your Talkwisp sign-in link",
+            "Here is your sign-in link. It works once and expires in "
+            f"15 minutes.\n\n{link}\n\n"
+            "If you did not ask for this, ignore it -- nothing happens "
+            "until the link is opened.")
     return {"sent": True,
             "message": "If that address has an account, a sign-in link is on "
                        "its way. It expires in 15 minutes."}
