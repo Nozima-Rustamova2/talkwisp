@@ -3091,3 +3091,70 @@ A business that sets nothing gets a prompt byte-identical to the one before the
 feature existed, asserted in `check_style.py` against the bytes `_ask()` sends
 rather than a string the check rebuilds. Every cost above is paid only by a
 business that chose to pay it.
+
+
+## Backgrounded commands leave orphans — 2026-09-16
+
+Three times in one session, a child process outlived the wrapper that started
+it, and each time the symptom looked like something else:
+
+  **Two `check_answer.py` runs** kept polling Gemini for hours after the task
+  that launched them was stopped. They surfaced as a migration that would not
+  apply -- `alter table business` waiting on an `idle in transaction` lock held
+  by a process nobody knew was running. Diagnosed through `pg_stat_activity`,
+  not through anything that said "your old job is still going".
+
+  **A `gcloud auth login`** kept listening on port 8085 after its task was
+  killed, so the next login attempt raced it and died with
+  `mismatching_state (CSRF Warning!)`. Read as a browser problem for two
+  attempts.
+
+  **Five `git` processes**, two of them eight hours old, hung with no output.
+
+STOPPING A BACKGROUND TASK STOPS THE WRAPPER, NOT THE PROCESS. Nothing in the
+tooling says so, and the orphan keeps holding whatever it held -- a database
+lock, a TCP port, an API quota.
+
+The practical rules that came out of it:
+
+  * When a database operation hangs rather than failing, look at
+    `pg_stat_activity` for `idle in transaction` before suspecting the schema.
+    A lock wait is silent by design.
+  * When a port-bound flow fails on a second attempt but not the first,
+    suspect the first is still holding the port.
+  * `Get-CimInstance Win32_Process -Filter "Name='python.exe'"` shows command
+    lines, which is what identifies WHICH orphan.
+
+Worth knowing as a property of the setup rather than three separate incidents,
+so the next confusing symptom is not read as an application bug.
+
+
+## Conversation shape may vary by business type — 2026-09-16
+
+Measuring the follow-up rewriter's trigger against 77 distinct refused questions
+from the clinic found that essentially NONE of them were reference-dependent.
+Every one named its own subject: "Sanjar aka qabuli nechpul", "Mrt ga
+tushishdan oldin choy poy ichsa...". The reference-word arm of `needs_rewrite`
+fired on exactly one, and that one was arguably self-contained.
+
+The case the trigger was being changed FOR -- "meniki 34 ballda lekin", which
+means nothing without the previous turn -- came from a course seller's log, not
+this one.
+
+THAT IS NOT TWO SAMPLES OF ONE DISTRIBUTION. A clinic's customers ask complete
+questions: they want a price, an opening time, whether a doctor works Saturday.
+A course seller's customers reply to things: they are mid-conversation about one
+course, and their messages lean on it. If that holds, a single
+`MAX_WORDS_WITHOUT_REFERENCE` fitted to either is wrong for the other.
+
+It connects to something already in the product. Business type is captured at
+onboarding and already shapes extraction vocabulary and test-console
+suggestions. If conversation shape varies by type too, that is a second thing
+the field legitimately configures -- and the first evidence it earns its place
+beyond examples and phrasing.
+
+DO NOT BUILD PER-TYPE THRESHOLDS ON TWO CORPORA. Two points make a line whether
+or not there is one. Three business types, then decide -- and the measurement to
+run on each is the one run here: how many distinct refused questions are
+reference-dependent? If the answer differs by type rather than by volume, the
+difference is the finding.
