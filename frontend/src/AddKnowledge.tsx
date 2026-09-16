@@ -319,6 +319,37 @@ export default function AddKnowledge() {
                 usually thirty or forty facts. Or write a fact yourself on the right; that
                 takes ten seconds and always works.
               </span>
+
+              {/* THE DOORS STILL HAVE TO BE HERE. "Nothing confirmed yet" is not
+                  "nothing exists": a business that uploaded a file has facts
+                  waiting, and this branch used to render no links at all -- so
+                  after Add, Review and the list became one rail item, the only
+                  routes to Review and to the fact list disappeared for exactly
+                  the business that most needs them. Nothing could be reviewed
+                  and nothing could be deleted.
+
+                  The list shows unconfirmed facts too (knowledge.everything is
+                  "every fact this business has, confirmed or not"), so it is
+                  worth linking the moment anything exists at all. */}
+              {stats.facts_awaiting_review > 0 && (
+                <div style={{ display: "flex", gap: "8px 20px", flexWrap: "wrap",
+                              marginTop: 4 }}>
+                  <a
+                    href="#/review"
+                    style={{ minHeight: 44, display: "inline-flex", alignItems: "center",
+                             fontSize: 14, fontWeight: 600 }}
+                  >
+                    {stats.facts_awaiting_review} waiting for review
+                  </a>
+                  <a
+                    href="#/knowledge"
+                    style={{ minHeight: 44, display: "inline-flex", alignItems: "center",
+                             fontSize: 14, fontWeight: 600, color: "var(--text-muted)" }}
+                  >
+                    See everything read so far
+                  </a>
+                </div>
+              )}
             </div>
           ) : (
             <div
