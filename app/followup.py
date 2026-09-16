@@ -63,21 +63,19 @@ Rules:
 def underspecified(question: str) -> bool:
     """Whether this question depends on something outside itself.
 
-    HISTORY-FREE, deliberately. Two callers ask different questions of the same
-    test: needs_rewrite() below asks "can I resolve this against what was said
-    before?", and bot.py asks "was this question ever resolvable at all?" --
-    the second only matters when there is NO history, which is exactly when the
-    first must say no.
+    HISTORY-FREE, deliberately, and split out from needs_rewrite() below so the
+    word-count rule and the reference-word list live in one place.
 
-    One definition, because two answers to "is this underspecified?" would drift
-    the first time either was edited, and the drift would be invisible: the
-    rewriter would stop firing where the clarifier still did.
+    IT IS NOT A TEST FOR "VAGUE", and docs/design-clarification.md has the
+    measurement: against 503 real refusals it fires on twelve distinct
+    questions, of which roughly one is genuinely underspecified. The rest --
+    "Nechida yopilasiz?", "Ertaga ishlaysizmi?" -- are short because Uzbek
+    questions are short, and completely specified. Anything tempted to use this
+    as a vagueness signal should read that first.
 
     Deliberately lets some self-contained questions through -- "Kardiolog narxi
-    qancha?" is three words and will trip this. Downstream, the rewriter's
-    prompt is told to return such a question unchanged; the clarifier's second
-    condition is that nothing was said before, which a customer mid-conversation
-    never satisfies.
+    qancha?" is three words and will trip this. The rewriter's prompt is told to
+    return such a question unchanged, which is the second line of defence.
     """
     words = normalize(question).split()
     if not words:
