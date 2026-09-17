@@ -155,6 +155,26 @@ def _provenance(result: dict) -> list[dict]:
     return sorted(items, key=lambda i: not i["used"])
 
 
+def facts_used(result: dict) -> list[dict]:
+    """The facts an answer demonstrably came from, AS THEY READ AT THAT MOMENT.
+
+    For bot.py's log, so a conversation read later can say where a reply came
+    from. The wording is kept, not just the id, because the question an owner
+    asks of a bad answer is "was the fact wrong then, or has it changed since?"
+    -- and an id alone can only say what the fact says NOW.
+
+    Same test as the console's `used`: the value appears in the reply. A reply
+    that paraphrased every fact gets an empty list, which the screen reports as
+    exactly that rather than guessing. Nothing for a refusal: the reply sent is
+    not the model's answer, so matching against it would mean nothing.
+    """
+    if result.get("status") != "ok":
+        return []
+    return [{"id": p["id"], "subject": p["subject"],
+             "attribute": p["attribute"], "value": p["value"]}
+            for p in _provenance(result) if p["kind"] == "fact" and p["used"]]
+
+
 def ask(conn: Connection, question: str, from_suggestion: bool = False) -> dict:
     """The existing answer path. Nothing here answers anything itself."""
     result = answer_question(conn, question)

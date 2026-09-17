@@ -246,6 +246,10 @@ def exchange(conn, chat_id: int) -> list[dict]:
             "answer": row.get("answer"),
             "note": _OUTCOMES.get(outcome) if outcome else None,
             "from": "agent",
+            # None, NOT [], for a line written before provenance was logged:
+            # "we did not record it" and "no fact's wording is in this reply"
+            # are different statements and the screen says each differently.
+            "facts": row.get("facts_used"),
         }
         previous = entries[-1] if entries else None
         if (previous is not None
@@ -257,6 +261,8 @@ def exchange(conn, chat_id: int) -> list[dict]:
             # timestamp and take whichever half each line carried.
             previous["answer"] = previous["answer"] or entry["answer"]
             previous["note"] = previous["note"] or entry["note"]
+            if previous["facts"] is None:
+                previous["facts"] = entry["facts"]
             continue
         entries.append(entry)
 
@@ -267,11 +273,44 @@ def exchange(conn, chat_id: int) -> list[dict]:
         " where status = 'answered' and answer is not null"
         "   and %s = any(chat_ids)", (chat_id,)).fetchall()
     entries.extend({"at": at.isoformat(), "question": None, "answer": answer,
-                    "note": None, "from": "owner"} for answer, at in replies)
+                    "note": None, "from": "owner", "facts": None}
+                   for answer, at in replies)
+    _compare_with_now(conn, entries)
     # By TIME, not by string. The log writes +00:00 and Postgres writes the
     # session's offset, and two ISO strings in different offsets do not sort.
     entries.sort(key=lambda e: _instant(e["at"]))
     return entries
+
+
+def _compare_with_now(conn, entries: list[dict]) -> None:
+    """Mark each logged fact as it stands today: unchanged, changed, or deleted.
+
+    THE VALUABLE HALF OF PROVENANCE. An owner looking at a bad answer needs to
+    know whether the fact was wrong THEN or has changed SINCE -- "fix the
+    knowledge" versus "this is already fixed". So the wording logged with the
+    reply is compared with the row now, and a changed fact carries both.
+
+    NEVER RE-RETRIEVED. Running the question again would show what today's
+    knowledge would say, which looks like provenance and is a reconstruction.
+    Read under RLS, so an id from another business reads as deleted rather
+    than leaking its text -- and bot.py only ever logs this business's ids.
+    """
+    ids = {f["id"] for e in entries for f in (e.get("facts") or [])}
+    if not ids:
+        return
+    now = {str(i): (s, a, v) for i, s, a, v in conn.execute(
+        "select id, subject, attribute, value from fact where id = any(%s::uuid[])",
+        (list(ids),)).fetchall()}
+    for entry in entries:
+        for fact in entry.get("facts") or []:
+            current = now.get(fact["id"])
+            if current is None:
+                fact["now"] = "deleted"
+            elif current == (fact["subject"], fact["attribute"], fact["value"]):
+                fact["now"] = "unchanged"
+            else:
+                fact["now"] = "changed"
+                fact["current"] = dict(zip(("subject", "attribute", "value"), current))
 
 
 _EPOCH = datetime.datetime.min.replace(tzinfo=datetime.UTC)

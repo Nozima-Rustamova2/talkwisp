@@ -677,6 +677,16 @@ export type Turn = {
   /* Who spoke the answer. "owner" turns come from the escalation table: a
      person replied, and the customer saw a person. */
   from: "agent" | "owner";
+  /* The facts this reply demonstrably came from, with their wording AT THE
+     TIME, and where each stands now. null: not recorded (older messages, owner
+     replies). []: recorded, and no fact's wording appears in the reply. */
+  facts: UsedFact[] | null;
+};
+
+export type UsedFact = ParsedFact & {
+  id: string;
+  now: "unchanged" | "changed" | "deleted";
+  current?: ParsedFact;
 };
 
 export function getCustomers(): Promise<Customers> {

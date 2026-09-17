@@ -1930,6 +1930,9 @@ def handle(conn, message: dict, last_seen: dict) -> None:
             "fact_scores": [f["similarity"] for f in result.get("near_facts", [])],
             "chunk_scores": [c["similarity"] for c in result.get("chunks", [])],
             "answer": reply,
+            # Where the reply came from, with each fact's wording at this
+            # moment. Listed field-by-field on site/privacy.html like the rest.
+            "facts_used": console.facts_used(result),
         })
 
 

@@ -56,8 +56,9 @@ def check(label: str, got, want) -> None:
 
 
 def clear(admin, addr: str) -> None:
-    admin.execute("delete from escalation where business_id in"
-                  " (select id from business where owner_email = %s)", (addr,))
+    for table in ("escalation", "fact"):
+        admin.execute(f"delete from {table} where business_id in"
+                      " (select id from business where owner_email = %s)", (addr,))
     admin.execute("delete from business where owner_email = %s", (addr,))
 
 
@@ -360,6 +361,79 @@ def run(admin, biz_a: str, biz_b: str, scratch: pathlib.Path) -> None:
     check("and present for that business",
           [a["answer"] for a in other.get("/conversations/111").json()
            if a["from"] == "owner"], [secret])
+
+    print("\n10. PROVENANCE: where a reply came from, and whether it still holds")
+    from app import console
+
+    def fact(biz, subject, attribute, value):
+        return str(admin.execute(
+            "insert into fact (business_id, subject, subject_key, attribute,"
+            " attribute_key, value, value_key, confirmed) values"
+            " (%s, %s, lower(%s), %s, lower(%s), %s, lower(%s), true) returning id",
+            (biz, subject, subject, attribute, attribute, value, value)).fetchone()[0])
+
+    kept = fact(biz_a, "MRT", "narx", "400 000 so'm")
+    edited = fact(biz_a, "MRT", "ish vaqti", "09:00-18:00")
+    gone = fact(biz_a, "MRT", "manzil", "Chilonzor 5")
+    theirs = fact(biz_b, "Kurs", "narx", "B ning narxi 999")
+
+    # What bot.py logs, from the same function it calls. The value must APPEAR
+    # in the reply to count as used; a refusal logs nothing.
+    result = {"status": "ok", "answer": "MRT 400 000 so'm, 09:00-18:00 ishlaydi.",
+              "context_facts": [
+                  {"id": kept, "subject": "MRT", "attribute": "narx",
+                   "value": "400 000 so'm"},
+                  {"id": edited, "subject": "MRT", "attribute": "ish vaqti",
+                   "value": "09:00-18:00"},
+                  {"id": gone, "subject": "MRT", "attribute": "manzil",
+                   "value": "Chilonzor 5"}]}
+    logged = console.facts_used(result)
+    check("only facts whose wording is in the reply are logged",
+          [f["id"] for f in logged], [kept, edited])
+    check("a refusal logs none", console.facts_used(dict(result, status="unknown")), [])
+
+    used = logged + [{"id": gone, "subject": "MRT", "attribute": "manzil",
+                      "value": "Chilonzor 5"},
+                     # An id that is not this business's, with invented wording.
+                     {"id": theirs, "subject": "Kurs", "attribute": "narx",
+                      "value": "logged wording"}]
+    with scratch.open("a", encoding="utf-8") as handle:
+        # Section 4 left a deliberately truncated line with no newline; without
+        # this the first row below would be glued onto it and read as malformed.
+        handle.write("\n")
+        for row in [
+            line(business_id=biz_a, chat_id=555, question="MRT narxi va vaqti?",
+                 answer=result["answer"], status="ok", facts_used=used,
+                 at=mins(60)),
+            line(business_id=biz_a, chat_id=555, question="Qayerdasiz?",
+                 answer="Aniq aytolmayman.", status="ok", facts_used=[],
+                 at=mins(61)),
+            # Before provenance was logged: no key at all.
+            line(business_id=biz_a, chat_id=555, question="Eski savol?",
+                 answer="Eski javob.", status="ok", at=mins(62)),
+        ]:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    # AFTER the reply: one fact edited, one deleted.
+    admin.execute("update fact set value = '10:00-19:00' where id = %s", (edited,))
+    admin.execute("delete from fact where id = %s", (gone,))
+
+    turns = client.get("/conversations/555").json()
+    facts = {f["id"]: f for f in turns[0]["facts"]}
+    check("an unchanged fact says so", facts[kept]["now"], "unchanged")
+    check("an EDITED fact says it changed", facts[edited]["now"], "changed")
+    check("keeping the wording the reply was built from",
+          facts[edited]["value"], "09:00-18:00")
+    check("beside what it says now", facts[edited]["current"]["value"],
+          "10:00-19:00")
+    check("a DELETED fact says so, with what it said",
+          (facts[gone]["now"], facts[gone]["value"]), ("deleted", "Chilonzor 5"))
+    check("another business's id reads as deleted, never as its text",
+          (facts[theirs]["now"], "B ning narxi" in json.dumps(turns, ensure_ascii=False)),
+          ("deleted", False))
+    check("recorded-but-none is an empty list", turns[1]["facts"], [])
+    check("never recorded is null, not empty", turns[2]["facts"], None)
+    admin.execute("delete from fact where id in (%s, %s, %s)", (kept, edited, theirs))
 
 
 if __name__ == "__main__":

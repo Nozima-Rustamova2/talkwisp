@@ -5,6 +5,7 @@ import {
   type Customer,
   type Customers,
   type Turn,
+  type UsedFact,
 } from "./api";
 
 /* Dialogs: who wrote to the agent, and what was said.
@@ -73,6 +74,7 @@ type Message = {
   /* What became of it -- "Sent to you". Metadata about the message, drawn under
      the bubble and never inside it: it was not said to anyone. */
   note: string | null;
+  facts: UsedFact[] | null;
 };
 
 // Consecutive messages from one side closer together than this share a group
@@ -82,16 +84,23 @@ const GROUP_GAP_MS = 5 * 60 * 1000;
 function messages(turns: Turn[]): Message[] {
   const out: Message[] = [];
   for (const t of turns) {
-    if (t.question) out.push({ side: "customer", text: t.question, at: t.at, note: null });
+    if (t.question)
+      out.push({ side: "customer", text: t.question, at: t.at, note: null, facts: null });
     if (t.answer) {
-      out.push({ side: t.from === "owner" ? "owner" : "agent", text: t.answer, at: t.at, note: t.note });
+      out.push({
+        side: t.from === "owner" ? "owner" : "agent",
+        text: t.answer,
+        at: t.at,
+        note: t.note,
+        facts: t.facts,
+      });
     } else if (t.note) {
       // Something happened with no reply text -- a greeting short-circuit, a
       // screenshot, an order. The note is still information, so it attaches to
       // whatever came before it, or stands alone when nothing did.
       const last = out[out.length - 1];
       if (last && last.at === t.at && !last.note) last.note = t.note;
-      else out.push({ side: "event", text: null, at: t.at, note: t.note });
+      else out.push({ side: "event", text: null, at: t.at, note: t.note, facts: null });
     }
   }
   return out;
@@ -120,6 +129,73 @@ function day(iso: string | null): string {
 
 function clock(iso: string | null): string {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+}
+
+const said = (f: { subject: string; attribute: string; value: string }) =>
+  `${f.subject} — ${f.attribute}: ${f.value}`;
+
+/* WHERE THE REPLY CAME FROM, and whether that is still true. Closed by default:
+ * it is there for the answer that looks wrong, not for every answer. */
+function Why({ facts }: { facts: UsedFact[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ maxWidth: "min(78%, 560px)", marginTop: 4, textAlign: "right" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          border: "none",
+          background: "none",
+          padding: "0 4px",
+          font: "inherit",
+          fontSize: 12,
+          color: "var(--text-muted)",
+          cursor: "pointer",
+        }}
+      >
+        {open ? "Hide" : "Why this answer"}
+      </button>
+      {open ? (
+        <div
+          style={{
+            textAlign: "left",
+            fontSize: 13,
+            lineHeight: 1.5,
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            padding: "8px 12px",
+            marginTop: 4,
+            background: "var(--surface)",
+          }}
+        >
+          {facts.length === 0 ? (
+            <span style={{ color: "var(--text-muted)" }}>
+              No fact's wording appears in this reply. It may have paraphrased a fact or drawn
+              on a document.
+            </span>
+          ) : (
+            facts.map((f) => (
+              <div key={f.id} style={{ padding: "3px 0" }}>
+                <div>{said(f)}</div>
+                {f.now === "changed" && f.current ? (
+                  <div style={{ color: "var(--caution-text)", fontSize: 12 }}>
+                    Changed since. Now: {said(f.current)}
+                  </div>
+                ) : f.now === "deleted" ? (
+                  <div style={{ color: "var(--caution-text)", fontSize: 12 }}>
+                    Deleted since.
+                  </div>
+                ) : (
+                  <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
+                    Still reads this way.
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function DayChip({ at, first }: { at: string; first: boolean }) {
@@ -232,6 +308,7 @@ function Transcript({ turns }: { turns: Turn[] }) {
                 </div>
               ) : null}
 
+              {m.side === "agent" && m.facts ? <Why facts={m.facts} /> : null}
               {m.note ? (
                 <div
                   style={{
