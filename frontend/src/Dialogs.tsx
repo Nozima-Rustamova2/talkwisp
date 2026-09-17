@@ -47,11 +47,167 @@ function label(c: Customer): string {
   return `Chat ${c.chat_id}`;
 }
 
-function Figure({ value, unit }: { value: string | number; unit: string }) {
+/* --- the transcript as a chat ------------------------------------------------
+ *
+ * TELEGRAM'S LAYOUT, OUR LOOK. The business is on the right, where "you" are in
+ * Telegram, because the owner reading this is that side of the conversation.
+ * The customer is on the left.
+ *
+ * The server sends one entry per customer message, carrying its answer. Here
+ * each entry is split back into the two things that were said, so the screen
+ * shows two parties rather than a list of question-answer records. */
+
+type Side = "customer" | "agent";
+
+type Message = {
+  side: Side;
+  text: string | null;
+  at: string | null;
+  /* What became of it -- "Sent to you". Metadata about the message, drawn under
+     the bubble and never inside it: it was not said to anyone. */
+  note: string | null;
+};
+
+// Consecutive messages from one side closer together than this share a group
+// and one timestamp. Five minutes is roughly where Telegram stops grouping.
+const GROUP_GAP_MS = 5 * 60 * 1000;
+
+function messages(turns: Turn[]): Message[] {
+  const out: Message[] = [];
+  for (const t of turns) {
+    if (t.question) out.push({ side: "customer", text: t.question, at: t.at, note: null });
+    if (t.answer) {
+      out.push({ side: "agent", text: t.answer, at: t.at, note: t.note });
+    } else if (t.note) {
+      // Something happened with no reply text -- a greeting short-circuit, a
+      // screenshot, an order. The note is still information, so it attaches to
+      // whatever came before it, or stands alone when nothing did.
+      const last = out[out.length - 1];
+      if (last && last.at === t.at && !last.note) last.note = t.note;
+      else out.push({ side: "agent", text: null, at: t.at, note: t.note });
+    }
+  }
+  return out;
+}
+
+function ms(iso: string | null): number | null {
+  return iso ? new Date(iso).getTime() : null;
+}
+
+function sameGroup(a: Message, b: Message): boolean {
+  if (a.side !== b.side || a.note) return false; // a note closes its group
+  const x = ms(a.at);
+  const y = ms(b.at);
+  return x !== null && y !== null && y - x <= GROUP_GAP_MS;
+}
+
+function day(iso: string | null): string {
+  if (!iso) return "";
+  const at = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(Date.now() - 86400000);
+  if (at.toDateString() === today.toDateString()) return "Today";
+  if (at.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return at.toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" });
+}
+
+function clock(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+}
+
+function Transcript({ turns }: { turns: Turn[] }) {
+  const list = messages(turns);
   return (
-    <div>
-      <div style={{ fontSize: 26, fontWeight: 600, lineHeight: 1.2 }}>{value}</div>
-      <div style={{ fontSize: 13, color: "var(--text-faint)" }}>{unit}</div>
+    <div style={{ display: "flex", flexDirection: "column", marginTop: 16 }}>
+      {list.map((m, i) => {
+        const prev = list[i - 1];
+        const next = list[i + 1];
+        const startsGroup = !prev || !sameGroup(prev, m);
+        const endsGroup = !next || !sameGroup(m, next);
+        const newDay = !prev || day(prev.at) !== day(m.at);
+        const right = m.side === "agent";
+        return (
+          <div key={i}>
+            {newDay && m.at ? (
+              <div style={{ textAlign: "center", margin: i === 0 ? "0 0 12px" : "16px 0 12px" }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-muted)",
+                    background: "var(--ground)",
+                    borderRadius: 999,
+                    padding: "3px 10px",
+                  }}
+                >
+                  {day(m.at)}
+                </span>
+              </div>
+            ) : null}
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: right ? "flex-end" : "flex-start",
+                marginTop: startsGroup && !newDay ? 12 : 2,
+              }}
+            >
+              {m.text ? (
+                <div
+                  style={{
+                    maxWidth: "min(78%, 560px)",
+                    padding: "8px 12px",
+                    background: right ? "var(--accent-tint-strong)" : "var(--ground)",
+                    color: "var(--text)",
+                    // The corner nearest its own side is tightened on the last
+                    // bubble of a group only -- that is what makes a run of
+                    // bubbles read as one speaker.
+                    borderRadius: 16,
+                    borderBottomRightRadius: right && endsGroup ? 6 : 16,
+                    borderBottomLeftRadius: !right && endsGroup ? 6 : 16,
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {m.text}
+                  {endsGroup && m.at ? (
+                    // Floated so a short last line keeps the time beside it,
+                    // the way Telegram does, and a long one pushes it below.
+                    <span
+                      style={{
+                        float: "right",
+                        fontSize: 11,
+                        color: "var(--text-faint)",
+                        margin: "6px 0 -2px 10px",
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {clock(m.at)}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {m.note ? (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-faint)",
+                    marginTop: 4,
+                    padding: "0 4px",
+                  }}
+                >
+                  {m.note}
+                  {!m.text && m.at ? ` · ${clock(m.at)}` : ""}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -98,45 +254,7 @@ function Exchange({ customer }: { customer: Customer }) {
       ) : turns.length === 0 ? (
         <p style={{ color: "var(--text-faint)", fontSize: 13 }}>Nothing recorded.</p>
       ) : (
-        <ol style={{ listStyle: "none", padding: 0, margin: "16px 0 0" }}>
-          {turns.map((t, i) => (
-            <li
-              key={i}
-              style={{
-                marginBottom: 16,
-                paddingBottom: 16,
-                borderBottom:
-                  i === turns.length - 1 ? "none" : "1px solid var(--rule)",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 3 }}>
-                {when(t.at)}
-              </div>
-              {/* An entry with no question is something that happened rather
-                  than something said -- a button tap, an order, a screenshot.
-                  It gets the note alone, with no empty quotation above it. */}
-              {t.question ? (
-                <div style={{ fontWeight: 500, lineHeight: 1.5 }}>{t.question}</div>
-              ) : null}
-              {t.answer ? (
-                <div
-                  style={{
-                    color: "var(--text-muted)",
-                    marginTop: 4,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  {t.answer}
-                </div>
-              ) : null}
-              {t.note ? (
-                <div style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 4 }}>
-                  {t.note}
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ol>
+        <Transcript turns={turns} />
       )}
     </>
   );
@@ -144,7 +262,7 @@ function Exchange({ customer }: { customer: Customer }) {
 
 export default function Dialogs() {
   const [data, setData] = useState<Customers | "loading" | "error">("loading");
-  const [open, setOpen] = useState<Customer | null>(null);
+  const [picked, setPicked] = useState<Customer | null>(null);
 
   useEffect(() => {
     getCustomers()
@@ -153,6 +271,10 @@ export default function Dialogs() {
   }, []);
 
   const shell = { maxWidth: 1100, margin: "0 auto", padding: "24px 20px 64px" };
+  // THE MOST RECENT CONVERSATION IS OPEN BY DEFAULT. At one conversation an
+  // empty right pane saying "pick someone" is a screen with nothing on it, and
+  // the list is sorted newest first, so the first entry is the one to read.
+  const open = picked ?? (data !== "loading" && data !== "error" ? data.customers[0] ?? null : null);
 
   if (data === "loading")
     return (
@@ -169,20 +291,6 @@ export default function Dialogs() {
 
   return (
     <div style={shell}>
-      {/* THE HEADER IS THE SCREEN AT TWELVE CONVERSATIONS and the list is the
-          screen at five hundred. These three numbers are true at both. */}
-      <div
-        className="card"
-        style={{ padding: 20, marginBottom: 16, display: "flex", gap: 36, flexWrap: "wrap" }}
-      >
-        <Figure value={data.people} unit={data.people === 1 ? "person" : "people"} />
-        <Figure
-          value={data.conversations}
-          unit={data.conversations === 1 ? "conversation" : "conversations"}
-        />
-        <Figure value={when(data.last_at)} unit="last message" />
-      </div>
-
       {data.people === 0 ? (
         <div className="card" style={{ padding: 20 }}>
           <p style={{ margin: 0, color: "var(--text-muted)" }}>
@@ -194,13 +302,31 @@ export default function Dialogs() {
           {/* Wrapping rather than a media query, because everything else on
               these screens is an inline style. Below roughly 760px the panes
               stack, which is the one place the old layout was right. */}
-          <div className="card" style={{ flex: "1 1 300px", minWidth: 0, padding: 8 }}>
+          {/* PROPORTIONS. The list keeps about the width of a Telegram chat
+              list and the transcript takes everything else: the growth factors
+              send spare width to the side that has something to read. When the
+              panes wrap on a phone, the list fills the row on its own. */}
+          <div className="card" style={{ flex: "1 1 260px", maxWidth: "100%", minWidth: 0, padding: 8 }}>
+            {/* THE NUMBERS LIVE HERE NOW, not in a card of their own. At one
+                conversation that card was a dashboard with nothing on it; as
+                the list's heading they describe the list, which is true at one
+                conversation and at five hundred. */}
+            <div style={{ padding: "8px 12px 10px", borderBottom: "1px solid var(--rule)", marginBottom: 6 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Dialogs</div>
+              <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
+                {data.people} {data.people === 1 ? "person" : "people"}
+                {" · "}
+                {data.conversations} {data.conversations === 1 ? "conversation" : "conversations"}
+                {" · last "}
+                {when(data.last_at)}
+              </div>
+            </div>
             {data.customers.map((c) => {
               const selected = open?.chat_id === c.chat_id;
               return (
                 <button
                   key={c.chat_id}
-                  onClick={() => setOpen(c)}
+                  onClick={() => setPicked(c)}
                   style={{
                     display: "block",
                     width: "100%",
@@ -241,7 +367,7 @@ export default function Dialogs() {
             })}
           </div>
 
-          <div className="card" style={{ flex: "2 1 400px", minWidth: 0, padding: 20 }}>
+          <div className="card" style={{ flex: "999 1 420px", minWidth: 0, padding: 20 }}>
             {open ? (
               <Exchange customer={open} />
             ) : (
