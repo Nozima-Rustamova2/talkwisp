@@ -457,5 +457,34 @@ check("`is not False` would NOT have worked",
       bot.SendResult(False) is not False, True)
 
 
+# --- the social short-circuit must not swallow a fragment --------------------
+#
+# is_social() runs BEFORE the follow-up rewriter, so a message it wrongly calls
+# a greeting is unrecoverable: it never reaches the code that could resolve it
+# against the previous turn. `kun` means "day" and is in _GREETINGS only for
+# "xayrli kun" -- alone, it is far more likely a reply ("which day?" -> "kun").
+for _text, _want in (
+    ("kun", None),                 # the fragment
+    ("kun kun", None),             # all-social words, still not a greeting
+    ("xayrli kun", "greeting"),    # the reason kun is in the list at all
+    ("Hayrli kun", "greeting"),
+    ("salom", "greeting"),
+    ("rahmat", "thanks"),
+    ("ertaga kun", None),
+):
+    check(f"is_social({_text!r})", bot.is_social(_text), _want)
+
+# THE WIDER QUESTION -- is `kun` the only one? -- is not something code can
+# answer: whether a word could be a reply is a judgement about language. So the
+# vocabulary is PINNED instead. Adding a word to either list fails here, which
+# forces whoever adds it to ask that question before the rewriter pays for it.
+# As of 2026-09-17 every word below except `kun` means nothing but a greeting or
+# thanks.
+check("the social vocabulary is the reviewed one",
+      sorted(bot._GREETINGS | bot._THANKS),
+      sorted(["assalom", "assalomu", "alaykum", "salom", "hello", "hi", "hey",
+              "privet", "zdravstvuyte", "xayrli", "hayrli", "kun",
+              "rahmat", "raxmat", "spasibo", "thanks", "thank", "tashakkur"]))
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

@@ -188,6 +188,15 @@ def is_social(text: str) -> str | None:
     words = normalize(text).split()
     if not words or len(words) > 3:
         return None
+    # `kun` IS A NOUN -- "day" -- and is in _GREETINGS only for "xayrli kun".
+    # Alone, or without the word that makes it a greeting, it is far more
+    # likely a fragment replying to something ("which day?" -> "kun"). And this
+    # short-circuit runs BEFORE the follow-up rewriter, so anything it wrongly
+    # claims is unrecoverable: it never reaches the code that could have
+    # resolved it against the previous turn. Of the eighteen social words it is
+    # the only ordinary noun, which is why the exception is this narrow.
+    if "kun" in words and not {"xayrli", "hayrli"} & set(words):
+        return None
     if all(w in _GREETINGS for w in words):
         return "greeting"
     if all(w in _THANKS for w in words):
