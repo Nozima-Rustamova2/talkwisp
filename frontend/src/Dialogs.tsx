@@ -57,7 +57,12 @@ function label(c: Customer): string {
  * each entry is split back into the two things that were said, so the screen
  * shows two parties rather than a list of question-answer records. */
 
-type Side = "customer" | "agent";
+/* "event" is something that HAPPENED rather than something said -- an order, a
+   screenshot, the owner confirming a payment. Centred, like a Telegram service
+   message, because it belongs to neither side: "Sent a payment screenshot" is
+   the customer's act and "You confirmed the payment" the owner's, and drawing
+   either on the agent's side would put words in the wrong mouth. */
+type Side = "customer" | "agent" | "event";
 
 type Message = {
   side: Side;
@@ -84,7 +89,7 @@ function messages(turns: Turn[]): Message[] {
       // whatever came before it, or stands alone when nothing did.
       const last = out[out.length - 1];
       if (last && last.at === t.at && !last.note) last.note = t.note;
-      else out.push({ side: "agent", text: null, at: t.at, note: t.note });
+      else out.push({ side: "event", text: null, at: t.at, note: t.note });
     }
   }
   return out;
@@ -115,6 +120,25 @@ function clock(iso: string | null): string {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 }
 
+function DayChip({ at, first }: { at: string; first: boolean }) {
+  return (
+    <div style={{ textAlign: "center", margin: first ? "0 0 12px" : "16px 0 12px" }}>
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: "var(--text-muted)",
+          background: "var(--ground)",
+          borderRadius: 999,
+          padding: "3px 10px",
+        }}
+      >
+        {day(at)}
+      </span>
+    </div>
+  );
+}
+
 function Transcript({ turns }: { turns: Turn[] }) {
   const list = messages(turns);
   return (
@@ -126,24 +150,22 @@ function Transcript({ turns }: { turns: Turn[] }) {
         const endsGroup = !next || !sameGroup(m, next);
         const newDay = !prev || day(prev.at) !== day(m.at);
         const right = m.side === "agent";
-        return (
-          <div key={i}>
-            {newDay && m.at ? (
-              <div style={{ textAlign: "center", margin: i === 0 ? "0 0 12px" : "16px 0 12px" }}>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--text-muted)",
-                    background: "var(--ground)",
-                    borderRadius: 999,
-                    padding: "3px 10px",
-                  }}
-                >
-                  {day(m.at)}
+        if (m.side === "event") {
+          return (
+            <div key={i}>
+              {newDay && m.at ? <DayChip at={m.at} first={i === 0} /> : null}
+              <div style={{ textAlign: "center", marginTop: 10 }}>
+                <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                  {m.note}
+                  {m.at ? ` · ${clock(m.at)}` : ""}
                 </span>
               </div>
-            ) : null}
+            </div>
+          );
+        }
+        return (
+          <div key={i}>
+            {newDay && m.at ? <DayChip at={m.at} first={i === 0} /> : null}
 
             <div
               style={{
@@ -201,7 +223,6 @@ function Transcript({ turns }: { turns: Turn[] }) {
                   }}
                 >
                   {m.note}
-                  {!m.text && m.at ? ` · ${clock(m.at)}` : ""}
                 </div>
               ) : null}
             </div>
@@ -306,7 +327,12 @@ export default function Dialogs() {
               list and the transcript takes everything else: the growth factors
               send spare width to the side that has something to read. When the
               panes wrap on a phone, the list fills the row on its own. */}
-          <div className="card" style={{ flex: "1 1 260px", maxWidth: "100%", minWidth: 0, padding: 8 }}>
+          <div
+            className="card"
+            // Sticky, so a long transcript does not scroll the list away --
+            // the reason the panes sit side by side in the first place.
+            style={{ flex: "1 1 260px", maxWidth: "100%", minWidth: 0, padding: 8, position: "sticky", top: 24 }}
+          >
             {/* THE NUMBERS LIVE HERE NOW, not in a card of their own. At one
                 conversation that card was a dashboard with nothing on it; as
                 the list's heading they describe the list, which is true at one
