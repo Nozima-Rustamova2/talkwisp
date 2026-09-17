@@ -1450,8 +1450,16 @@ def deliver_owner_answer(conn, owner_chat: int, row: dict, text: str) -> None:
     sent = 0
     for waiting_chat in row["chat_ids"]:
         prefix = _say(FROM_OWNER, FROM_OWNER_DEFAULT, row["question"])
-        if send(waiting_chat, f"{prefix}\n{text}"):
+        result = send(waiting_chat, f"{prefix}\n{text}")
+        if result:
             sent += 1
+        else:
+            # PER CUSTOMER, under THEIR chat. The count above says how many got
+            # it, not who did not -- so Dialogs showed a customer who had
+            # blocked the bot a reply they never received. escalation_id ties
+            # this to the exact reply rather than to whatever is nearby in time.
+            log({"chat_id": waiting_chat, "outcome": "owner_reply_undelivered",
+                 "escalation_id": row["id"], "blocked": result.blocked})
 
     # Now the half the landing page promises: "your answer is saved so it knows
     # next time." Without it this is a relay and the owner answers the same

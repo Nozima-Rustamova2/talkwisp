@@ -435,6 +435,58 @@ def run(admin, biz_a: str, biz_b: str, scratch: pathlib.Path) -> None:
     check("never recorded is null, not empty", turns[2]["facts"], None)
     admin.execute("delete from fact where id in (%s, %s, %s)", (kept, edited, theirs))
 
+    print("\n11. A REPLY THAT DID NOT REACH A CUSTOMER IS MARKED, NOT HIDDEN")
+    # Through bot.py's real delivery, with Telegram faked: one reply, three
+    # customers waiting, and each send ends differently.
+    import contextlib
+
+    from app import escalation as esc
+
+    outcomes = {
+        601: bot.SendResult(True),
+        602: bot.SendResult(False, blocked=True, detail="bot was blocked by the user"),
+        603: bot.SendResult(False, detail="ReadTimeout"),
+    }
+    saved = (bot.send, bot.parse_fact, bot.typing, bot.BUSINESS_ID, bot.MESSAGE_LOG)
+    bot.send = lambda chat, text: outcomes.get(chat, bot.SendResult(True))
+    bot.parse_fact = lambda conn, line: {"error": "not a fact", "parsed": None}
+    bot.typing = lambda chat: contextlib.nullcontext()
+    bot.BUSINESS_ID = biz_a
+    bot.MESSAGE_LOG = scratch
+    try:
+        with connection(biz_a) as conn:
+            esc_id, _ = esc.open_or_join(conn, 601, "Parkovka bormi?", {})
+            esc.open_or_join(conn, 602, "Parkovka bormi?", {})
+            esc.open_or_join(conn, 603, "Parkovka bormi?", {})
+            esc.start_answering(conn, esc_id, 9001)
+            bot.deliver_owner_answer(conn, 9001, esc.get(conn, esc_id),
+                                     "Ha, binoning orqasida.")
+    finally:
+        (bot.send, bot.parse_fact, bot.typing, bot.BUSINESS_ID,
+         bot.MESSAGE_LOG) = saved
+
+    def owner_turn(chat):
+        return [t for t in client.get(f"/conversations/{chat}").json()
+                if t["from"] == "owner"]
+
+    got, blocked, failed_send = owner_turn(601), owner_turn(602), owner_turn(603)
+    check("delivered: the reply is shown, unmarked",
+          [(t["answer"], t["undelivered"]) for t in got],
+          [("Ha, binoning orqasida.", None)])
+    check("BLOCKED: the reply is still shown, marked as blocked",
+          [(t["answer"], t["undelivered"]) for t in blocked],
+          [("Ha, binoning orqasida.", "blocked")])
+    check("another failure is marked as a failure, not as blocked",
+          [t["undelivered"] for t in failed_send], ["failed"])
+    check("the failure line is not a row of its own",
+          len(client.get("/conversations/602").json()), 1)
+    # The failure is logged under the CUSTOMER's chat, so it cannot mark the
+    # same reply for someone who did receive it.
+    lines = [json.loads(x) for x in scratch.read_text(encoding="utf-8").splitlines()
+             if x.strip().startswith("{") and "owner_reply_undelivered" in x]
+    check("one failure line per customer who missed it, none for the one who got it",
+          sorted(x["chat_id"] for x in lines), [602, 603])
+
 
 if __name__ == "__main__":
     main()

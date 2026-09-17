@@ -681,6 +681,10 @@ export type Turn = {
      TIME, and where each stands now. null: not recorded (older messages, owner
      replies). []: recorded, and no fact's wording appears in the reply. */
   facts: UsedFact[] | null;
+  /* Owner replies only: set when this reply did NOT reach this customer.
+     Absent or null means no failure was recorded -- which, for replies from
+     before failures were logged per customer, is "not known". */
+  undelivered?: "blocked" | "failed" | null;
 };
 
 export type UsedFact = ParsedFact & {

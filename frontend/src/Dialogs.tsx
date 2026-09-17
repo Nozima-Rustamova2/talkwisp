@@ -77,6 +77,7 @@ type Message = {
      the bubble and never inside it: it was not said to anyone. */
   note: string | null;
   facts: UsedFact[] | null;
+  undelivered?: "blocked" | "failed" | null;
 };
 
 // Consecutive messages from one side closer together than this share a group
@@ -95,6 +96,7 @@ function messages(turns: Turn[]): Message[] {
         at: t.at,
         note: t.note,
         facts: t.facts,
+        undelivered: t.undelivered,
       });
     } else if (t.note) {
       // Something happened with no reply text -- a greeting short-circuit, a
@@ -314,6 +316,17 @@ function Transcript({ turns }: { turns: Turn[] }) {
               ) : null}
 
               {m.side === "agent" && m.facts ? <Why facts={m.facts} /> : null}
+              {/* Metadata, like every outcome line -- but in the caution colour,
+                  because it contradicts what the bubble above appears to say. */}
+              {owner && m.undelivered ? (
+                <div
+                  style={{ fontSize: 12, color: "var(--caution-text)", marginTop: 4, padding: "0 4px" }}
+                >
+                  {m.undelivered === "blocked"
+                    ? "Not delivered — they had blocked the bot"
+                    : "Not delivered — Telegram didn't accept it"}
+                </div>
+              ) : null}
               {m.note ? (
                 <div
                   style={{

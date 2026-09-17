@@ -167,7 +167,9 @@ def overview() -> dict:
 # and then FALLS THROUGH to answer(), which logs again. The customer sent one
 # message; the log has two lines about it.
 _SILENT = {"buy_prefilter_blocked", "not_approved", "owner_claimed",
-           "owner_claim_refused", "fact_written"}
+           "owner_claim_refused", "fact_written",
+           # Not its own row: it marks the owner's reply it belongs to.
+           "owner_reply_undelivered"}
 
 # Everything else, said the way the owner would say it. An outcome missing from
 # this table is shown as nothing rather than as its key: a gap here should look
@@ -235,6 +237,13 @@ def exchange(conn, chat_id: int) -> list[dict]:
             if r.get("chat_id") == chat_id and not r.get("is_owner")]
     mine.sort(key=lambda r: r.get("at") or "")
 
+    # escalation id -> "blocked" or "failed", for replies that did not reach
+    # THIS customer. Matched on the id bot.py logs, never on nearby timestamps.
+    undelivered = {
+        row["escalation_id"]: "blocked" if row.get("blocked") else "failed"
+        for row in mine
+        if row.get("outcome") == "owner_reply_undelivered" and row.get("escalation_id")}
+
     entries: list[dict] = []
     for row in mine:
         outcome = row.get("outcome")
@@ -269,12 +278,17 @@ def exchange(conn, chat_id: int) -> list[dict]:
     # Under RLS: another business's escalations are simply not there, whatever
     # chat_id is asked for.
     replies = conn.execute(
-        "select answer, answered_at from escalation"
+        "select id, answer, answered_at from escalation"
         " where status = 'answered' and answer is not null"
         "   and %s = any(chat_ids)", (chat_id,)).fetchall()
+    # MARKED, NOT HIDDEN. Hiding an undelivered reply would also hide that the
+    # owner answered; the true statement is "you replied, they did not get it".
+    # Replies from before per-customer failures were logged carry None, which
+    # is "not known", not "delivered".
     entries.extend({"at": at.isoformat(), "question": None, "answer": answer,
-                    "note": None, "from": "owner", "facts": None}
-                   for answer, at in replies)
+                    "note": None, "from": "owner", "facts": None,
+                    "undelivered": undelivered.get(str(eid))}
+                   for eid, answer, at in replies)
     _compare_with_now(conn, entries)
     # By TIME, not by string. The log writes +00:00 and Postgres writes the
     # session's offset, and two ISO strings in different offsets do not sort.
