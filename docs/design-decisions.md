@@ -306,6 +306,29 @@ confirms -- and the decision now rests on discovery rather than on principle.
 The seven questions to ask a real merchant are written down; ask them before
 building anything.
 
+**Confirming a typed fact does not confirm what the owner read.** `POST /fact`
+parses the line for the preview, and parses it AGAIN when called with
+`confirm=true` -- so the fact written is the second parse, not the one on
+screen. Usually identical; not guaranteed, because it is a model call. That is
+the confirmation step not actually confirming. Add knowledge has always worked
+this way; the gap composer (2026-09-17) shares it rather than causing it. The
+fix is its own change: confirm should write the parsed fact the preview
+returned, not re-parse the line.
+
+**The Dashboard's primary action is still missing.** The design's contextual
+button -- *Answer N open questions*, or *Test your agent* at zero gaps -- was
+left out of the gaps session. It now has something real behind it: the count is
+`open` from `gaps.open_gaps()`, and the target is `#/gaps`. Never a disabled
+button at zero.
+
+**How often "Not for us" hides a question that was answered elsewhere.** A fact
+added through Add knowledge or Telegram `/fact` does not close the gap it
+answers, so owners will dismiss those by hand. Every close in `gaps.jsonl`
+records `resolution` (`answered` / `dismissed`), so this is measurable once it is
+live: dismissed closes whose question the agent now answers. If that share is
+high, the limit costs more than it looks and closing gaps from any fact write
+becomes worth building.
+
 ## Vision — measured, not assumed
 
 Tested 2026-08-30 on a real phone photo of a printed cafe menu: angled, glare,
