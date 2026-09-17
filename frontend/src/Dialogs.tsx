@@ -31,7 +31,9 @@ import {
 function when(iso: string | null): string {
   if (!iso) return "—";
   const at = new Date(iso);
-  const days = Math.floor((Date.now() - at.getTime()) / 86400000);
+  // Clamped at zero. A timestamp a few seconds ahead of this browser's clock --
+  // ordinary drift between server and laptop -- floored to "-1 days ago".
+  const days = Math.max(0, Math.floor((Date.now() - at.getTime()) / 86400000));
   if (days === 0) return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (days === 1) return "yesterday";
   if (days < 7) return `${days} days ago`;
@@ -169,8 +171,11 @@ function Why({ facts }: { facts: UsedFact[] }) {
         >
           {facts.length === 0 ? (
             <span style={{ color: "var(--text-muted)" }}>
-              No fact's wording appears in this reply. It may have paraphrased a fact or drawn
-              on a document.
+              {/* Not "general knowledge": the agent answers only from what the
+                  business added, and saying otherwise would describe the one
+                  thing it is built not to do. */}
+              Answered by rewording a fact, or from a document you added — no fact's exact
+              wording appears in it.
             </span>
           ) : (
             facts.map((f) => (
