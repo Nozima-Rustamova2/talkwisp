@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AddKnowledge from "./AddKnowledge";
 import Dashboard from "./Dashboard";
+import Gaps from "./Gaps";
 import Dialogs from "./Dialogs";
 import Payment from "./Payment";
 import Knowledge from "./Knowledge";
@@ -24,6 +25,7 @@ import { getMe, getPayment, logout, setSpendingAllowed, type Me } from "./api";
 
 type Route =
   | "dashboard"
+  | "gaps"
   | "add"
   | "review"
   | "knowledge"
@@ -34,10 +36,8 @@ type Route =
 
 /* FOUR ITEMS, NOT SEVEN.
  *
- * The design draws a seven-item left rail. Three of those still have nothing
- * behind them: Gaps and Conversations have no prototype and no endpoint
- * (gaps.jsonl is a file, and app/console.py:33 says to promote it "when it
- * earns a table"), and Templates has neither. They are not here.
+ * The design draws a seven-item left rail. Templates still has nothing behind
+ * it and is not here. (Historical: this header predates the rail.)
  *
  * Settings is what changed. Add, Review and Test are a SEQUENCE -- you do them
  * in that order -- and a header says an order better than a rail does. Settings
@@ -49,6 +49,7 @@ function routeFromHash(): Route {
   if (hash === "review") return "review";
   if (hash === "knowledge") return "knowledge";
   if (hash === "dashboard") return "dashboard";
+  if (hash === "gaps") return "gaps";
   if (hash === "dialogs") return "dialogs";
   if (hash === "payment") return "payment";
   if (hash === "test") return "test";
@@ -101,6 +102,8 @@ export default function App() {
         ? "Sign in — Talkwisp"
         : route === "dashboard"
           ? "Dashboard — Talkwisp"
+          : route === "gaps"
+          ? "Gaps — Talkwisp"
           : route === "review"
           ? "Review — Talkwisp"
           : route === "knowledge"
@@ -234,10 +237,9 @@ export default function App() {
      * screens that do not exist is the dishonesty the design docs argue
      * against. All seven are built now, so the reason expired.
      *
-     * DASHBOARD AND GAPS ARE NOT HERE AT ALL, rather than greyed. Dashboard is
-     * the first item and where the eye lands; a greyed top of the rail reads as
-     * an unfinished product every time the owner opens the app, which is worse
-     * than an app that simply does not have that screen yet.
+     * NOTHING IN IT IS GREYED. A screen joined the rail only once it was
+     * whole -- Dashboard and Gaps last -- because a greyed item reads as an
+     * unfinished product every time the owner opens the app.
      *
      * On a narrow screen it wraps above the content rather than pinning to the
      * side. The bottom bar in the design is a better answer and is not this. */
@@ -273,9 +275,7 @@ export default function App() {
         {/* FIRST, AND ONLY NOW THAT IT IS WHOLE. It was kept out of the
             rail while it was a design, because this is where the eye lands and
             a greyed or half-built first item reads as an unfinished product
-            every time the app opens. Its two columns are one column today --
-            "what it doesn't know yet" needs a gaps.jsonl reader that does not
-            exist -- but what is here is measured and complete, not a shell. */}
+            every time the app opens. */}
         {tab("dashboard", "Dashboard")}
         {/* ONE ITEM FOR THREE ROUTES. Add, Review and the browsable list are
             three stages of a single task -- put something in, check what was
@@ -288,6 +288,9 @@ export default function App() {
             list. Its doors disappear when there is nothing behind them, which
             a persistent "Review (0)" tab could never do. */}
         {tab("add", "Knowledge base", ["review", "knowledge"])}
+        {/* Where the design puts it: after the knowledge base, because a gap
+            is closed by adding knowledge. */}
+        {tab("gaps", "Gaps")}
         {/* "Dialogs", not "Customers". Customers was the framing we wanted --
             a contacts list -- and the data does not support it: names exist
             only from the moment the bot started capturing them, so older rows
@@ -333,6 +336,8 @@ export default function App() {
       {payment}
       {route === "dashboard" ? (
         <Dashboard />
+      ) : route === "gaps" ? (
+        <Gaps />
       ) : route === "review" ? (
         <Review />
       ) : route === "knowledge" ? (

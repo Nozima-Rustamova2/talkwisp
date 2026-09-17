@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.answer import answer as answer_question
 from app import (auth, channel, console, conversations, dashboard, extract,
+                 gaps,
                  knowledge, payment, review, sources, style, vision)
 from app.approval import NotApproved
 from app.db import assert_app_role, connection, current_approved, pool
@@ -615,6 +616,42 @@ def rename_business(business: Business, name: str = Form(...)) -> dict:
             raise HTTPException(status_code=400,
                                 detail=str(exc).split("\n")[0]) from None
     return {"name": renamed}
+
+
+# --- questions the agent could not answer -----------------------------------
+#
+# ONE ACTION CLOSES A GAP IN BOTH VIEWS because both views read gaps.open_gaps().
+# Answering does not write the fact here: the composer writes it through
+# POST /fact, the only way owner-typed facts are written, and then closes the
+# gap with the id it got back. Two routes to writing a fact would be two
+# definitions of what a confirmed fact is.
+
+
+@app.get("/gaps")
+def gap_list(business: Business) -> dict:
+    with connection(business):
+        return gaps.open_gaps()
+
+
+@app.post("/gaps/answer")
+def answer_gap(business: Business, question_key: str = Form(...),
+               fact_id: str = Form(...)) -> dict:
+    with connection(business) as conn:
+        if not gaps.answer(conn, question_key, fact_id):
+            # Read under RLS: another business's fact id is simply absent, so
+            # this cannot close a gap with somebody else's knowledge.
+            raise HTTPException(status_code=400,
+                                detail="That fact does not exist.")
+        return {"closed": question_key}
+
+
+@app.post("/gaps/dismiss")
+def dismiss_gap(business: Business, question_key: str = Form(...)) -> dict:
+    """"Not for us", or answered some other way. Without this the list only
+    grows, and a list that only grows is one owners stop opening."""
+    with connection(business):
+        gaps.dismiss(question_key)
+        return {"closed": question_key}
 
 
 # --- the board --------------------------------------------------------------

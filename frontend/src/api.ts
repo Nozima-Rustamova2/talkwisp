@@ -749,12 +749,46 @@ export type Board = {
     floor: number;
     days: number[];
   };
+  unknown: GapList;
   attention: { kind: string; says: string; fix: string; href: string | null }[];
 };
 
 export function getBoard(): Promise<Board> {
   return request<Board>("/dashboard");
 }
+
+/* --- what it doesn't know yet ----------------------------------------------
+ *
+ * The board's `unknown` and GET /gaps are the SAME server call, one with a
+ * limit. There is no client-side notion of "open": after closing a gap, both
+ * screens re-fetch rather than removing the row locally, so neither can show a
+ * list the server would not. */
+
+export type Gap = {
+  question_key: string;
+  asked: number;
+  /* The most recent wording, in the customer's own script. */
+  question: string | null;
+  last_at: string | null;
+  best_similarity: number | null;
+};
+
+export type GapList = { gaps: Gap[]; open: number; unattributed: number };
+
+export const getGaps = () => request<GapList>("/gaps");
+
+const form = (fields: Record<string, string>) => ({
+  method: "POST",
+  body: new URLSearchParams(fields),
+});
+
+/* The fact is written first, through writeFact -- the only way typed facts
+ * are written -- and the gap is closed with the id that came back. */
+export const answerGap = (question_key: string, fact_id: string) =>
+  request<{ closed: string }>("/gaps/answer", form({ question_key, fact_id }));
+
+export const dismissGap = (question_key: string) =>
+  request<{ closed: string }>("/gaps/dismiss", form({ question_key }));
 
 /* --- the business itself ---------------------------------------------------
  *

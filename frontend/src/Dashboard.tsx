@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import GapRows from "./GapRows";
 import { getBoard, type Board } from "./api";
 
 /* The board: are you working, is it worth it, what to do next.
@@ -13,9 +14,10 @@ import { getBoard, type Board } from "./api";
  * NEVER A DISABLED BUTTON. When a blocker has no action the owner can take --
  * approval is ours to do, not theirs -- the slot is empty rather than greyed.
  *
- * WHAT IS NOT HERE YET: the "what it doesn't know yet" column with its inline
- * composer. It needs a reader over gaps.jsonl that does not exist, and half of
- * it would be a shell in the place the eye lands first. */
+ * ONE ACTION, TWO VIEWS. The "what it doesn't know yet" column is the top of
+ * the same server list the Gaps screen shows. Closing a gap here re-fetches the
+ * board; nothing is removed in the browser, so the column can never show a list
+ * the Gaps screen would not. */
 
 function Plate({ plate }: { plate: Board["plate"] }) {
   const ok = plate.answering;
@@ -119,9 +121,36 @@ function Figures({ week }: { week: Board["week"] }) {
   );
 }
 
+function Unknown({ unknown, onClosed }: { unknown: Board["unknown"]; onClosed: () => void }) {
+  return (
+    <div className="card" style={{ padding: 24, flex: "1 1 320px", minWidth: 0 }}>
+      <h2 style={{ margin: "0 0 12px", fontSize: 16 }}>What it doesn't know yet</h2>
+      {unknown.open === 0 ? (
+        <p style={{ margin: 0, color: "var(--text-muted)" }}>
+          Nothing so far. Every question customers asked, it could answer.
+        </p>
+      ) : (
+        <>
+          <GapRows gaps={unknown.gaps} onClosed={onClosed} />
+          {/* The footer link to the full list. The composer above is NOT a
+              route there -- this link is for the rest of the list only. */}
+          {unknown.open > unknown.gaps.length ? (
+            <a
+              href="#/gaps"
+              style={{ display: "inline-block", marginTop: 12, fontSize: 14, fontWeight: 600 }}
+            >
+              See all {unknown.open} open questions
+            </a>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 function Attention({ items }: { items: Board["attention"] }) {
   return (
-    <div className="card" style={{ padding: 24 }}>
+    <div className="card" style={{ padding: 24, flex: "1 1 320px", minWidth: 0 }}>
       <h2 style={{ margin: "0 0 12px", fontSize: 16 }}>Needs your attention</h2>
       {items.length === 0 ? (
         /* A GENUINE AND CELEBRATED STATE, not an apology and not a placeholder
@@ -164,10 +193,13 @@ function Attention({ items }: { items: Board["attention"] }) {
 export default function Dashboard() {
   const [board, setBoard] = useState<Board | "loading" | "error">("loading");
 
-  useEffect(() => {
+  const load = () =>
     getBoard()
       .then(setBoard)
       .catch(() => setBoard("error"));
+
+  useEffect(() => {
+    void load();
   }, []);
 
   const shell = { maxWidth: 860, margin: "0 auto", padding: "24px 20px 64px" };
@@ -189,7 +221,10 @@ export default function Dashboard() {
     <div style={shell}>
       <Plate plate={board.plate} />
       <Figures week={board.week} />
-      <Attention items={board.attention} />
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <Unknown unknown={board.unknown} onClosed={() => void load()} />
+        <Attention items={board.attention} />
+      </div>
     </div>
   );
 }

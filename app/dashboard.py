@@ -35,7 +35,7 @@ import datetime
 
 from psycopg import Connection
 
-from app import knowledge, payment
+from app import gaps, knowledge, payment
 from app.conversations import read_lines
 
 # Two missed beats. The poller touches bot_last_seen_at about once a minute, so
@@ -246,7 +246,13 @@ def attention(conn: Connection, approved: bool) -> list[dict]:
     return items[:ATTENTION_LIMIT]
 
 
+# Five, as the design has it. The Gaps screen shows the rest from the SAME call
+# with no limit -- the column is a window onto that list, not a second one.
+UNKNOWN_LIMIT = 5
+
+
 def board(conn: Connection, approved: bool) -> dict:
     return {"plate": plate(conn, approved),
             "week": week(conn),
+            "unknown": gaps.open_gaps(limit=UNKNOWN_LIMIT),
             "attention": attention(conn, approved)}
