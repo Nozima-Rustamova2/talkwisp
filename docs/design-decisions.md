@@ -306,14 +306,14 @@ confirms -- and the decision now rests on discovery rather than on principle.
 The seven questions to ask a real merchant are written down; ask them before
 building anything.
 
-**Confirming a typed fact does not confirm what the owner read.** `POST /fact`
-parses the line for the preview, and parses it AGAIN when called with
-`confirm=true` -- so the fact written is the second parse, not the one on
-screen. Usually identical; not guaranteed, because it is a model call. That is
-the confirmation step not actually confirming. Add knowledge has always worked
-this way; the gap composer (2026-09-17) shares it rather than causing it. The
-fix is its own change: confirm should write the parsed fact the preview
-returned, not re-parse the line.
+~~**Confirming a typed fact does not confirm what the owner read.**~~ **Fixed
+2026-09-17.** `POST /fact?confirm=true` parsed the line a second time and saved
+that reading, so the owner could check one fact and save another. It is gone,
+not kept beside the fix: `POST /fact` only parses, and `POST /fact/confirm` takes
+the subject, attribute and value the preview returned and saves exactly those,
+with no model call. check_knowledge section 7 stubs the model to read the line
+differently the second time, plants the old re-read to show it saves the other
+reading, then asserts the new path saves the preview anyway.
 
 **The Dashboard's primary action is still missing.** The design's contextual
 button -- *Answer N open questions*, or *Test your agent* at zero gaps -- was
@@ -2374,7 +2374,8 @@ two of them do not look like it:
 
 | Endpoint | What it buys | Obvious? |
 |---|---|---|
-| `POST /fact` | one generation to parse — **even without `confirm=true`** — plus an embedding when confirmed | half |
+| `POST /fact` | one generation to parse; it never writes | yes |
+| `POST /fact/confirm` | one embedding, and **no** generation — it saves the reading the preview returned (was `POST /fact?confirm=true`, which parsed again) | half |
 | `POST /source/{id}/extract` | vision + extraction + prose-splitting generations, then one embedding **per passage**. `dry_run=true` spends all of it and only skips the writing | yes |
 | `POST /source/{id}/read` | one vision generation | yes |
 | `GET /answer` | an embedding and a generation, plus a second on the follow-up and purchase branches | yes |

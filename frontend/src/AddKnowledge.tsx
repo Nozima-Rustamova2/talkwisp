@@ -231,10 +231,13 @@ export default function AddKnowledge() {
 
   async function commitFact() {
     const line = typedText.trim();
+    // The reading the owner is looking at. Saved as-is; the line is not sent.
+    const checked = preview?.parsed;
+    if (!checked) return;
     setTypedBusy(true);
     setTypedError(null);
     try {
-      const written = await writeFact(line);
+      const written = await writeFact(checked);
       setTypedRows((prev) => [
         {
           id: written.id ?? line,

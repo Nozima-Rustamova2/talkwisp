@@ -159,9 +159,13 @@ export const listSources = () => request<Source[]>("/source");
 export const parseFact = (line: string) =>
   request<FactResult>(`/fact?${q({ line })}`, { method: "POST" });
 
-export const writeFact = (line: string) =>
-  request<FactResult>(`/fact?${q({ line, confirm: true })}`, {
+/* Saves THE READING THE OWNER CHECKED, not the line. Sending the line again
+ * meant a second model call, whose reading was the one saved -- usually the
+ * same as the preview, never guaranteed. */
+export const writeFact = (parsed: ParsedFact) =>
+  request<FactResult>("/fact/confirm", {
     method: "POST",
+    body: new URLSearchParams(parsed),
   });
 
 /* MEASURED, 6 Sep 2026, by binary search with a raw socket against this server:

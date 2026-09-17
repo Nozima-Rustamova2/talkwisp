@@ -15,7 +15,7 @@ from app.approval import NotApproved
 from app.db import assert_app_role, connection, current_approved, pool
 from app.llm import check_configured, check_reachable
 from app.retrieval import find
-from app.typed import parse as parse_fact, store as store_fact
+from app.typed import conflicts as fact_conflicts, parse as parse_fact, store as store_fact
 
 
 @asynccontextmanager
@@ -200,22 +200,54 @@ def answer_endpoint(business: Business, q: str) -> dict:
 
 
 @app.post("/fact")
-def add_fact(business: Business, line: str, confirm: bool = False) -> dict:
-    """Parse one free-text line into a fact.
+def add_fact(business: Business, line: str) -> dict:
+    """Parse one free-text line into a fact. WRITES NOTHING.
 
-    Without `confirm=true` this only shows what it would write, plus any
-    confirmed fact that already answers the same subject and attribute
-    differently. A mis-parse written blind becomes a confirmed fact, and
-    confirmed is precisely what nothing downstream questions.
+    Shows what it would write, plus any confirmed fact that already answers the
+    same subject and attribute differently. A mis-parse written blind becomes a
+    confirmed fact, and confirmed is precisely what nothing downstream
+    questions. Saving is POST /fact/confirm, with the reading this returned.
     """
     with connection(business) as conn:
         result = parse_fact(conn, line)
-        if result["error"] or not confirm:
-            result["written"] = False
-            return result
-        result["id"] = str(store_fact(conn, result["parsed"]))
-        result["written"] = True
+        result["written"] = False
         return result
+
+
+@app.post("/fact/confirm")
+def confirm_fact(business: Business, subject: str = Form(""),
+                 attribute: str = Form(""), value: str = Form("")) -> dict:
+    """Save the reading the owner checked -- exactly that, never the line again.
+
+    THIS USED TO BE `POST /fact?line=...&confirm=true`, which parsed the line a
+    second time and saved the SECOND reading. It is a model call, so the two
+    usually agreed and were not guaranteed to: the owner read one fact and
+    saved another. That form is gone rather than kept beside this one, because
+    a path that saves a line without showing it is the confirmation guarantee
+    eroding somewhere nobody looks. Telegram's /fact already worked this way:
+    it stores the parsed fact it showed (bot.py, pending["parsed"]).
+
+    No model call here. The owner could type anything as the line anyway, so
+    accepting the three fields directly trusts them with nothing new; the
+    subject guard in store() still applies.
+    """
+    parsed = {"subject": subject.strip(), "attribute": attribute.strip(),
+              "value": value.strip()}
+    missing = [k for k, v in parsed.items() if not v]
+    if missing:
+        raise HTTPException(status_code=400,
+                            detail=f"Missing {', '.join(missing)}.")
+    with connection(business) as conn:
+        # Before the insert, or the new fact would be compared with nothing
+        # but itself. The owner saw these in the preview; returned again
+        # because one could have been confirmed in between.
+        clashing = fact_conflicts(conn, parsed)
+        try:
+            fact_id = str(store_fact(conn, parsed))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"error": None, "parsed": parsed, "conflicts": clashing,
+                "candidates": [], "written": True, "id": fact_id}
 
 
 @app.post("/source/paste")

@@ -47,12 +47,10 @@ function Row({ gap, onClosed }: { gap: Gap; onClosed: () => void }) {
 
   const save = () =>
     run(async () => {
-      const written = await writeFact(text.trim());
-      if (written.error || !written.id) {
-        // Nothing was written, so there is nothing to close the gap with.
-        setPreview(written);
-        return;
-      }
+      // The reading shown under "Will save", exactly. The line is not re-read.
+      if (!preview?.parsed) return;
+      const written = await writeFact(preview.parsed);
+      if (!written.id) throw new Error("The fact was not saved.");
       await answerGap(gap.question_key, written.id);
       onClosed();
     });

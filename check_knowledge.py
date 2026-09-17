@@ -301,6 +301,74 @@ def run(admin, biz: str) -> None:
           client.delete(f"/alias/{listed[0]['id']}").status_code, 200)
     check("and it is gone", client.get("/alias").json(), [])
 
+    print("\n7. CONTROL: saving a typed fact saves THE READING THE OWNER CHECKED")
+    # The model is stubbed to read the same line DIFFERENTLY the second time.
+    # Without that, "the saved fact matches the preview" is equally true of the
+    # fix and of a path that re-reads the line and happens to agree.
+    import json as _json
+    from app import typed
+    from app.embeddings import DIMENSIONS
+    from app.payment import PAYMENT_SUBJECT
+    readings = [
+        {"subject": "Oktyabr intensivi", "attribute": "format", "value": "onlayn"},
+        {"subject": "Oktyabr intensivi", "attribute": "format", "value": "oflayn"},
+    ]
+    calls = []
+
+    def disagreeing(system, prompt):
+        calls.append(prompt)
+        return _json.dumps(readings[min(len(calls), 2) - 1])
+
+    real_complete, real_embed = typed.complete, typed.embed_document
+    typed.complete = disagreeing
+    # Not what is being proven, and a vector per save would be spend for nothing.
+    typed.embed_document = lambda text: [0.001] * DIMENSIONS
+    line = "Oktyabr intensivi onlayn"
+    try:
+        preview = client.post("/fact", params={"line": line}).json()
+        check("the preview is the first reading", preview["parsed"], readings[0])
+        check("and previewing writes nothing", preview["written"], False)
+
+        # THE REMOVED PATH, planted: parse the line again and store that. It is
+        # the old confirm=true body, verbatim in effect.
+        with connection(biz) as conn:
+            again = typed.parse(conn, line)
+            planted = typed.store(conn, again["parsed"])
+            planted_value = conn.execute("select value from fact where id = %s",
+                                         (planted,)).fetchone()[0]
+            conn.execute("delete from fact where id = %s", (planted,))
+        check("re-reading saves something the owner never saw (the bug)",
+              planted_value, "oflayn")
+
+        calls.clear()
+        saved = client.post("/fact/confirm", data=preview["parsed"])
+        check("POST /fact/confirm saves", saved.status_code, 200)
+        row = admin.execute("select subject, attribute, value, confirmed from fact"
+                            " where id = %s", (saved.json()["id"],)).fetchone()
+        check("THE SAVED FACT IS THE PREVIEW, though the model now reads otherwise",
+              row, ("Oktyabr intensivi", "format", "onlayn", True))
+        check("and saving made no model call at all", len(calls), 0)
+
+        count = admin.execute("select count(*) from fact where business_id = %s",
+                              (biz,)).fetchone()[0]
+        old = client.post("/fact", params={"line": line, "confirm": "true"})
+        check("the old line-plus-confirm form writes nothing now",
+              (old.json()["written"],
+               admin.execute("select count(*) from fact where business_id = %s",
+                             (biz,)).fetchone()[0]),
+              (False, count))
+
+        empty = client.post("/fact/confirm", data={"subject": "Kurs", "attribute": " ",
+                                                   "value": "x"})
+        check("a reading with a blank part is refused", empty.status_code, 400)
+        reserved = client.post("/fact/confirm", data={
+            "subject": PAYMENT_SUBJECT, "attribute": "karta", "value": "8600"})
+        check("the subject guard still applies, as a 400 not a crash",
+              reserved.status_code, 400)
+        admin.execute("delete from fact where id = %s", (saved.json()["id"],))
+    finally:
+        typed.complete, typed.embed_document = real_complete, real_embed
+
 
 if __name__ == "__main__":
     main()

@@ -415,6 +415,10 @@ def run(admin, biz: str, set_flag) -> None:
         "POST /review/{id}/confirm": client.post(f"/review/{fact_id}/confirm"),
         "POST /console/feedback": client.post(
             "/console/feedback", params={"q": "ish vaqti", "verdict": "wrong"}),
+        # No generation any more -- it saves the reading it is given -- but a
+        # confirmed fact is embedded on write.
+        "POST /fact/confirm": client.post("/fact/confirm", data={
+            "subject": "Klinika", "attribute": "manzil", "value": "Chilonzor"}),
     }
     for label, response in surprising.items():
         check(f"{label} is gated too, though it does not look like it",
