@@ -205,8 +205,20 @@ _OUTCOMES = {
 SAME_MESSAGE = datetime.timedelta(seconds=10)
 
 
-def exchange(chat_id: int) -> list[dict]:
-    """One customer's conversation, oldest first, ONE ENTRY PER MESSAGE.
+def exchange(conn, chat_id: int) -> list[dict]:
+    """One customer's conversation, oldest first, ONE ENTRY PER MESSAGE, with
+    the owner's own replies in it.
+
+    THE OWNER'S TURNS COME FROM THE ESCALATION TABLE, not the log. The log line
+    for an owner's reply is written under the OWNER's chat and carries the
+    question, not the words -- so a transcript built from the log alone showed
+    the agent refusing and then nothing, when a person had answered. That is
+    the screen misrepresenting what happened. escalation.answer holds the words
+    and chat_ids holds everyone they went to, so past replies come back too.
+
+    Each entry says who spoke: `from` is "agent" for log entries and "owner"
+    for these. Honest limit: delivery is counted per reply, not per customer,
+    so a customer who had blocked the bot is shown the reply they never got.
 
     The log is a record of what the bot DID, and a single customer message can
     produce more than one line of that -- a routing decision, then an answer.
@@ -233,6 +245,7 @@ def exchange(chat_id: int) -> list[dict]:
             "question": row.get("question"),
             "answer": row.get("answer"),
             "note": _OUTCOMES.get(outcome) if outcome else None,
+            "from": "agent",
         }
         previous = entries[-1] if entries else None
         if (previous is not None
@@ -246,7 +259,32 @@ def exchange(chat_id: int) -> list[dict]:
             previous["note"] = previous["note"] or entry["note"]
             continue
         entries.append(entry)
+
+    # Under RLS: another business's escalations are simply not there, whatever
+    # chat_id is asked for.
+    replies = conn.execute(
+        "select answer, answered_at from escalation"
+        " where status = 'answered' and answer is not null"
+        "   and %s = any(chat_ids)", (chat_id,)).fetchall()
+    entries.extend({"at": at.isoformat(), "question": None, "answer": answer,
+                    "note": None, "from": "owner"} for answer, at in replies)
+    # By TIME, not by string. The log writes +00:00 and Postgres writes the
+    # session's offset, and two ISO strings in different offsets do not sort.
+    entries.sort(key=lambda e: _instant(e["at"]))
     return entries
+
+
+_EPOCH = datetime.datetime.min.replace(tzinfo=datetime.UTC)
+
+
+def _instant(at: str | None) -> datetime.datetime:
+    if not at:
+        return _EPOCH
+    try:
+        moment = datetime.datetime.fromisoformat(at)
+    except ValueError:
+        return _EPOCH
+    return moment if moment.tzinfo else moment.replace(tzinfo=datetime.UTC)
 
 
 def _close(first: str | None, second: str | None) -> bool:

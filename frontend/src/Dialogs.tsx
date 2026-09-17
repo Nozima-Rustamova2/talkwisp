@@ -62,7 +62,9 @@ function label(c: Customer): string {
    message, because it belongs to neither side: "Sent a payment screenshot" is
    the customer's act and "You confirmed the payment" the owner's, and drawing
    either on the agent's side would put words in the wrong mouth. */
-type Side = "customer" | "agent" | "event";
+/* "owner" is a person's reply, and it must never look like the agent's: the
+   customer saw a human, so the screen has to say which turns were human. */
+type Side = "customer" | "agent" | "owner" | "event";
 
 type Message = {
   side: Side;
@@ -82,7 +84,7 @@ function messages(turns: Turn[]): Message[] {
   for (const t of turns) {
     if (t.question) out.push({ side: "customer", text: t.question, at: t.at, note: null });
     if (t.answer) {
-      out.push({ side: "agent", text: t.answer, at: t.at, note: t.note });
+      out.push({ side: t.from === "owner" ? "owner" : "agent", text: t.answer, at: t.at, note: t.note });
     } else if (t.note) {
       // Something happened with no reply text -- a greeting short-circuit, a
       // screenshot, an order. The note is still information, so it attaches to
@@ -149,7 +151,8 @@ function Transcript({ turns }: { turns: Turn[] }) {
         const startsGroup = !prev || !sameGroup(prev, m);
         const endsGroup = !next || !sameGroup(m, next);
         const newDay = !prev || day(prev.at) !== day(m.at);
-        const right = m.side === "agent";
+        const right = m.side === "agent" || m.side === "owner";
+        const owner = m.side === "owner";
         if (m.side === "event") {
           return (
             <div key={i}>
@@ -175,13 +178,29 @@ function Transcript({ turns }: { turns: Turn[] }) {
                 marginTop: startsGroup && !newDay ? 12 : 2,
               }}
             >
+              {owner && startsGroup ? (
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "var(--accent)",
+                    margin: "0 4px 3px",
+                  }}
+                >
+                  You
+                </div>
+              ) : null}
               {m.text ? (
                 <div
                   style={{
                     maxWidth: "min(78%, 560px)",
                     padding: "8px 12px",
-                    background: right ? "var(--accent-tint-strong)" : "var(--ground)",
-                    color: "var(--text)",
+                    background: owner
+                      ? "var(--accent)"
+                      : right
+                        ? "var(--accent-tint-strong)"
+                        : "var(--ground)",
+                    color: owner ? "#ffffff" : "var(--text)",
                     // The corner nearest its own side is tightened on the last
                     // bubble of a group only -- that is what makes a run of
                     // bubbles read as one speaker.
@@ -202,7 +221,7 @@ function Transcript({ turns }: { turns: Turn[] }) {
                       style={{
                         float: "right",
                         fontSize: 11,
-                        color: "var(--text-faint)",
+                        color: owner ? "rgba(255, 255, 255, 0.8)" : "var(--text-faint)",
                         margin: "6px 0 -2px 10px",
                         lineHeight: 1.2,
                       }}

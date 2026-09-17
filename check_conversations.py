@@ -56,6 +56,8 @@ def check(label: str, got, want) -> None:
 
 
 def clear(admin, addr: str) -> None:
+    admin.execute("delete from escalation where business_id in"
+                  " (select id from business where owner_email = %s)", (addr,))
     admin.execute("delete from business where owner_email = %s", (addr,))
 
 
@@ -308,6 +310,56 @@ def run(admin, biz_a: str, biz_b: str, scratch: pathlib.Path) -> None:
     check("Telegram's language hint, under its own name",
           captured[0].get("telegram_language"), "uz")
     check("A DIFFERENT CHAT GETS NO NAME", "first_name" in captured[1], False)
+
+    print("\n9. THE OWNER'S REPLIES ARE IN THE TRANSCRIPT")
+    # The log line for an owner's reply is written under the OWNER's chat and
+    # carries the question, not the words. So a transcript built from the log
+    # showed the agent refusing and then nothing, when a person had answered.
+    def escalation(biz, chat_ids, question, status, answer, at):
+        admin.execute(
+            "insert into escalation (business_id, chat_ids, question,"
+            " question_key, status, answer, answered_at)"
+            " values (%s, %s, %s, %s, %s, %s, %s)",
+            (biz, chat_ids, question, question.lower(), status, answer, at))
+
+    words = "Yakshanba 10:00 dan 14:00 gacha ishlaymiz."
+    # Answered at +3 minutes, which falls BETWEEN Anvar's first two messages --
+    # so it also proves the merge sorts by time rather than appending.
+    escalation(biz_a, [111, 222], "Yakshanba ishlaysizmi?", "answered", words,
+               NOW + datetime.timedelta(minutes=3))
+    # Waiting, and closed with no words ("not for us"): neither was said.
+    escalation(biz_a, [111], "Chegirma bormi?", "waiting", None, None)
+    escalation(biz_a, [111], "Parkovka bormi?", "answered", None,
+               NOW + datetime.timedelta(minutes=4))
+    # ANOTHER BUSINESS, THE SAME CHAT ID. Chat ids are Telegram's, not ours, so
+    # one person talking to two businesses has one id in both.
+    secret = "B biznesining javobi, A ko'rmasligi kerak."
+    escalation(biz_b, [111], "Kurs narxi?", "answered", secret,
+               NOW + datetime.timedelta(minutes=6))
+
+    # The words are nowhere in the log. Whatever shows them below read the table.
+    check("the owner's words are not in the log at all",
+          words in scratch.read_text(encoding="utf-8"), False)
+
+    anvar = client.get("/conversations/111").json()
+    replies = [a for a in anvar if a["from"] == "owner"]
+    check("the owner's reply is in the customer's transcript",
+          [r["answer"] for r in replies], [words])
+    check("marked as the owner's, not the agent's",
+          {a["from"] for a in anvar if a["answer"] == words}, {"owner"})
+    check("and placed where it happened, between the first two messages",
+          [a["question"] or a["answer"] for a in anvar][:3],
+          ["Narxi qancha?", words, "Karta raqami?"])
+    check("a waiting escalation and a wordless close add nothing",
+          len(anvar), 4)
+    check("the same reply reaches everyone who was waiting",
+          [a["answer"] for a in client.get("/conversations/222").json()
+           if a["from"] == "owner"], [words])
+    check("ANOTHER BUSINESS'S REPLY TO THE SAME CHAT ID IS ABSENT",
+          secret in json.dumps(anvar, ensure_ascii=False), False)
+    check("and present for that business",
+          [a["answer"] for a in other.get("/conversations/111").json()
+           if a["from"] == "owner"], [secret])
 
 
 if __name__ == "__main__":

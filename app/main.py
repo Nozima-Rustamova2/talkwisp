@@ -768,8 +768,8 @@ def customer_list(business: Business) -> dict:
 @app.get("/conversations/{chat_id}")
 def customer_exchange(business: Business, chat_id: int) -> list[dict]:
     """One customer's messages, oldest first."""
-    with connection(business):
-        return conversations.exchange(chat_id)
+    with connection(business) as conn:
+        return conversations.exchange(conn, chat_id)
 
 
 # --- the knowledge base -----------------------------------------------------

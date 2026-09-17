@@ -674,6 +674,9 @@ export type Turn = {
      Internal routing outcomes are dropped server-side rather than translated
      here, so a screen can never show buy_prefilter_blocked to a business. */
   note: string | null;
+  /* Who spoke the answer. "owner" turns come from the escalation table: a
+     person replied, and the customer saw a person. */
+  from: "agent" | "owner";
 };
 
 export function getCustomers(): Promise<Customers> {
