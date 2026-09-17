@@ -2,6 +2,13 @@
 
     uv run python harvest.py                 read the log, write stubs, show why
     uv run python harvest.py --rerun         also run them through the system now
+    uv run python harvest.py --business ID --triggers --compare OTHER
+                                             count where the clarification
+                                             trigger would fire; writes nothing
+
+--business and --compare take a business id or a name. A name shared by more
+than one business is refused by the database, and every self-serve signup was
+called "Klinika", so the id is the form that works.
 
 The hand-written test set stopped discriminating at 30/30. Every real bug found
 in the first week came from live phone messages, not from the harness -- the
@@ -190,6 +197,129 @@ def _wrap(text: str, width: int) -> list[str]:
     return out
 
 
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def resolve(given: str) -> tuple[str, str]:
+    """(id, name) for an id or a name. Refuses rather than guesses.
+
+    An id is checked, not trusted: read back under that tenant's own binding,
+    so a mistyped id is "no such business" rather than an empty report that
+    looks like a business with no refusals.
+    """
+    if _UUID.match(given.strip().lower()):
+        business_id = given.strip().lower()
+    else:
+        try:
+            business_id = business_by_name(given)
+        except Exception as exc:  # the ambiguous-name refusal from 0017
+            raise SystemExit(f"{exc}".strip().splitlines()[0]) from exc
+        if not business_id:
+            raise SystemExit(f"No business named {given!r}.")
+    with connection(business_id) as conn:
+        row = conn.execute("select name from business where id = %s",
+                           (business_id,)).fetchone()
+    if not row:
+        raise SystemExit(f"No business with id {business_id}.")
+    return business_id, row[0]
+
+
+def had_history(row: dict, rows: list[dict]) -> bool | None:
+    """Whether the bot held conversation history for this chat when `row` came in.
+
+    RECONSTRUCTED, NOT LOGGED. History lives in bot.py's memory and is never
+    written down, so this approximates bot.history_for(): some earlier line from
+    the same chat within HISTORY_IDLE_SECONDS. Wrong across a bot restart, which
+    empties the memory the log cannot see -- so it can call a first message
+    after a restart "had history". None when the row has no timestamp.
+    """
+    import datetime
+
+    from bot import HISTORY_IDLE_SECONDS
+
+    if row.get("rewritten"):
+        return True  # the rewriter only runs with history
+    at = row.get("at")
+    if not at:
+        return None
+    now = datetime.datetime.fromisoformat(at)
+    for other in rows:
+        if other is row or other.get("chat_id") != row.get("chat_id"):
+            continue
+        then = other.get("at")
+        if not then:
+            continue
+        gap = (now - datetime.datetime.fromisoformat(then)).total_seconds()
+        if 0 < gap <= HISTORY_IDLE_SECONDS:
+            return True
+    return False
+
+
+def triggers(business_id: str) -> dict:
+    """Where the removed clarification trigger WOULD fire, for a person to read.
+
+    The trigger (docs/design-clarification.md) was: refused, not the owner, no
+    conversation history, and followup.underspecified(). This counts it. IT DOES
+    NOT JUDGE IT. Whether a question is genuinely vague is read by a person, and
+    that reading is what made the original measurement worth trusting -- a script
+    deciding "vague" would be the heuristic grading itself.
+
+    No model calls and no embeddings: nothing here is re-run.
+    """
+    from app.followup import underspecified
+
+    rows = load(business_id)
+    refused = [r for r in usable(rows)
+               if r.get("status") != "ok" and not r.get("is_owner")]
+    fires = [r for r in refused if underspecified(r["question"])]
+    for r in fires:
+        r["_history"] = had_history(r, rows)
+    alone = [r for r in fires if r["_history"] is not True]
+    return {"refused": refused, "fires": fires, "alone": alone}
+
+
+def _distinct(rows: list[dict]) -> int:
+    return len({normalize(r["question"]) for r in rows})
+
+
+def report_triggers(targets: list[tuple[str, str]]) -> None:
+    results = [(name, business_id, triggers(business_id))
+               for business_id, name in targets]
+
+    # THE COMPARISON FIRST. Either figure alone says little; whether the trigger
+    # should differ by business type is a question only the two side by side
+    # can raise.
+    print("=" * 70)
+    print("CLARIFICATION TRIGGER -- counted, not judged")
+    print("=" * 70)
+    width = max(len(name) for name, _, _ in results)
+    print(f"\n  {'':{width}}  refusals   underspecified   ...and no history")
+    for name, _, t in results:
+        n = len(t["refused"])
+        share = f"({len(t['fires']) / n:.0%})" if n else ""
+        print(f"  {name:{width}}  {n:>4} / {_distinct(t['refused']):<4}"
+              f"  {len(t['fires']):>4} / {_distinct(t['fires']):<4} {share:<6}"
+              f"  {len(t['alone']):>4} / {_distinct(t['alone']):<4}")
+    print("\n  rows / distinct questions. 'no history' is reconstructed from the")
+    print("  log, not logged, and a bot restart makes it overcount history.")
+
+    for name, business_id, t in results:
+        print(f"\n--- {name} ({business_id}) ---")
+        if not t["fires"]:
+            print("  it fires on nothing")
+            continue
+        grouped: dict[str, list[dict]] = {}
+        for r in t["fires"]:
+            grouped.setdefault(normalize(r["question"]), []).append(r)
+        print("  vague?  asked  history  question")
+        for group in sorted(grouped.values(), key=len, reverse=True):
+            seen = {r["_history"] for r in group}
+            history = ("yes" if seen == {True} else "no" if seen == {False}
+                       else "mixed" if len(seen) > 1 else "?")
+            # The first column is left EMPTY on purpose. It is yours.
+            print(f"  [   ]   {len(group):>5}  {history:<7}  {group[-1]['question']}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rerun", action="store_true",
@@ -199,20 +329,31 @@ def main() -> None:
     # bug: a silent fallback to the harness business would grade a real
     # customer's questions against the demo clinic and print confident numbers.
     ap.add_argument("--business", required=True,
-                    help="business name, as in bot.py --business. Only this "
-                         "business's logged questions are read.")
+                    help="business id, or a name that only one business has. "
+                         "Only this business's logged questions are read.")
+    ap.add_argument("--triggers", action="store_true",
+                    help="report where the clarification trigger would fire, "
+                         "instead of writing stubs. No model calls.")
+    ap.add_argument("--compare", action="append", default=[],
+                    help="with --triggers: another business (id or name) to "
+                         "count alongside. Repeatable.")
     args = ap.parse_args()
+    if args.compare and not args.triggers:
+        ap.error("--compare only means something with --triggers")
 
     global BUSINESS
-    BUSINESS = args.business
     # OPENED BEFORE THE FIRST QUERY, and the ordering is a bug this codebase
     # has already shipped once: supervise.py called assert_app_role() above
     # pool.open() and died with PoolClosed on the live box, with the bots
     # already stopped. business_by_name() is a query like any other.
     pool.open()
-    business_id = business_by_name(args.business)
-    if not business_id:
-        raise SystemExit(f"No business named {args.business!r}.")
+    business_id, BUSINESS = resolve(args.business)
+
+    if args.triggers:
+        targets = [(business_id, BUSINESS)] + [resolve(c) for c in args.compare]
+        report_triggers(targets)
+        pool.close()
+        return
 
     rows = load(business_id)
     if not rows:

@@ -49,6 +49,27 @@ fires on twelve distinct questions:
 | `Navbat koʻp durmi hozir?` — "is the queue long now?" | no |
 | `buxoroda yoqmi`, `Nechida yopilasila?` | no |
 
+**THESE FIGURES CAME FROM A ONE-OFF COUNT WITH NO SCRIPT**, against Avisena
+Med's log on the box. Nothing in the repo could regenerate the 503 or the twelve,
+and a figure nobody can regenerate decays into a claim. Since 2026-09-17 the
+count is reproducible, and no longer one business's:
+
+    uv run python harvest.py --business <id> --triggers --compare <avisena id>
+
+It prints refusals, how many trip `underspecified()`, and how many of those had
+no conversation history — per business, side by side — then lists the questions
+it fires on with an EMPTY "vague?" column. The script counts and never judges:
+whether a question is genuinely vague is read by a person, and that reading is
+what made this table worth trusting. History is reconstructed from the log (an
+earlier line from the same chat within 20 minutes), not logged, so a bot restart
+makes it overcount history. Until it has been run, treat the numbers below as
+Avisena's alone and unverified by a second count.
+
+The reason the comparison matters: a clinic's customers ask complete questions,
+a course seller's reply to things. If a second business's share is meaningfully
+higher, the trigger may be right for one business type and wrong for another,
+rather than simply wrong.
+
 **Roughly one true positive in twelve.** The no-history condition filters none
 of them: *"Ertaga ishlaysizmi?"* as somebody's first message is the normal case,
 not the edge.
