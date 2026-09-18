@@ -235,6 +235,27 @@ def run(admin, scratch: str) -> None:
     check("with a dead token there is still no link, whatever the heartbeat",
           client.get("/channel").json()["claim_link"], None)
 
+    # ...AND THE LINK APPEARING, which the paragraph above said was only
+    # exercised by hand -- and was broken: `row[1] is not None` on a COUNT > 0
+    # hid it from every business, so no self-serve owner could claim a bot from
+    # the web. Telegram's confirmation is faked rather than borrowed, so no real
+    # token is touched.
+    from app import channel as channel_module
+    real_verify = channel_module.verify_token
+    channel_module.verify_token = lambda token: (True, "checkchannel_scratch_bot")
+    try:
+        admin.execute("delete from business_owner where business_id = %s", (scratch,))
+        link = client.get("/channel").json()["claim_link"]
+        check("UNCLAIMED, confirmed and polling: the claim link IS offered",
+              (link or "").startswith("https://t.me/checkchannel_scratch_bot?start="),
+              True)
+        admin.execute("insert into business_owner (business_id, telegram_id)"
+                      " values (%s, %s)", (scratch, 111))
+        check("and withdrawn once someone has claimed it",
+              client.get("/channel").json()["claim_link"], None)
+    finally:
+        channel_module.verify_token = real_verify
+
     print("\n8. The endpoints refuse without a session")
     anon = TestClient(api.app)
     check("GET /channel is 401 logged out", anon.get("/channel").status_code, 401)

@@ -1019,7 +1019,11 @@ def channel_state(business: Business) -> dict:
         #
         # Regenerated per request and short-lived, so a page left open does not
         # go stale in a way anyone has to think about.
-        "claim_link": (None if row[1] is not None or not ok or not polling else
+        #
+        # row[1], NOT `row[1] is not None` -- the same fix as owner_linked
+        # above, missed here. A COUNT > 0 is never null, so the old test hid
+        # the link from every business, including every unclaimed one.
+        "claim_link": (None if row[1] or not ok or not polling else
                        f"https://t.me/{detail}?start="
                        f"{channel.claim_code(business, token)}"),
     }
